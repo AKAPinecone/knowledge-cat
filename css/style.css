@@ -448,6 +448,8 @@ audio{width:100%;margin-top:6px;height:34px;}
 }
 .sync-code:focus{outline:none;border-color:var(--mint);background:#fff;box-shadow:0 0 0 3px rgba(143,211,168,.25);}
 .sync-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.sync-gens{display:flex;gap:8px;flex-wrap:wrap;}
+.sync-gens > .btn{flex:1 1 auto;min-width:132px;}
 .field .sync-acts{margin-bottom:4px;}
 .field > .btn{margin-bottom:2px;}
 .sync-cmp{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:13px;}

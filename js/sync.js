@@ -60,14 +60,160 @@ window.Sync = (function () {
     } catch (e) { return Promise.resolve(null); }
   }
 
+  /* 纯 JS 的 raw-deflate 解压（RFC1951），不碰任何新 API。
+     为什么要有它：电脑上的 Chrome 会把同步码压成 CATD1-（省一半长度），
+     而不少手机自带浏览器（荣耀 / UC / 微信 X5 内核等）没有 DecompressionStream，
+     拿到压缩码就只能干瞪眼。有这份兜底，再老的浏览器也能读压缩码。 */
+  var LBASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59,
+    67, 83, 99, 115, 131, 163, 195, 227, 258];
+  var LEXT = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+  var DBASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769,
+    1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+  var DEXT = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+  var CLORD = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+  var FIXL = null, FIXD = null, fixLit = null, fixDist = null;
+
+  /* 把「每个符号几位」编成一份可查的表（puff 那套规范霍夫曼解码） */
+  function mkTree(lengths, n) {
+    var i, count = new Uint16Array(16);
+    for (i = 0; i < n; i++) count[lengths[i]]++;
+    count[0] = 0;
+    var offs = new Uint16Array(17);
+    for (i = 1; i < 16; i++) offs[i + 1] = offs[i] + count[i];
+    var symbol = new Uint16Array(n);
+    for (i = 0; i < n; i++) if (lengths[i]) symbol[offs[lengths[i]]++] = i;
+    return { count: count, symbol: symbol };
+  }
+
+  function fixedTrees() {
+    if (fixLit) return;
+    var i;
+    FIXL = new Uint8Array(288);
+    for (i = 0; i < 144; i++) FIXL[i] = 8;
+    for (; i < 256; i++) FIXL[i] = 9;
+    for (; i < 280; i++) FIXL[i] = 7;
+    for (; i < 288; i++) FIXL[i] = 8;
+    FIXD = new Uint8Array(30);
+    for (i = 0; i < 30; i++) FIXD[i] = 5;
+    fixLit = mkTree(FIXL, 288);
+    fixDist = mkTree(FIXD, 30);
+  }
+
+  function inflateJs(src) {
+    var sp = 0, bb = 0, bc = 0;
+    var out = new Uint8Array(Math.max(4096, src.length * 6)), op = 0;
+
+    function grow(n) {
+      if (op + n <= out.length) return;
+      var cap = out.length;
+      while (cap < op + n) cap = cap * 2;
+      var nb = new Uint8Array(cap);
+      nb.set(out.subarray(0, op));
+      out = nb;
+    }
+    function bit() {
+      if (!bc) {
+        if (sp >= src.length) throw new Error('同步码被截断了（复制时少了一截）');
+        bb = src[sp++]; bc = 8;
+      }
+      var v = bb & 1; bb = bb >> 1; bc--; return v;
+    }
+    function bits(n) {
+      var v = 0;
+      for (var i = 0; i < n; i++) v |= bit() << i;
+      return v;
+    }
+    function sym(h) {
+      var code = 0, first = 0, index = 0, len, c;
+      for (len = 1; len <= 15; len++) {
+        code |= bit();
+        c = h.count[len];
+        if (code >= first && code - first < c) return h.symbol[index + (code - first)];
+        index += c;
+        first = (first + c) << 1;
+        code = code << 1;
+      }
+      throw new Error('同步码里有坏数据');
+    }
+
+    fixedTrees();
+    var last = 0, type, i, len, ds, dist, from, k, v, rep, s2;
+    do {
+      last = bit();
+      type = bits(2);
+      if (type === 0) {
+        bb = 0; bc = 0;
+        if (sp + 4 > src.length) throw new Error('同步码被截断了（复制时少了一截）');
+        len = src[sp] | (src[sp + 1] << 8);
+        sp += 4;
+        if (sp + len > src.length) throw new Error('同步码被截断了（复制时少了一截）');
+        grow(len);
+        out.set(src.subarray(sp, sp + len), op);
+        op += len; sp += len;
+      } else if (type === 1 || type === 2) {
+        var lh, dh;
+        if (type === 1) { lh = fixLit; dh = fixDist; }
+        else {
+          var hlit = bits(5) + 257, hdist = bits(5) + 1, hclen = bits(4) + 4;
+          var cl = new Uint8Array(19);
+          for (i = 0; i < hclen; i++) cl[CLORD[i]] = bits(3);
+          var clh = mkTree(cl, 19);
+          var lens = new Uint8Array(hlit + hdist);
+          i = 0;
+          while (i < lens.length) {
+            s2 = sym(clh);
+            if (s2 < 16) { lens[i++] = s2; continue; }
+            v = 0;
+            if (s2 === 16) {
+              if (!i) throw new Error('同步码里有坏数据');
+              v = lens[i - 1]; rep = 3 + bits(2);
+            } else if (s2 === 17) { rep = 3 + bits(3); }
+            else { rep = 11 + bits(7); }
+            while (rep--) {
+              if (i >= lens.length) throw new Error('同步码里有坏数据');
+              lens[i++] = v;
+            }
+          }
+          lh = mkTree(lens.subarray(0, hlit), hlit);
+          dh = mkTree(lens.subarray(hlit), hdist);
+        }
+        for (;;) {
+          s2 = sym(lh);
+          if (s2 === 256) break;
+          if (s2 < 256) { grow(1); out[op++] = s2; continue; }
+          s2 -= 257;
+          if (s2 >= 29) throw new Error('同步码里有坏数据');
+          len = LBASE[s2] + bits(LEXT[s2]);
+          ds = sym(dh);
+          if (ds >= 30) throw new Error('同步码里有坏数据');
+          dist = DBASE[ds] + bits(DEXT[ds]);
+          from = op - dist;
+          if (from < 0) throw new Error('同步码里有坏数据');
+          grow(len);
+          for (k = 0; k < len; k++) out[op++] = out[from++];
+        }
+      } else {
+        throw new Error('同步码里有坏数据');
+      }
+    } while (!last);
+    return out.subarray(0, op);
+  }
+
   function inflate(bytes) {
-    if (!canInflate()) return Promise.resolve(null);
-    try {
-      const st = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-      return new Response(st).arrayBuffer().then(function (buf) {
-        return new Uint8Array(buf);
-      }).catch(function () { return null; });
-    } catch (e) { return Promise.resolve(null); }
+    if (canInflate()) {
+      try {
+        const st = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        return new Response(st).arrayBuffer().then(function (buf) {
+          const out = new Uint8Array(buf);
+          if (out.length) return out;
+          try { return inflateJs(bytes) || null; } catch (e) { return null; }
+        }).catch(function () {
+          try { return inflateJs(bytes) || null; } catch (e) { return null; }
+        });
+      } catch (e) { /* 老浏览器连流都用不了，往下走纯 JS 版 */ }
+    }
+    try { return Promise.resolve(inflateJs(bytes) || null); }
+    catch (e) { return Promise.resolve(null); }
   }
 
   /* ---------------- 打包 / 解包 ---------------- */
@@ -93,8 +239,9 @@ window.Sync = (function () {
     return c;
   }
 
-  function pack(obj) {
+  function pack(obj, forceRaw) {
     const bytes = new TextEncoder().encode(JSON.stringify(obj));
+    if (forceRaw) return Promise.resolve(PREFIX_RAW + toUrlSafe(bytesToB64(bytes)));
     return deflate(bytes).then(function (def) {
       if (def && def.length && def.length < bytes.length) {
         return PREFIX_DEFLATE + toUrlSafe(bytesToB64(def));
@@ -104,15 +251,18 @@ window.Sync = (function () {
   }
 
   /* 生成同步码。返回 {code, droppedThumbs, size} */
-  function encode(state) {
+  /* opts.raw = true 时强制出「不压缩的兼容码」：更长，但连最老的浏览器都能读。
+     老手机读不了压缩码时用得上。 */
+  function encode(state, opts) {
+    const raw = !!(opts && opts.raw);
     const stamp = new Date().toISOString();
     const full = { kind: KIND, exportedAt: stamp, state: stripLocalSlots(state) };
-    return pack(full).then(function (code) {
+    return pack(full, raw).then(function (code) {
       if (code.length <= MAX_CODE) {
         return { code: code, droppedThumbs: false, size: code.length, compressed: code.indexOf(PREFIX_DEFLATE) === 0 };
       }
       const lean = { kind: KIND, exportedAt: stamp, slim: true, state: slim(stripLocalSlots(state)) };
-      return pack(lean).then(function (code2) {
+      return pack(lean, raw).then(function (code2) {
         if (code2.length < code.length) {
           return { code: code2, droppedThumbs: true, size: code2.length, compressed: code2.indexOf(PREFIX_DEFLATE) === 0 };
         }
@@ -172,7 +322,7 @@ window.Sync = (function () {
         catch (e) { return Promise.reject(new Error('同步码解出来是坏数据')); }
       }
       return inflate(bytes).then(function (out) {
-        if (!out) throw new Error('这台设备解不开压缩的同步码，回原来那台点「复制为链接」再发一次');
+        if (!out) throw new Error('这台的浏览器读不了压缩过的同步码。让对面生成一份「老设备兼容码」（不压缩的那种）再发一次。');
         try { return validate(JSON.parse(new TextDecoder().decode(out))); }
         catch (e) { throw new Error('同步码解出来是坏数据'); }
       });
@@ -230,6 +380,7 @@ window.Sync = (function () {
     linkFor: linkFor, codeFromHash: codeFromHash, clearHash: clearHash,
     brief: brief, when: when,
     PREFIX_DEFLATE: PREFIX_DEFLATE, PREFIX_RAW: PREFIX_RAW,
-    canDeflate: canDeflate
+    canDeflate: canDeflate,
+    inflateJs: function (b) { return inflateJs(b); }
   };
 })();

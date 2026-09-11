@@ -2603,7 +2603,10 @@
       '<div class="hint">' + esc(window.Sync.brief(S)) + '</div></div>' +
 
       '<div class="field"><label>① 把这台的进度搬到别的设备</label>' +
-      '<button class="btn btn-primary btn-sm" id="sy-gen">生成同步码</button>' +
+      '<div class="sync-gens">' +
+        '<button class="btn btn-primary btn-sm" id="sy-gen">生成同步码</button>' +
+        '<button class="btn btn-sm" id="sy-gen-raw">🧓 老设备兼容码</button>' +
+      '</div>' +
       '<textarea id="sy-code" class="sync-code" readonly placeholder="点上面的按钮生成，然后复制"></textarea>' +
       '<div class="sync-acts">' +
         '<button class="btn btn-sm" id="sy-copy" disabled>📋 复制同步码</button>' +
@@ -2633,6 +2636,25 @@
         const noteEl = $('#sy-note', m);
 
         $('#sy-close', m).onclick = closeModal;
+
+        /* 老手机（荣耀自带浏览器、微信 X5 内核等）读不了压缩码时的退路：
+           出一份不压缩的码，长是长，但只要是浏览器就能读。 */
+        $('#sy-gen-raw', m).onclick = function () {
+          codeEl.value = '正在打包（不压缩，请稍等）…';
+          window.Sync.encode(S, { raw: true }).then(function (r) {
+            code = r.code;
+            codeEl.value = code;
+            copyBtn.disabled = false;
+            linkBtn.disabled = r.size > 6000;
+            noteEl.innerHTML = '共 ' + r.size + ' 个字符（<b>未压缩的兼容码</b>）。这份会更长，' +
+              '但连老手机自带的浏览器也读得出来——对面要是报「解不开压缩的同步码」，就发这一份。' +
+              (r.droppedThumbs ? ' 码太长，已不带证据库里的图片缩略图。' : '') +
+              (r.size > 6000 ? ' 太长不适合做成链接，直接复制文本发过去。' : '');
+          }).catch(function (e) {
+            codeEl.value = '';
+            toast('❌ 生成失败：' + e.message, 'err');
+          });
+        };
 
         $('#sy-gen', m).onclick = function () {
           codeEl.value = '正在打包…';
