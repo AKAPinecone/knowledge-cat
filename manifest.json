@@ -1,0 +1,18 @@
+{
+  "name": "知识喂了猫 · 导游证备考养成",
+  "short_name": "知识喂了猫",
+  "description": "给全国导游资格考试（云南考区）备考者的放置收集学习游戏：课本精读、课后练习、破壳题库、导游词通读，像养小猫一样把知识喂进脑子里。",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#EFF6EE",
+  "theme_color": "#EFF6EE",
+  "categories": ["education", "games", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

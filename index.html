@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>知识喂了猫 · 导游证备考养成</title>
+<meta name="theme-color" content="#EFF6EE">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="知识喂了猫">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ 顶栏 ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">🐱</span>
+      <span class="brand-text">
+        <strong>知识喂了猫</strong>
+        <em>导游证备考养成 · 云南 · 2026</em>
+      </span>
+    </div>
+
+    <div class="topmeta">
+      <div class="chip chip-dday" id="chip-dday" title="距离考试">
+        <span class="chip-k">距考试</span><span class="chip-v">--</span>
+      </div>
+      <div class="chip" id="chip-phase" title="当前阶段">
+        <span class="chip-k">阶段</span><span class="chip-v">--</span>
+      </div>
+      <div class="chip" id="chip-streak" title="连续打卡">
+        <span class="chip-k">连续</span><span class="chip-v">--</span>
+      </div>
+      <button class="chip chip-cloud" id="chip-cloud" type="button" title="云端同步">
+        <span class="chip-k">☁️</span><span class="chip-v" id="chip-cloud-v">连接中…</span>
+      </button>
+    </div>
+
+    <div class="wallet">
+      <div class="cur cur-ticket" title="胶囊券：用来在扭蛋机抽胶囊">
+        <span class="cur-ico">🎟️</span><span class="cur-num" id="cur-tickets">0</span>
+        <span class="cur-name">胶囊券</span>
+      </div>
+      <div class="cur cur-bean" title="可可豆：用来买食物、药水与设施">
+        <span class="cur-ico">🌰</span><span class="cur-num" id="cur-beans">0</span>
+        <span class="cur-name">可可豆</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ 标签栏 ============ -->
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="garden">🌳 我的乐园<span class="dot" id="dot-garden"></span></button>
+    <button class="tab" data-tab="study">🍽️ 今日投喂<span class="dot" id="dot-study"></span></button>
+    <button class="tab" data-tab="gacha">🥚 扭蛋机<span class="dot" id="dot-gacha"></span></button>
+    <button class="tab" data-tab="shop">🛒 可可豆商店</button>
+    <button class="tab" data-tab="ach">🏆 成就</button>
+    <button class="tab" data-tab="me">🙋 我的</button>
+    <button class="tab" data-tab="evidence">🗂️ 证据库</button>
+    <button class="tab" data-tab="help">❓ 怎么玩</button>
+  </nav>
+
+  <!-- ============ 主视图 ============ -->
+  <main id="view"></main>
+
+  <footer class="footer">
+    <span>知识喂了猫 · 本机存档常驻；登录 ☁️ 后进度在手机 / 电脑 / iPad 间自动同步。</span>
+    <span id="foot-save">自动存档已开启</span>
+  </footer>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast-root" class="toast-root"></div>
+<div id="fx-root" class="fx-root"></div>
+
+<script async src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+<script src="js/data.js"></script>
+<script src="js/store.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/qbank.js"></script>
+<script src="js/game.js"></script>
+<script src="js/study.js"></script>
+<script src="js/app.js"></script>
+<script>
+/* PWA：注册 Service Worker（离线可玩 + 桌面图标入口） */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
