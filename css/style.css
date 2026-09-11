@@ -1059,3 +1059,29 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
   .avatar-pick{grid-template-columns:repeat(6,1fr);}
   .avatar-pick .av{height:44px;font-size:22px;}
 }
+
+
+/* ============ v1.2 生物立绘（图片版）与立体投影 ============ */
+/* 立绘图片：跟随各上下文的 font-size 缩放，object-fit 防变形 */
+img.pp-img{width:1em;height:1em;object-fit:contain;display:block;}
+.dex-ico img.pp-img{display:inline-block;vertical-align:-0.18em;}
+/* 地面投影：空场上的小生物脚下有椭圆软阴影，立体感 */
+.pp-shadow{width:50px;height:14px;margin-left:-25px;bottom:-3px;
+  background:radial-gradient(ellipse, rgba(15,42,26,.36), transparent 70%);}
+.walker .pp-shadow{width:68px;height:17px;margin-left:-34px;bottom:3px;}
+.potted .pp-shadow{width:40px;height:9px;margin-left:-20px;bottom:14px;}
+.pond-pet .pp-shadow{width:44px;height:10px;margin-left:-22px;}
+/* 各场景立绘尺寸 */
+.walker img.pp-img{width:56px;height:56px;}
+.potted img.pp-img{width:42px;height:42px;}
+.pond-pet img.pp-img{width:40px;height:40px;}
+.hp-emoji img.pp-img{width:40px;height:40px;}
+.caps-ico img.pp-img{width:32px;height:32px;}
+.dex-ico img.pp-img{width:22px;height:22px;}
+/* 图片版阴影离身体近一点：walker 身体上移，投影保持在地面 */
+@media (max-width:720px){
+  .walker img.pp-img{width:50px;height:50px;}
+  .potted img.pp-img{width:38px;height:38px;}
+  .hp-emoji img.pp-img{width:36px;height:36px;}
+  .walker .pp-shadow{width:54px;height:13px;margin-left:-27px;}
+}

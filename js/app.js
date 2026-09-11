@@ -508,6 +508,12 @@
     return { icon: icons[worst.k], text: names[worst.k], cls: worst.v < 20 ? 'bad' : 'warn' };
   }
 
+  /* 物种立绘：新物种用图片，老物种兜底 emoji */
+  function spArt(sp, cls) {
+    if (sp.img) return '<img class="' + cls + ' pp-img" src="' + sp.img + '" alt="" draggable="false">';
+    return '<span class="' + cls + '">' + sp.emoji + '</span>';
+  }
+
   function petFaceHtml(p) {
     const sp = window.Game.speciesById(p.speciesId);
     const mood = window.Game.moodOf(p);
@@ -515,7 +521,7 @@
     const happy = !b && mood.emoji === '😊';
     return '<span class="pp-bubble ' + (b ? b.cls : 'hide') + '">' +
         (b ? b.icon + ' <i>' + esc(b.text) + '</i>' : '…') + '</span>' +
-      '<span class="pp-body"><span class="pp-emoji">' + sp.emoji + '</span></span>' +
+      '<span class="pp-body">' + spArt(sp, 'pp-emoji') + '</span>' +
       (happy ? '<span class="pp-happy">💗</span>' : '') +
       '<span class="pp-shadow"></span>';
   }
@@ -560,7 +566,7 @@
         const prog = Math.min(1, (Date.now() - c.hatchStart) / (c.hatchMinutes * 60000));
         const ready = prog >= 1;
         h += '<button class="hatch-pod' + (ready ? ' ready' : '') + '" data-act="cap-open" data-id="' + c.id + '" title="' + esc(sp.name) + '">' +
-          '<span class="hp-emoji">' + sp.emoji + '</span>' +
+          spArt(sp, 'hp-emoji') +
           '<span class="hp-bar"><i style="width:' + Math.round(prog * 100) + '%"></i></span>' +
           (ready ? '<span class="hp-tag">✨破壳</span>' : '') +
           '</button>';
@@ -772,7 +778,7 @@
     const gate = window.Game.quizGate(c.id);
 
     let h = '<div class="caps">';
-    h += '<div class="caps-ico">' + sp.emoji + '</div>';
+    h += '<div class="caps-ico">' + spArt(sp, 'caps-ico') + '</div>';
     h += '<div style="flex:1;min-width:0">';
     h += '<div class="caps-name">' + esc(sp.name) + ' <span class="badge-rar rar-' + sp.rarity + '">' + rarityName(sp.rarity) + '</span></div>';
     if (c.place) {
@@ -977,14 +983,14 @@
     /* 图鉴 */
     h += '<div class="panel">';
     h += '<div class="panel-head"><h2>📖 已收录的生命</h2><span class="hint">' +
-      S.stats.uniqueSpecies + ' / ' + D.SPECIES.length + ' 种</span></div>';
+      S.stats.uniqueSpecies + ' / ' + D.SPECIES_ACTIVE.length + ' 种</span></div>';
     h += '<div style="display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto">';
-    D.SPECIES.forEach(function (sp) {
+    D.SPECIES_ACTIVE.forEach(function (sp) {
       const owned = S.pets.some(function (p) { return p.speciesId === sp.id; });
       const caps = S.capsules.some(function (c) { return c.speciesId === sp.id; });
       const known = owned || caps;
       h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid ' + (known ? '#D9E8D8' : '#EEF3EE') + ';border-radius:12px;background:' + (known ? '#fff' : '#FAFCFA') + '">' +
-        '<span style="font-size:20px;filter:' + (known ? 'none' : 'grayscale(1) opacity(.4)') + '">' + sp.emoji + '</span>' +
+        '<span style="font-size:20px;filter:' + (known ? 'none' : 'grayscale(1) opacity(.4)') + '">' + spArt(sp, 'dex-ico') + '</span>' +
         '<div style="flex:1;min-width:0">' +
           '<div style="font-size:13.5px;font-weight:600;color:' + (known ? '#22332A' : '#B7C7BA') + '">' + (known ? esc(sp.name) : '？？？') +
             ' <span class="badge-rar rar-' + sp.rarity + '">' + rarityName(sp.rarity) + '</span></div>' +

@@ -60,43 +60,72 @@ window.GAME_DATA = (function () {
    * need: 护理动作类型（plantish: water/fert/pest；animal: food/bath/clean）
    */
   const SPECIES = [
-    /* ===== 植物 ===== */
-    { id: 'p_tea',   name: '云南山茶',   kind: 'plant', rarity: 1, emoji: '🌸', home: '大理·楚雄',  tip: '花大如碗，一树千朵。云南八大名花之首。' },
-    { id: 'p_bougain', name: '三角梅',   kind: 'plant', rarity: 1, emoji: '🌺', home: '全省',        tip: '苞片似花，越晒越艳，城市的墙都靠它撑着。' },
-    { id: 'p_rhodo', name: '高山杜鹃',   kind: 'plant', rarity: 1, emoji: '💮', home: '迪庆·怒江',  tip: '海拔三千米以上开成花海，当地人叫"山踯躅"。' },
-    { id: 'p_clove', name: '滇丁香',     kind: 'plant', rarity: 1, emoji: '🌼', home: '滇中高原',    tip: '雨后香气最浓，云南特有属。' },
-    { id: 'p_wangtian', name: '望天树',  kind: 'plant', rarity: 2, emoji: '🌲', home: '西双版纳',    tip: '雨林里的摩天楼，跳伞塔旁抬头看它才知道什么叫高。' },
-    { id: 'p_puer',  name: '普洱茶树',   kind: 'plant', rarity: 2, emoji: '🍃', home: '普洱·临沧',  tip: '一片叶子撑起一条古道。越陈越香。' },
-    { id: 'p_lotus', name: '地涌金莲',   kind: 'plant', rarity: 2, emoji: '🌻', home: '西双版纳',    tip: '佛家五树六花之一，花开如地上涌出金莲。' },
-    { id: 'p_dove',  name: '珙桐·鸽子花', kind: 'plant', rarity: 3, emoji: '🕊️', home: '滇东北',      tip: '第三纪孑遗植物，风一吹满树白鸽。' },
+    /* ===== 动物（孵化仓）===== */
+    { id: 'n_panda',    name: '大熊猫',     kind: 'animal', rarity: 3, emoji: '🐼', img: 'assets/creatures/daxiongmao.webp',    home: '滇川交界',  tip: '国宝界的顶流。别看它天天啃竹子，咬合力在食肉目里名列前茅。' },
+    { id: 'n_redpanda', name: '小熊猫',     kind: 'animal', rarity: 2, emoji: '🐾', img: 'assets/creatures/xiaoxiongmao.webp',  home: '高黎贡山',  tip: '单独一科，和大熊猫没多少亲戚关系。尾巴红棕环纹，爬树高手。' },
+    { id: 'n_elephant', name: '亚洲象',     kind: 'animal', rarity: 3, emoji: '🐘', img: 'assets/creatures/yazhouxiang.webp',   home: '西双版纳',  tip: '2021 年那趟北上旅行，让全世界记住了它们。' },
+    { id: 'n_peacock',  name: '绿孔雀',     kind: 'animal', rarity: 3, emoji: '🦚', img: 'assets/creatures/lvkongque.webp',     home: '滇中河谷',  tip: '中国唯一的本土孔雀，比蓝孔雀更难得。' },
+    { id: 'n_hornbill', name: '双角犀鸟',   kind: 'animal', rarity: 2, emoji: '🦜', img: 'assets/creatures/shuangjiaoxiniao.webp', home: '盈江·瑞丽', tip: '繁殖时把妻子封在树洞里养胎，堪称雨林模范丈夫。' },
+    { id: 'n_snub',     name: '滇金丝猴',   kind: 'animal', rarity: 3, emoji: '🐒', img: 'assets/creatures/dianjinsihou.webp',  home: '白马雪山',  tip: '"雪山精灵"，全球仅三千余只，云南独有。' },
+    { id: 'n_salamander', name: '红瘰疣螈', kind: 'animal', rarity: 2, emoji: '🦎', img: 'assets/creatures/hongluoyouyuan.webp', home: '滇西山地', tip: '云南特有的两栖"小辣条"，橙红疣粒是警戒色。国家二级保护动物。' },
+    { id: 'n_turtle',   name: '云南闭壳龟', kind: 'animal', rarity: 2, emoji: '🐢', img: 'assets/creatures/yunnanbikegui.webp', home: '滇中高原',  tip: '云南特有的闭壳龟，腹甲能完全闭合，把自己锁成一个小堡垒。' },
+    { id: 'n_ladyam',   name: '白腹锦鸡',   kind: 'animal', rarity: 1, emoji: '🐦', img: 'assets/creatures/baifujinji.webp',    home: '滇西·川西', tip: '羽色像打翻的调色盘，白冠红腹配蓝绿披肩，山里最靓的鸡。' },
+    { id: 'n_ratsnake', name: '黑眉锦蛇',   kind: 'animal', rarity: 1, emoji: '🐍', img: 'assets/creatures/heimeijinshe.webp',  home: '全省',      tip: '无毒的捕鼠能手，眼后两条黑纹像画了眉，农家粮仓的老朋友。' },
 
-    /* ===== 真菌（云南的浪漫） ===== */
-    { id: 'f_bolete', name: '牛肝菌',    kind: 'fungus', rarity: 1, emoji: '🍄', home: '全省松林',   tip: '"菌中之王"的邻居，便宜、好吃、必须炒熟。' },
-    { id: 'f_green',  name: '青头菌',    kind: 'fungus', rarity: 1, emoji: '🍄‍🟫', home: '滇中',      tip: '伞面泛青，云南人从小吃到大，最安全的那一口。' },
-    { id: 'f_bamboo', name: '竹荪',      kind: 'fungus', rarity: 2, emoji: '🎋', home: '昭通·普洱',  tip: '穿白纱裙的菌子，一朵一朵像小宫女。' },
-    { id: 'f_jizong', name: '鸡枞',      kind: 'fungus', rarity: 2, emoji: '🐔', home: '滇南',        tip: '和白蚁共生，挖断蚁巢就再长不出来。' },
-    { id: 'f_ganba',  name: '干巴菌',    kind: 'fungus', rarity: 2, emoji: '🥩', home: '昆明·楚雄',  tip: '长得最丑，炒出来最香，价格也最不讲道理。' },
-    { id: 'f_ganoderma', name: '灵芝',   kind: 'fungus', rarity: 3, emoji: '🧿', home: '滇西',        tip: '仙草级存在，长在朽木上，一年才增一圈。' },
-    { id: 'f_matsutake', name: '松茸',   kind: 'fungus', rarity: 3, emoji: '✨', home: '香格里拉',    tip: '无法人工栽培的傲娇贵族，出土 48 小时香气最好。' },
+    /* ===== 植物（温室）===== */
+    { id: 'p_camellia', name: '云南茶花',   kind: 'plant', rarity: 1, emoji: '🌺', img: 'assets/creatures/yunnanchahua.webp',  home: '大理·楚雄', tip: '花大如碗，一树千朵。云南八大名花之首。' },
+    { id: 'p_musella',  name: '地涌金莲',   kind: 'plant', rarity: 2, emoji: '🌻', img: 'assets/creatures/diyongjinlian.webp', home: '西双版纳',  tip: '佛家五树六花之一，花开如地上涌出金莲。' },
+    { id: 'p_phalaen',  name: '蝴蝶兰',     kind: 'plant', rarity: 1, emoji: '🦋', img: 'assets/creatures/hudielan.webp',      home: '澜沧江流域', tip: '附生在林间树干上，开花像群蝶落枝，年宵花里的常青树。' },
+    { id: 'p_primula',  name: '报春花',     kind: 'plant', rarity: 1, emoji: '💐', img: 'assets/creatures/baochunhua.webp',    home: '滇西北',    tip: '报春花属以云南为分布中心，早春开花，名副其实的"报春使者"。' },
+    { id: 'p_rhodo',    name: '高山杜鹃',   kind: 'plant', rarity: 2, emoji: '💮', img: 'assets/creatures/gaoshandujuan.webp', home: '迪庆·怒江', tip: '海拔三千米以上开成花海，当地人叫"山踯躅"。' },
+    { id: 'p_haicai',   name: '海菜花',     kind: 'plant', rarity: 2, emoji: '🌊', img: 'assets/creatures/haicaihua.webp',     home: '大理洱海',  tip: '只长在清水里，水一脏就绝迹——它是水质的判官。' },
+    { id: 'p_dendrobium', name: '球花石斛', kind: 'plant', rarity: 2, emoji: '🌿', img: 'assets/creatures/qiuhuashihu.webp',   home: '普洱·版纳', tip: '一串串白花开成球，附生老树干上，是有名的药用石斛。' },
+    { id: 'p_michelia', name: '云南含笑',   kind: 'plant', rarity: 1, emoji: '🌼', img: 'assets/creatures/yunnanhanxiao.webp', home: '全省',      tip: '白花带清香，云南人叫"袋袋花"，春天山道边一路香。' },
+    { id: 'p_flame',    name: '火焰花',     kind: 'plant', rarity: 2, emoji: '🔥', img: 'assets/creatures/huoyanhua.webp',     home: '滇南',      tip: '橙红色花朵密密缀满枝条，远看像一束束小火把在燃烧。' },
+    { id: 'p_saxifrage', name: '虎耳草',    kind: 'plant', rarity: 1, emoji: '🍀', img: 'assets/creatures/huercao.webp',       home: '滇西北高山', tip: '圆叶带绒毛像小虎耳，能沿石壁攀生，岩石花园的宠儿。' },
 
-    /* ===== 藻类 ===== */
-    { id: 'a_spirulina', name: '程海螺旋藻', kind: 'algae', rarity: 2, emoji: '🦠', home: '丽江·程海', tip: '高原碱性湖泊里的蓝色奇迹，蛋白质含量极高。' },
-    { id: 'a_haicai',    name: '海菜花',     kind: 'algae', rarity: 2, emoji: '🌊', home: '大理洱海',   tip: '只长在清水里，水一脏就绝迹——它是水质的判官。' },
-    { id: 'a_water',     name: '水绵',       kind: 'algae', rarity: 1, emoji: '🟢', home: '随处可见',   tip: '水塘里那团绿丝，显微镜下像一串翡翠念珠。' },
-
-    /* ===== 动物 ===== */
-    { id: 'n_dog',   name: '土狗·阿黄',  kind: 'animal', rarity: 1, emoji: '🐕', home: '各村落',     tip: '云南乡村的守门神，忠诚又能吃苦。' },
-    { id: 'n_pika',  name: '高原鼠兔',   kind: 'animal', rarity: 1, emoji: '🐹', home: '迪庆草原',   tip: '不是老鼠也不是兔子，草原食物链的基石。' },
-    { id: 'n_snail', name: '洱海螺',     kind: 'animal', rarity: 1, emoji: '🐌', home: '大理',        tip: '洱海的原住民，慢，但活得比谁都久。' },
-    { id: 'n_fish',  name: '大理裂腹鱼', kind: 'animal', rarity: 2, emoji: '🐟', home: '洱海',        tip: '云南特有种，洄游时要在水里"翻山越岭"。' },
-    { id: 'n_loris', name: '懒猴·蜂猴',  kind: 'animal', rarity: 2, emoji: '🐒', home: '德宏·普洱',  tip: '唯一的毒猴，也是被宠物贸易伤害最深的猴。' },
-    { id: 'n_redpanda', name: '小熊猫',  kind: 'animal', rarity: 2, emoji: '🐾', home: '高黎贡山',   tip: '单独一个科，和大熊猫没多少亲戚关系。' },
-    { id: 'n_hornbill', name: '双角犀鸟', kind: 'animal', rarity: 2, emoji: '🦜', home: '盈江·瑞丽',  tip: '繁殖时把妻子封在树洞里养胎，堪称雨林模范丈夫。' },
-    { id: 'n_crane', name: '黑颈鹤',     kind: 'animal', rarity: 2, emoji: '🕊️', home: '昭通大山包', tip: '唯一的高原鹤类，冬天在云南的湿地过冬。' },
-    { id: 'n_snub',  name: '滇金丝猴',   kind: 'animal', rarity: 3, emoji: '🐒', home: '白马雪山',   tip: '"雪山精灵"，全球仅三千余只，云南独有。' },
-    { id: 'n_elephant', name: '亚洲象',  kind: 'animal', rarity: 3, emoji: '🐘', home: '西双版纳',   tip: '2021 年那趟北上旅行，让全世界记住了它们。' },
-    { id: 'n_peacock', name: '绿孔雀',   kind: 'animal', rarity: 3, emoji: '🦚', home: '滇中河谷',   tip: '中国唯一的本土孔雀，比蓝孔雀更难得。' }
+    /* ===== 真菌（温室 · 云南的浪漫）===== */
+    { id: 'f_porcini',  name: '美味牛肝菌', kind: 'fungus', rarity: 1, emoji: '🍄', img: 'assets/creatures/meiveiniuganjun.webp', home: '全省松林', tip: '"菌中之王"本尊，肉厚味鲜；炒前片薄片、务必炒熟透。' },
+    { id: 'f_jianshou', name: '见手青',     kind: 'fungus', rarity: 2, emoji: '🫥', img: 'assets/creatures/jianshouqing.webp',  home: '滇中·滇西', tip: '伤口变蓝的神奇菌子，风味一绝；炒不熟会"看见小人"。' },
+    { id: 'f_jizong',   name: '鸡枞菌',     kind: 'fungus', rarity: 2, emoji: '🐔', img: 'assets/creatures/jizongjun.webp',     home: '滇南',      tip: '和白蚁共生，挖断蚁巢就再长不出来。' },
+    { id: 'f_matsutake', name: '松茸',      kind: 'fungus', rarity: 3, emoji: '✨', img: 'assets/creatures/songrong.webp',      home: '香格里拉',  tip: '无法人工栽培的傲娇贵族，出土 48 小时香气最好。' },
+    { id: 'f_zhusun',   name: '竹荪',       kind: 'fungus', rarity: 2, emoji: '🎋', img: 'assets/creatures/zhusun.webp',        home: '昭通·普洱', tip: '穿白纱裙的菌子，一朵一朵像小宫女。' },
+    { id: 'f_honggu',   name: '红菇',       kind: 'fungus', rarity: 1, emoji: '🍅', img: 'assets/creatures/honggu.webp',        home: '滇南·普洱', tip: '伞面大红，炖汤汤色红亮，是月子里的传统滋补汤。' },
+    { id: 'f_naijiang', name: '奶浆菌',     kind: 'fungus', rarity: 1, emoji: '🥛', img: 'assets/creatures/naijiangjun.webp',   home: '全省',      tip: '掰断菌柄会流出白色乳汁而得名，脆嫩微甜，云南人从小吃到大。' },
+    { id: 'f_ganba',    name: '干巴菌',     kind: 'fungus', rarity: 2, emoji: '🥩', img: 'assets/creatures/ganbajun.webp',      home: '昆明·楚雄', tip: '长得最丑，炒出来最香，价格也最不讲道理。' },
+    { id: 'f_qingtou',  name: '青头菌',     kind: 'fungus', rarity: 1, emoji: '🍄‍🟫', img: 'assets/creatures/qingtoujun.webp', home: '滇中',      tip: '伞面泛青，最让人放心的那一口鲜甜。' },
+    { id: 'f_coral',    name: '珊瑚菌',     kind: 'fungus', rarity: 1, emoji: '🪸', img: 'assets/creatures/shanhujun.webp',     home: '滇中·滇西北', tip: '长得像海底珊瑚，脆脆嫩嫩，云南人叫它"刷把菌"。' }
   ];
+
+  /* 老物种（v1.2 之前的卡池）：只为兼容旧存档（已养着的别消失），
+   * 不进新抽卡池、不进图鉴。 */
+  const SPECIES_LEGACY = [
+    { id: 'p_tea',   name: '云南山茶',   kind: 'plant', rarity: 1, emoji: '🌸', home: '大理·楚雄',  legacy: true, tip: '老朋友：花大如碗，一树千朵。' },
+    { id: 'p_bougain', name: '三角梅',   kind: 'plant', rarity: 1, emoji: '🌺', home: '全省',        legacy: true, tip: '苞片似花，越晒越艳。' },
+    { id: 'p_clove', name: '滇丁香',     kind: 'plant', rarity: 1, emoji: '🌼', home: '滇中高原',    legacy: true, tip: '雨后香气最浓。' },
+    { id: 'p_wangtian', name: '望天树',  kind: 'plant', rarity: 2, emoji: '🌲', home: '西双版纳',    legacy: true, tip: '雨林里的摩天楼。' },
+    { id: 'p_puer',  name: '普洱茶树',   kind: 'plant', rarity: 2, emoji: '🍃', home: '普洱·临沧',  legacy: true, tip: '一片叶子撑起一条古道。' },
+    { id: 'p_dove',  name: '珙桐·鸽子花', kind: 'plant', rarity: 3, emoji: '🕊️', home: '滇东北',      legacy: true, tip: '风一吹满树白鸽。' },
+    { id: 'f_bolete', name: '牛肝菌',    kind: 'fungus', rarity: 1, emoji: '🍄', home: '全省松林',   legacy: true, tip: '便宜、好吃、必须炒熟。' },
+    { id: 'f_green',  name: '青头菌',    kind: 'fungus', rarity: 1, emoji: '🍄‍🟫', home: '滇中',      legacy: true, tip: '云南人从小吃到大。' },
+    { id: 'f_bamboo', name: '竹荪',      kind: 'fungus', rarity: 2, emoji: '🎋', home: '昭通·普洱',  legacy: true, tip: '穿白纱裙的菌子。' },
+    { id: 'f_jizong_old', name: '鸡枞', kind: 'fungus', rarity: 2, emoji: '🐔', home: '滇南',        legacy: true, tip: '和白蚁共生。' },
+    { id: 'f_ganba_old',  name: '干巴菌', kind: 'fungus', rarity: 2, emoji: '🥩', home: '昆明·楚雄',  legacy: true, tip: '长得最丑，炒出来最香。' },
+    { id: 'f_ganoderma', name: '灵芝',   kind: 'fungus', rarity: 3, emoji: '🧿', home: '滇西',        legacy: true, tip: '仙草级存在。' },
+    { id: 'f_matsutake_old', name: '松茸', kind: 'fungus', rarity: 3, emoji: '✨', home: '香格里拉',  legacy: true, tip: '无法人工栽培的傲娇贵族。' },
+    { id: 'a_spirulina', name: '程海螺旋藻', kind: 'algae', rarity: 2, emoji: '🦠', home: '丽江·程海', legacy: true, tip: '高原碱性湖泊里的蓝色奇迹。' },
+    { id: 'a_haicai',    name: '海菜花·老邻居', kind: 'algae', rarity: 2, emoji: '🌊', home: '大理洱海', legacy: true, tip: '水质的判官。' },
+    { id: 'a_water',     name: '水绵',       kind: 'algae', rarity: 1, emoji: '🟢', home: '随处可见',   legacy: true, tip: '水塘里那团绿丝。' },
+    { id: 'n_dog',   name: '土狗·阿黄',  kind: 'animal', rarity: 1, emoji: '🐕', home: '各村落',     legacy: true, tip: '云南乡村的守门神。' },
+    { id: 'n_pika',  name: '高原鼠兔',   kind: 'animal', rarity: 1, emoji: '🐹', home: '迪庆草原',   legacy: true, tip: '草原食物链的基石。' },
+    { id: 'n_snail', name: '洱海螺',     kind: 'animal', rarity: 1, emoji: '🐌', home: '大理',        legacy: true, tip: '慢，但活得久。' },
+    { id: 'n_fish',  name: '大理裂腹鱼', kind: 'animal', rarity: 2, emoji: '🐟', home: '洱海',        legacy: true, tip: '洄游时要在水里"翻山越岭"。' },
+    { id: 'n_loris', name: '懒猴·蜂猴',  kind: 'animal', rarity: 2, emoji: '🐒', home: '德宏·普洱',  legacy: true, tip: '唯一的毒猴。' },
+    { id: 'n_crane', name: '黑颈鹤',     kind: 'animal', rarity: 2, emoji: '🕊️', home: '昭通大山包', legacy: true, tip: '唯一的高原鹤类。' }
+  ];
+
+  const SPECIES_ACTIVE = SPECIES;
+  const SPECIES_ALL = SPECIES.concat(SPECIES_LEGACY);
 
   /* ---------- 商店 ---------- */
   const ITEMS = [
@@ -437,7 +466,8 @@ window.GAME_DATA = (function () {
     BOOK_DAYS: BOOK_DAYS,
     SUBJECTS: SUBJECTS,
     SCRIPTS: SCRIPTS,
-    SPECIES: SPECIES,
+    SPECIES: SPECIES_ALL,
+    SPECIES_ACTIVE: SPECIES_ACTIVE,
     ITEMS: ITEMS,
     ITEM_MAP: ITEM_MAP,
     CARE: CARE,

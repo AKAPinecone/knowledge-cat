@@ -29,7 +29,7 @@ window.Game = (function () {
   function homeOf(sp) {
     return (sp.kind === 'animal') ? 'hatchery' : 'greenhouse';
   }
-  function homeName(kind) { return kind === 'animal' ? '孵化仓' : '温室'; }
+  function homeName(kind) { return (kind === 'animal' || kind === 'hatchery') ? '孵化室' : '温室'; }
 
   /* ---------------- 扭蛋 ---------------- */
   function rollRarity() {
@@ -47,7 +47,7 @@ window.Game = (function () {
 
   function pullOnce() {
     const rarity = rollRarity();
-    const pool = D.SPECIES.filter(function (s) { return s.rarity === rarity; });
+    const pool = D.SPECIES.filter(function (s) { return s.rarity === rarity && !s.legacy; });
     const sp = pick(pool);
     const c = {
       id: 'cap_' + Date.now() + '_' + rand(9999),

@@ -6,7 +6,7 @@
  * - 版本号 CACHE 升一位即全量换新缓存（发新版记得 bump）
  * - 只拦本站 GET；云端 API 是跨域请求，天然不受影响，联网失败自动降级本地模式
  * ========================================================= */
-var CACHE = 'knowledge-cat-v2';
+var CACHE = 'knowledge-cat-v3';
 var ASSETS = [
   './',
   './index.html',
@@ -24,7 +24,37 @@ var ASSETS = [
   './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/icon-maskable-512.png'
+  './icons/icon-maskable-512.png',
+  './assets/creatures/baifujinji.webp',
+  './assets/creatures/baochunhua.webp',
+  './assets/creatures/daxiongmao.webp',
+  './assets/creatures/diyongjinlian.webp',
+  './assets/creatures/dianjinsihou.webp',
+  './assets/creatures/ganbajun.webp',
+  './assets/creatures/gaoshandujuan.webp',
+  './assets/creatures/haicaihua.webp',
+  './assets/creatures/heimeijinshe.webp',
+  './assets/creatures/honggu.webp',
+  './assets/creatures/hongluoyouyuan.webp',
+  './assets/creatures/hudielan.webp',
+  './assets/creatures/huercao.webp',
+  './assets/creatures/huoyanhua.webp',
+  './assets/creatures/jizongjun.webp',
+  './assets/creatures/jianshouqing.webp',
+  './assets/creatures/lvkongque.webp',
+  './assets/creatures/meiveiniuganjun.webp',
+  './assets/creatures/naijiangjun.webp',
+  './assets/creatures/qingtoujun.webp',
+  './assets/creatures/qiuhuashihu.webp',
+  './assets/creatures/shanhujun.webp',
+  './assets/creatures/shuangjiaoxiniao.webp',
+  './assets/creatures/songrong.webp',
+  './assets/creatures/xiaoxiongmao.webp',
+  './assets/creatures/yazhouxiang.webp',
+  './assets/creatures/yunnanbikegui.webp',
+  './assets/creatures/yunnanchahua.webp',
+  './assets/creatures/yunnanhanxiao.webp',
+  './assets/creatures/zhusun.webp',
 ];
 
 self.addEventListener('install', function (e) {
