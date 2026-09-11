@@ -169,18 +169,9 @@
     /* 学习链路只需一个提示回调；这里没有任何计时器 */
     window.Study.hooks.onNotice = function (t, k) { toast(t, k); };
 
-    /* 云端同步：登录过邮箱的设备打开就自动对账（云端新→接进来；本机新→推上去）。
-       没登录 / 本地预览 → 只是顶栏云朵显示状态，游戏照常玩。 */
-    if (window.CloudSync) {
-      window.CloudSync.onRemoteApplied = function () {
-        S = window.Store.state;
-        toast('☁️ 已从云端接上最新进度，乐园恢复如初。', 'ok', 6500);
-        render();
-      };
-      window.CloudSync.init();
-      const chip = $('#chip-cloud');
-      if (chip) chip.onclick = openCloudModal;
-    }
+    /* 跨设备同步：顶栏那颗显眼的按钮，一键开同步码（不联网、不登录） */
+    const syncChip = $('#chip-sync');
+    if (syncChip) syncChip.onclick = openSyncModal;
 
     /* 离线结算 */
     const report = window.Store.advanceOffline();
@@ -613,6 +604,7 @@
     }
     h += '</div>';
     h += '<div class="park-tip">👆 点小生物看状态、照顾它 · 小动物会自己遛弯 · 不舒服会冒气泡</div>';
+    h += '<button class="sync-banner" data-act="sync">📲 换设备玩？点这里把进度搬过去（跨设备同步）</button>';
     h += '</div>';
 
     /* ---- 待安置 ---- */
@@ -1123,8 +1115,6 @@
 
   function viewMe() {
     const pf = profileOf();
-    const cs = window.CloudSync ? window.CloudSync.status() : { state: 'off' };
-    const acc = cs.state === 'in' ? (cs.email || '') : '';
     const rate = S.stats.questions ? Math.round(S.stats.correct / S.stats.questions * 100) : 0;
     const achN = Object.keys(S.achievements).length;
     const achAll = D.ACHIEVEMENTS.length;
@@ -1143,15 +1133,12 @@
     h += '<button class="btn btn-sm" data-act="me-edit">✏️ 编辑资料</button>';
     h += '</div>';
 
-    h += '<div class="me-cloud' + (cs.state === 'in' ? ' on' : '') + '">';
-    if (cs.state === 'in') {
-      h += '<span>☁️ 云端同步 · ' + esc(acc) + '</span>' +
-        '<button class="btn btn-sm" data-act="cloud">查看</button>';
-    } else {
-      h += '<span>☁️ 还没登录云端 —— 登录后手机 / 电脑 / iPad 进度自动同步</span>' +
-        '<button class="btn btn-sm btn-primary" data-act="cloud">去登录</button>';
-    }
-    h += '</div>';
+    h += '<div class="me-sync">' +
+      '<div class="me-sync-t"><b>📲 换设备继续玩</b>' +
+      '<span>进度存在这台设备的浏览器里（安全沙箱，网页绕不过去）。' +
+      '用同步码，一分钟就能把乐园搬到手机 / 电脑 / iPad 上，不联网也不用注册。</span></div>' +
+      '<button class="btn btn-primary" data-act="sync">🔗 打开跨设备同步</button>' +
+      '</div>';
     h += '</div>';
 
     /* 数据总览 */
@@ -1537,7 +1524,6 @@
     if (act === 'heal') return openHealModal(ds.id);
     if (act === 'pet-open' || act === 'pet-info') return openCreatureModal(ds.id);
     if (act === 'cap-open') return openCapsuleModal(ds.id);
-    if (act === 'cloud') return openCloudModal();
     if (act === 'pull') return doPull(parseInt(ds.n, 10));
     if (act === 'qty') {
       const id = ds.id;
@@ -1568,122 +1554,6 @@
 
   /* ---------------- 云端同步弹窗 ---------------- */
   /* 把云端 SDK 的生硬报错翻译成人话（服务方平台故障时最常见） */
-  function cloudErrMsg(e) {
-    const raw = (e && e.message) || String(e || '');
-    if (/failed to fetch|request failed|networkerror|network error|timed? ?out|load failed|502|501|503|504|err_connection|err_name|dns|cors/i.test(raw)) {
-      return '☁️ 云端服务暂时连不上（多半是服务方平台在闹脾气）。' +
-        '你的进度都稳稳存在这台设备上，游戏照常玩、一分不丢；' +
-        '过几个小时再点登录就好了。';
-    }
-    return raw;
-  }
-
-  function openCloudModal() {
-    const cs = window.CloudSync;
-    if (!cs) return toast('❌ 云端模块没加载出来。', 'err');
-    const st = cs.status();
-
-    let body = '', foot = '<button class="btn btn-ghost" id="cl-cancel">关闭</button>';
-
-    if (st.state === 'in') {
-      body += '<div class="okbox">☁️ <b>云端同步开启中</b><br>账号：' + esc(st.email || '（邮箱）') +
-        '　·　这台设备：' + esc(deviceNameOf()) + '</div>';
-      body += '<div class="hint" style="margin-top:10px">最近推送：' +
-        (st.lastPushAt ? fmtWhen(st.lastPushAt) : '还没推过') + '　·　最近拉取：' +
-        (st.lastPullAt ? fmtWhen(st.lastPullAt) : '还没拉过') + '</div>';
-      body += '<div class="hintbox" style="margin-top:10px">之后什么都不用管：本机一有变化，几秒内自动推上云端；' +
-        '别的设备打开游戏会自动接上最新进度。<br>📄 <b>注意</b>：证据库里的录音 / 截图<b>原件</b>存在各设备本地，不进云端同步（云端同步进度与索引）。</div>';
-      if (st.lastErr) body += '<div class="warnbox" style="margin-top:10px">最近一次云端操作报错：' + esc(st.lastErr) + '</div>';
-      foot = '<button class="btn btn-warn" id="cl-out">退出登录</button>' +
-        '<span class="spacer"></span>' +
-        '<button class="btn" id="cl-push">⬆️ 立即推送</button>' +
-        '<button class="btn btn-primary" id="cl-cancel">好哒</button>';
-    } else if (st.state === 'off') {
-      body += '<div class="warnbox">☁️ 当前环境连不上云端（本地预览 / 无网络）。</div>' +
-        '<div class="hint" style="margin-top:10px">游戏照常玩，进度存本机；在正式发布的链接里打开，就会出现登录入口。</div>';
-      foot = '<button class="btn btn-primary" id="cl-cancel">知道啦</button>';
-    } else if (st.state === 'code') {
-      body += '<div class="hintbox">验证码已发到 <b>' + esc(st.email) + '</b>，翻一下邮箱（可能在垃圾邮件里）。</div>' +
-        '<div class="field" style="margin-top:12px"><label>6 位验证码</label>' +
-        '<input type="text" id="cl-code" inputmode="numeric" maxlength="8" placeholder="123456" autocomplete="one-time-code"></div>' +
-        '<div id="cl-out2"></div>';
-      foot = '<button class="btn btn-ghost" id="cl-back">换个邮箱</button>' +
-        '<span class="spacer"></span>' +
-        '<button class="btn btn-primary" id="cl-verify">验证并登录</button>';
-    } else {
-      if (/^http:\/\/(127\.0\.0\.1|localhost)/.test(location.href)) {
-        body += '<div class="warnbox" style="margin-bottom:10px">现在是本地预览（127.0.0.1），云端不认这个地址。' +
-          '请在正式发布的链接里打开再登录。</div>';
-      }
-      body += '<div class="hintbox">登录一个邮箱，进度就会在<b>手机 / 电脑 / iPad、不同浏览器</b>之间自动同步 —— ' +
-        '打开游戏就是最新进度，不用再手动搬存档。只需要登录这一次。</div>' +
-        '<div class="field" style="margin-top:12px"><label>邮箱</label>' +
-        '<input type="email" id="cl-email" placeholder="you@example.com" autocomplete="email">' +
-        '<div class="fh"><span>发送 6 位验证码，回这里填上就算登录。</span></div></div>' +
-        '<div id="cl-out2"></div>';
-      foot = '<button class="btn btn-ghost" id="cl-cancel">暂不登录</button>' +
-        '<button class="btn btn-primary" id="cl-send">发送验证码</button>';
-    }
-
-    openModal({
-      title: '☁️ 云端同步',
-      body: body, foot: foot, wide: false,
-      onMount: function (m) {
-        const out = $('#cl-out2', m);
-        function err(msg) { if (out) out.innerHTML = '<div class="errbox" style="margin-top:10px">' + esc(msg) + '</div>'; }
-        const cancel = $('#cl-cancel', m);
-        if (cancel) cancel.onclick = closeModal;
-        const send = $('#cl-send', m);
-        if (send) send.onclick = function () {
-          const mail = $('#cl-email', m).value;
-          send.disabled = true;
-          cs.sendCode(mail).then(function () {
-            closeModal();
-            toast('📨 验证码已发送，去邮箱看看。', 'ok');
-            openCloudModal();
-          }).catch(function (e) { send.disabled = false; err(cloudErrMsg(e)); });
-        };
-        const verify = $('#cl-verify', m);
-        if (verify) verify.onclick = function () {
-          verify.disabled = true;
-          cs.verifyCode($('#cl-code', m).value).then(function () {
-            closeModal();
-            toast('☁️ 登录成功！以后打开游戏就自动同步。', 'ok', 7000);
-            render();
-          }).catch(function (e) { verify.disabled = false; err(cloudErrMsg(e)); });
-        };
-        const back = $('#cl-back', m);
-        if (back) back.onclick = function () { closeModal(); openCloudModal(); };
-        const push = $('#cl-push', m);
-        if (push) push.onclick = function () {
-          push.disabled = true;
-          cs.pushNow().then(function (ok) {
-            push.disabled = false;
-            if (ok) { toast('⬆️ 已推送到云端。', 'ok'); closeModal(); openCloudModal(); }
-            else err('推送失败：' + cloudErrMsg({ message: cs.status().lastErr || '网络问题' }));
-          });
-        };
-        const outBtn = $('#cl-out', m);
-        if (outBtn) outBtn.onclick = function () {
-          cs.signOut().then(function () {
-            closeModal();
-            toast('已退出云端登录。本机存档还在，只是不再自动同步。', 'ok', 7000);
-            render();
-          });
-        };
-      }
-    });
-  }
-  function deviceNameOf() {
-    try {
-      const ua = navigator.userAgent || '';
-      if (/iPad|Tablet/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document)) return 'iPad / 平板';
-      if (/Mobi|iPhone|Android/i.test(ua)) return '手机';
-      return '电脑';
-    } catch (e) { return '设备'; }
-  }
-
-  /* ---------------- 破壳 ---------------- */
   function doHatch(id) {
     const r = window.Game.hatch(id);
     if (!r.ok) {
