@@ -1561,6 +1561,17 @@
   }
 
   /* ---------------- 云端同步弹窗 ---------------- */
+  /* 把云端 SDK 的生硬报错翻译成人话（服务方平台故障时最常见） */
+  function cloudErrMsg(e) {
+    const raw = (e && e.message) || String(e || '');
+    if (/failed to fetch|request failed|networkerror|network error|timed? ?out|load failed|502|501|503|504|err_connection|err_name|dns|cors/i.test(raw)) {
+      return '☁️ 云端服务暂时连不上（多半是服务方平台在闹脾气）。' +
+        '你的进度都稳稳存在这台设备上，游戏照常玩、一分不丢；' +
+        '过几个小时再点登录就好了。';
+    }
+    return raw;
+  }
+
   function openCloudModal() {
     const cs = window.CloudSync;
     if (!cs) return toast('❌ 云端模块没加载出来。', 'err');
@@ -1624,7 +1635,7 @@
             closeModal();
             toast('📨 验证码已发送，去邮箱看看。', 'ok');
             openCloudModal();
-          }).catch(function (e) { send.disabled = false; err(e.message || String(e)); });
+          }).catch(function (e) { send.disabled = false; err(cloudErrMsg(e)); });
         };
         const verify = $('#cl-verify', m);
         if (verify) verify.onclick = function () {
@@ -1633,7 +1644,7 @@
             closeModal();
             toast('☁️ 登录成功！以后打开游戏就自动同步。', 'ok', 7000);
             render();
-          }).catch(function (e) { verify.disabled = false; err(e.message || String(e)); });
+          }).catch(function (e) { verify.disabled = false; err(cloudErrMsg(e)); });
         };
         const back = $('#cl-back', m);
         if (back) back.onclick = function () { closeModal(); openCloudModal(); };
@@ -1643,7 +1654,7 @@
           cs.pushNow().then(function (ok) {
             push.disabled = false;
             if (ok) { toast('⬆️ 已推送到云端。', 'ok'); closeModal(); openCloudModal(); }
-            else err('推送失败：' + (cs.status().lastErr || '网络问题'));
+            else err('推送失败：' + cloudErrMsg({ message: cs.status().lastErr || '网络问题' }));
           });
         };
         const outBtn = $('#cl-out', m);
