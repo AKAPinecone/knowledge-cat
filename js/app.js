@@ -172,6 +172,8 @@
     /* 跨设备同步：顶栏那颗显眼的按钮，一键开同步码（不联网、不登录） */
     const syncChip = $('#chip-sync');
     if (syncChip) syncChip.onclick = openSyncModal;
+    const saveChip = $('#chip-save');
+    if (saveChip) saveChip.onclick = openSaveModal;
 
     /* 离线结算 */
     const report = window.Store.advanceOffline();
@@ -268,6 +270,8 @@
     const info = window.Store.currentPhase();
     $('#chip-phase .chip-v').textContent = info.phase.name + ' D' + info.day;
     $('#chip-streak .chip-v').textContent = (S.stats.streak || 0) + ' 天';
+    const svEl = $('#chip-save-v');
+    if (svEl) svEl.textContent = '存档 ' + window.Store.saveMeta().count;
     $('#cur-tickets').textContent = S.cur.tickets;
     $('#cur-beans').textContent = Math.floor(S.cur.beans);
 
@@ -307,6 +311,7 @@
     const kolb = window.Study.kolbProgress();
 
     let h = '';
+    h += saveNagHtml();
 
     /* 顶部：今日投喂单 —— 6 个小格子，这是每天的主线。
        进度条只数这 6 件；碎片和加餐退到下面当辅助信息。 */
@@ -605,6 +610,7 @@
     h += '</div>';
     h += '<div class="park-tip">👆 点小生物看状态、照顾它 · 小动物会自己遛弯 · 不舒服会冒气泡</div>';
     h += '<button class="sync-banner" data-act="sync">📲 换设备玩？点这里把进度搬过去（跨设备同步）</button>';
+    h += saveNagHtml();
     h += '</div>';
 
     /* ---- 待安置 ---- */
@@ -1133,6 +1139,23 @@
     h += '<button class="btn btn-sm" data-act="me-edit">✏️ 编辑资料</button>';
     h += '</div>';
 
+    /* 存档面板 */
+    const svList = window.Store.listSaves();
+    h += '<div class="panel">';
+    h += '<div class="panel-head"><h2>💾 我的存档</h2><span class="hint">' + svList.length + ' / 12 · 完成一项任务自动存一份</span></div>';
+    if (!svList.length) {
+      h += '<div class="empty">还没有存档。完成任意一项任务，系统会自动存下第一份。</div>';
+    } else {
+      h += '<div class="save-list">';
+      svList.slice(0, 5).forEach(function (sv, i) { h += saveRowHtml(sv, i); });
+      h += '</div>';
+    }
+    h += '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">' +
+      '<button class="btn btn-sm btn-primary" data-act="save-open">💾 打开存档</button>' +
+      '<button class="btn btn-sm" data-act="sync">🔗 用存档码跨设备</button>' +
+      '</div>';
+    h += '</div>';
+
     h += '<div class="me-sync">' +
       '<div class="me-sync-t"><b>📲 换设备继续玩</b>' +
       '<span>进度存在这台设备的浏览器里（安全沙箱，网页绕不过去）。' +
@@ -1550,6 +1573,14 @@
     if (act === 'import') return doImport();
     if (act === 'reset') return doReset();
     if (act === 'sync') return openSyncModal();
+    if (act === 'save-open') return openSaveModal();
+    if (act === 'save-code') return takeSaveCode(ds.id);
+    if (act === 'save-load') return loadSaveSlot(ds.id);
+    if (act === 'save-del') {
+      if (!window.confirm('删掉这份存档？删了就找不回来了。')) return;
+      window.Store.removeSave(ds.id);
+      return render();
+    }
   }
 
   /* ---------------- 云端同步弹窗 ---------------- */
@@ -2287,6 +2318,7 @@
       confetti(42);
       let msg = '✅ 「' + esc(task.title) + '」结算完成：🎟️ +' + res.gain.tickets + '　🌰 +' + res.gain.beans;
       toast(msg, 'ok', 6500);
+      autoSave('任务 · ' + task.title);   /* 每完成一项任务，自动存档一次 */
       res.extra.forEach(function (x) { setTimeout(function () { toast(x, 'ok', 6500); }, 350); });
       if (fmCards.some(function (f) { return f.pastedChars > 300; })) {
         setTimeout(function () {
@@ -2427,6 +2459,137 @@
       document.body.removeChild(ta);
       return !!ok;
     } catch (e) { return false; }
+  }
+
+  /* ---------------- 存档（自动存档 + 唠叨提醒 + 存档弹窗） ---------------- */
+  const SAVE_NAG_AT = 3;   /* 攒够这么多次进度没带走，就开始唠叨 */
+
+  function saveNagHtml() {
+    const m = window.Store.saveMeta();
+    if (m.sinceTake < SAVE_NAG_AT) return '';
+    return '<button class="save-nag" data-act="save-open">' +
+      '<b>💾 该存档了</b>' +
+      '<span>已经攒了 ' + m.sinceTake + ' 次进度没带走。点这里取一份存档码，' +
+      '存到微信「文件传输助手」，换设备或重装都能接着玩。</span></button>';
+  }
+
+  /* 自动存档：每完成一项任务就存一份，不打断操作 */
+  function autoSave(why) {
+    window.Store.makeSave(why || '', true).then(function (r) {
+      const m = window.Store.saveMeta();
+      const chipV = $('#chip-save-v');
+      if (chipV) chipV.textContent = '存档 ' + m.count;
+      if (!r.ok) { toast('⚠️ 自动存档没成功：' + r.msg, 'warn', 5000); return; }
+      toast('💾 已自动存档（第 ' + m.count + ' 号）· ' + (why || '进度'), 'ok', 4200);
+      if (m.sinceTake >= SAVE_NAG_AT) {
+        setTimeout(function () {
+          toast('📼 攒了 ' + m.sinceTake + " 次进度还没带走 —— 点顶栏「💾 存档」取一份存档码吧。", 'warn', 8000);
+        }, 900);
+      }
+      render();
+    });
+  }
+
+  function saveRowHtml(sv, i) {
+    const when = fmtWhen(sv.at);
+    return '<div class="save-row">' +
+      '<div class="save-no">' + (i + 1) + '</div>' +
+      '<div class="save-main">' +
+        '<div class="save-t">' + esc(sv.name || (sv.auto ? '自动存档' : '手动存档')) +
+          ' <span class="tag">' + (sv.auto ? '自动' : '手动') + '</span></div>' +
+        '<div class="save-b">' + esc(when) + ' · ' + esc(sv.brief || '') + ' · ' + (sv.size || 0) + ' 字</div>' +
+      '</div>' +
+      '<div class="save-ops">' +
+        '<button class="btn btn-sm btn-primary" data-act="save-code" data-id="' + sv.id + '">取码</button>' +
+        '<button class="btn btn-sm" data-act="save-load" data-id="' + sv.id + '">读档</button>' +
+        '<button class="btn btn-sm btn-warn" data-act="save-del" data-id="' + sv.id + '">删</button>' +
+      '</div>' +
+      '</div>';
+  }
+
+  function openSaveModal() {
+    const list = window.Store.listSaves();
+    const m = window.Store.saveMeta();
+    let body = '<div class="warnbox">这个游戏没有服务器，所以<b>存档就是一枚能带走的快照</b>：' +
+      '每完成一项任务自动存一份；取一份存档码发给自己，换设备、换浏览器、甚至重装都能接着玩。' +
+      '存档码和「跨设备同步」里那串码是同一个东西 —— 在这里叫存档，到了那头就叫同步。</div>' +
+      '<div class="field"><label>现在就存一份</label>' +
+      '<input id="sv-name" class="sv-inp" type="text" maxlength="24" placeholder="给这份存档起个名（可留空），比如「刷完法规第一章」">' +
+      '<button class="btn btn-primary btn-sm" id="sv-new">💾 存为新的存档位</button>' +
+      '<div class="hint">手动存档不会被自动存档挤掉，一共 12 个位置（自动档最多占 8 个）。</div>' +
+      '</div>' +
+      '<div class="field"><label>存档位（' + list.length + ' / 12）</label>';
+    if (!list.length) {
+      body += '<div class="empty">还没有存档。完成一项任务就会自动存第一份。</div>';
+    } else {
+      body += '<div class="save-list">';
+      list.forEach(function (sv, i) { body += saveRowHtml(sv, i); });
+      body += '</div>';
+    }
+    body += '</div>';
+
+    const foot = '<button class="btn btn-ghost" id="sv-close">关闭</button>' +
+      '<button class="btn" id="sv-sync">🔗 用存档码跨设备</button>';
+
+    openModal({
+      title: '💾 存档',
+      body: body,
+      foot: foot,
+      onMount: function (m) {
+        $('#sv-close', m).onclick = closeModal;
+        $('#sv-sync', m).onclick = function () { closeModal(); openSyncModal(); };
+        $('#sv-new', m).onclick = function () {
+          const name = ($('#sv-name', m).value || '').trim();
+          const btn = $('#sv-new', m);
+          btn.disabled = true; btn.textContent = '正在存档…';
+          window.Store.makeSave(name, false).then(function (r) {
+            btn.disabled = false; btn.textContent = '💾 存为新的存档位';
+            if (!r.ok) { toast('⚠️ 存档失败：' + r.msg, 'err', 6000); return; }
+            toast('💾 存档成功（' + r.size + ' 字）', 'ok');
+            closeModal(); openSaveModal(); render();
+          });
+        };
+        Array.prototype.forEach.call(m.querySelectorAll('[data-act="save-code"]'), function (b) {
+          b.onclick = function () { takeSaveCode(b.dataset.id); };
+        });
+        Array.prototype.forEach.call(m.querySelectorAll('[data-act="save-load"]'), function (b) {
+          b.onclick = function () { loadSaveSlot(b.dataset.id); };
+        });
+        Array.prototype.forEach.call(m.querySelectorAll('[data-act="save-del"]'), function (b) {
+          b.onclick = function () {
+            if (!window.confirm('删掉这份存档？删了就找不回来了。')) return;
+            window.Store.removeSave(b.dataset.id);
+            closeModal(); openSaveModal(); render();
+          };
+        });
+      }
+    });
+  }
+
+  /* 取码：这份存档的码就是同步码，复制到剪贴板 */
+  function takeSaveCode(id) {
+    const sv = window.Store.listSaves().filter(function (x) { return x.id === id; })[0];
+    if (!sv) { toast('没找到这份存档', 'err'); return; }
+    copyText(sv.code).then(function (ok) {
+      if (ok) window.Store.markSavedTaken();
+      toast(ok ? '📋 存档码已复制（' + sv.size + ' 字）。发到微信「文件传输助手」，' +
+        '在另一台设备打开「🔗 跨设备同步」粘进去就接着玩。'
+        : '复制没成功，去「🔗 跨设备同步」里生成一份新的吧。', ok ? 'ok' : 'warn', 8000);
+      render();
+    });
+  }
+
+  /* 读档：回到那一格（覆盖前会自动留一手备份） */
+  function loadSaveSlot(id) {
+    const sv = window.Store.listSaves().filter(function (x) { return x.id === id; })[0];
+    if (!sv) { toast('没找到这份存档', 'err'); return; }
+    if (!window.confirm('读档会回到 ' + fmtWhen(sv.at) + ' 那一份进度，现在的进度会被覆盖（会自动留备份）。确定吗？')) return;
+    window.Store.loadSave(id).then(function (r) {
+      if (!r.ok) { toast('❌ 读档失败：' + r.msg, 'err', 6000); return; }
+      S = window.Store.state;
+      toast('💾 已读档：回到 ' + fmtWhen(r.at) + ' 那一份。', 'ok', 6000);
+      closeModal(); render();
+    });
   }
 
   function openSyncModal() {

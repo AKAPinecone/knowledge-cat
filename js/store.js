@@ -45,6 +45,8 @@ window.Store = (function () {
       pets: [],
       slots: { greenhouse: 4, hatchery: 4 },
       pity: 0,
+      saves: [],                   /* 存档槽：每项是一枚可带走的快照（含存档码） */
+      save: { lastAt: 0, sinceTake: 0, lastTakeAt: 0, autoCount: 0 },  /* 存档统计 + 唠叨计数 */
       study: {
         tasksDate: '',
         taskVer: 0,         /* 任务库版本；升级后强制重算今日任务 */
@@ -139,6 +141,12 @@ window.Store = (function () {
     if (!s.profile || typeof s.profile !== 'object') s.profile = { nick: '', avatar: '' };
     if (s.profile.nick === undefined) s.profile.nick = '';
     if (s.profile.avatar === undefined) s.profile.avatar = '';
+    /* 老存档补存档槽 */
+    if (!Array.isArray(s.saves)) s.saves = [];
+    if (!s.save || typeof s.save !== 'object') s.save = { lastAt: 0, sinceTake: 0, lastTakeAt: 0, autoCount: 0 };
+    ['lastAt', 'sinceTake', 'lastTakeAt', 'autoCount'].forEach(function (k) {
+      if (s.save[k] === undefined) s.save[k] = 0;
+    });
   }
 
   /* localStorage 只有 5MB 上下，而证据库里每条凭证都带一张 base64 缩略图。
@@ -355,6 +363,84 @@ window.Store = (function () {
     });
   }
 
+  /* ---------------- 存档（本地快照 + 可带走的存档码） ----------------
+     这个游戏没有服务器，所以「存档」就是一枚能带走的快照：
+     每完成一项任务自动存一份，随时读档回到那一格；存档码抄到别的设备，
+     就是同步码——同一个东西，两种用法。 */
+  const SAVE_MAX = 12;      /* 存档位总数 */
+  const SAVE_AUTO_MAX = 8;  /* 其中自动档最多占几格（手动档不会被挤掉） */
+
+  function makeSave(name, auto) {
+    if (!state) return Promise.resolve({ ok: false, msg: '存档系统还没准备好' });
+    if (!window.Sync || !window.Sync.encode) return Promise.resolve({ ok: false, msg: '同步模块没加载' });
+    return window.Sync.encode(state).then(function (r) {
+      const sv = {
+        id: 'sv_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        at: Date.now(),
+        name: name || '',
+        auto: !!auto,
+        size: r.size,
+        brief: window.Sync.brief ? window.Sync.brief(state) : '',
+        code: r.code
+      };
+      const list = [sv].concat(state.saves || []);
+      /* 手动档永远留着；自动档只留最近几份，最老的先被挤掉 */
+      const kept = [];
+      let autoN = 0;
+      list.forEach(function (x) {
+        if (x.auto) { autoN++; if (autoN <= SAVE_AUTO_MAX) kept.push(x); }
+        else kept.push(x);
+      });
+      state.saves = kept.slice(0, SAVE_MAX);
+      state.save = state.save || {};
+      state.save.lastAt = sv.at;
+      if (auto) {
+        state.save.autoCount = (state.save.autoCount || 0) + 1;
+        state.save.sinceTake = (state.save.sinceTake || 0) + 1;
+      } else {
+        state.save.sinceTake = 0;   /* 手动存过一次就别再唠叨 */
+      }
+      save(true);
+      return { ok: true, save: sv, size: r.size };
+    }).catch(function (e) { return { ok: false, msg: (e && e.message) || String(e) }; });
+  }
+
+  function listSaves() { return state && state.saves ? state.saves.slice() : []; }
+
+  function loadSave(id) {
+    const sv = listSaves().filter(function (x) { return x.id === id; })[0];
+    if (!sv) return Promise.resolve({ ok: false, msg: '没找到这份存档' });
+    return window.Sync.decode(sv.code).then(function (obj) {
+      importAll(obj);   /* importAll 收的是整包（含 state 字段） */
+
+      return { ok: true, at: sv.at, name: sv.name };
+    }).catch(function (e) { return { ok: false, msg: (e && e.message) || String(e) }; });
+  }
+
+  function removeSave(id) {
+    if (!state || !state.saves) return false;
+    const n = state.saves.length;
+    state.saves = state.saves.filter(function (x) { return x.id !== id; });
+    if (state.saves.length !== n) { save(true); return true; }
+    return false;
+  }
+
+  function markSavedTaken() {   /* 导出存档码之后：唠叨计数清零 */
+    if (!state) return;
+    state.save = state.save || {};
+    state.save.sinceTake = 0;
+    state.save.lastTakeAt = Date.now();
+    save(true);
+  }
+
+  function saveMeta() {
+    const m = (state && state.save) || {};
+    return {
+      count: listSaves().length, lastAt: m.lastAt || 0,
+      sinceTake: m.sinceTake || 0, lastTakeAt: m.lastTakeAt || 0
+    };
+  }
+
   /* ---------------- 导出 / 导入 ---------------- */
   function exportAll() {
     const clone = JSON.parse(JSON.stringify(state));
@@ -480,6 +566,8 @@ window.Store = (function () {
     pushLog: pushLog,
     addEvidence: addEvidence, getEvidenceBlob: getEvidenceBlob, removeEvidence: removeEvidence,
     exportAll: exportAll, importAll: importAll,
+    makeSave: makeSave, listSaves: listSaves, loadSave: loadSave,
+    removeSave: removeSave, markSavedTaken: markSavedTaken, saveMeta: saveMeta,
     backupCurrent: backupCurrent, backupInfo: backupInfo, restoreBackup: restoreBackup,
     advanceOffline: advanceOffline,
     resetDaily: resetDaily, markCheckin: markCheckin

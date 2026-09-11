@@ -84,6 +84,15 @@ window.Sync = (function () {
     return c;
   }
 
+  /* 存档槽是"本机抽屉"，不跟着存档码走：
+     否则每存一次就把上一份码再打包一遍，码会越滚越大。 */
+  function stripLocalSlots(state) {
+    const c = clone(state);
+    c.saves = [];
+    c.save = { lastAt: 0, sinceTake: 0, lastTakeAt: 0, autoCount: 0 };
+    return c;
+  }
+
   function pack(obj) {
     const bytes = new TextEncoder().encode(JSON.stringify(obj));
     return deflate(bytes).then(function (def) {
@@ -97,12 +106,12 @@ window.Sync = (function () {
   /* 生成同步码。返回 {code, droppedThumbs, size} */
   function encode(state) {
     const stamp = new Date().toISOString();
-    const full = { kind: KIND, exportedAt: stamp, state: clone(state) };
+    const full = { kind: KIND, exportedAt: stamp, state: stripLocalSlots(state) };
     return pack(full).then(function (code) {
       if (code.length <= MAX_CODE) {
         return { code: code, droppedThumbs: false, size: code.length, compressed: code.indexOf(PREFIX_DEFLATE) === 0 };
       }
-      const lean = { kind: KIND, exportedAt: stamp, slim: true, state: slim(state) };
+      const lean = { kind: KIND, exportedAt: stamp, slim: true, state: slim(stripLocalSlots(state)) };
       return pack(lean).then(function (code2) {
         if (code2.length < code.length) {
           return { code: code2, droppedThumbs: true, size: code2.length, compressed: code2.indexOf(PREFIX_DEFLATE) === 0 };
@@ -140,6 +149,13 @@ window.Sync = (function () {
 
     /* 找到同步码前缀的位置（粘贴时前面可能混了文字）。注意：
        这里只对"码"做去空白，不能对 JSON 做——JSON 的字符串值里本来就有空格。 */
+    /* 整份存档 JSON 优先：它里面也可能出现同步码字样（例如存档槽），
+       先按 JSON 解，免得被误判成一串码。 */
+    if (s.charAt(0) === '{') {
+      try { return Promise.resolve(validate(JSON.parse(s))); }
+      catch (e) { return Promise.reject(new Error('这段 JSON 读不出来')); }
+    }
+
     let at = -1, compressed = false;
     if (s.indexOf(PREFIX_DEFLATE) >= 0) { at = s.indexOf(PREFIX_DEFLATE); compressed = true; }
     else if (s.indexOf(PREFIX_RAW) >= 0) { at = s.indexOf(PREFIX_RAW); compressed = false; }
@@ -162,10 +178,6 @@ window.Sync = (function () {
       });
     }
 
-    if (s.charAt(0) === '{') {
-      try { return Promise.resolve(validate(JSON.parse(s))); }
-      catch (e) { return Promise.reject(new Error('这段 JSON 读不出来')); }
-    }
     return Promise.reject(new Error('这看起来不是一段同步码'));
   }
 
@@ -204,7 +216,7 @@ window.Sync = (function () {
     if (!state) return '（空档）';
     const st = state.stats || {};
     return [
-      (st.shards || 0) + ' 朵碎片',
+      (st.notes || 0) + ' 条文字记录',
       (state.pets || []).length + ' 只小生物',
       Object.keys(state.achievements || {}).length + ' 个成就',
       (st.fullFeedDays || 0) + ' 天喂饱',
