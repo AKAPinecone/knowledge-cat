@@ -64,6 +64,19 @@ window.QBank = (function () {
     }
     return -1;
   }
+  /* 多选题答案：逗号/顿号/中文逗号分隔的字母或数字，返回去重后排序的下标数组 */
+  function answerIndices(token, optCount) {
+    if (token === null || token === undefined) return [];
+    const t = String(token).trim();
+    if (!t) return [];
+    const parts = t.split(/[,，、\s]+/).filter(function (x) { return x !== ''; });
+    const idxs = [];
+    parts.forEach(function (p) {
+      const i = answerIndex(p, optCount);
+      if (i >= 0 && i < optCount && idxs.indexOf(i) < 0) idxs.push(i);
+    });
+    return idxs.sort(function (a, b) { return a - b; });
+  }
 
   /* 去掉选项前面的 "A." "B、" "(C)" "选项D：" 之类的序号 */
   function stripLabel(s) {
@@ -73,9 +86,10 @@ window.QBank = (function () {
   }
 
   /* ---------------- 规范化一道题 ---------------- */
-  /* 接受两种 answer 写法：
-     - 数字 → 当下标（JSON 里写 0 就是第一项）
-     - 字符串 → 按人的习惯（'A' = 第一项，'1' = 第一项） */
+  /* 接受 answer 写法：
+     - 单选：数字 / 单字母 / 单数字字符串
+     - 多选：数字数组，或逗号分隔的字母/数字字符串（如 "A,C,D"）
+     内部统一存成“下标数组”，multi 标记 true/false。 */
   function normalize(q) {
     if (!q || typeof q !== 'object') return null;
     const stem = String(q.stem || q.q || q.title || q.question || '').trim();
@@ -84,22 +98,41 @@ window.QBank = (function () {
     options = options.map(function (o) { return String(o === undefined || o === null ? '' : o).trim(); })
       .filter(function (o) { return o !== ''; });
 
-    let ans;
-    if (typeof q.answer === 'number') ans = q.answer;
-    else if (typeof q.answer === 'string') ans = answerIndex(q.answer, options.length);
-    else if (typeof q.correct === 'number') ans = q.correct;
-    else ans = -1;
-    ans = parseInt(ans, 10);
+    const forceMulti = q.type === 'multi' || q.multi === true || String(q.type).toLowerCase() === 'multiple';
+
+    let ansArr = [];
+    if (Array.isArray(q.answer)) {
+      q.answer.forEach(function (x) {
+        const i = (typeof x === 'number') ? Math.floor(x) : answerIndex(x, options.length);
+        if (i >= 0 && i < options.length && ansArr.indexOf(i) < 0) ansArr.push(i);
+      });
+      ansArr.sort(function (a, b) { return a - b; });
+    } else if (typeof q.answer === 'string' && /[,，、]/.test(q.answer)) {
+      ansArr = answerIndices(q.answer, options.length);
+    } else if (typeof q.answer === 'string') {
+      const i = answerIndex(q.answer, options.length);
+      if (i >= 0) ansArr = [i];
+    } else if (typeof q.answer === 'number') {
+      const i = Math.floor(q.answer);
+      if (i >= 0 && i < options.length) ansArr = [i];
+    } else if (typeof q.correct === 'number') {
+      const i = Math.floor(q.correct);
+      if (i >= 0 && i < options.length) ansArr = [i];
+    }
 
     if (!stem || options.length < 2) return null;
-    if (!(ans >= 0 && ans < options.length)) return null;
+    if (!ansArr.length) return null;
+    if (ansArr.some(function (i) { return i < 0 || i >= options.length; })) return null;
+
+    const isMulti = forceMulti || ansArr.length > 1;
 
     return {
       id: String(q.id || ('q_' + hash(stem + '|' + options.join('|')))),
       subject: normSubject(q.subject || q.subjectId || q.kemu),
       stem: stem,
       options: options,
-      answer: ans,
+      answer: ansArr,
+      multi: isMulti,
       explain: String(q.explain || q.exp || q.analysis || '').trim()
     };
   }
@@ -146,8 +179,7 @@ window.QBank = (function () {
 
   /* ---------------- 抽卷 ---------------- */
   /* 按科目轮流取，让一张卷子尽量四科都沾到；没有科目标记的算「未分类」 */
-  function pickPool(n) {
-    const pool = all();
+  function pickPool(n, pool) {
     if (!pool.length) return [];
     if (n >= pool.length) return shuffle(pool);
     const groups = {};
@@ -169,33 +201,63 @@ window.QBank = (function () {
     return shuffle(out);
   }
 
-  /* 生成一份卷子：选项顺序也会打乱（否则答案位置固定，记字母就能蒙） */
-  function makePaper(n) {
-    const want = Math.max(1, Math.min(n || cfg().count, count()));
-    return pickPool(want).map(function (q) {
+  /* 生成一份卷子：
+     - 选项顺序打乱
+     - opts.mastered 为 true 时排除已掌握题（默认 true）
+     - opts.excludeIds 为数组/Set 时排除这些题（用于“重做不能一样”） */
+  function makePaper(n, opts) {
+    opts = opts || {};
+    const mastered = (opts.mastered !== false) ? (st() && st().masteredQuestions) || {} : {};
+    const excludeIds = new Set();
+    if (opts.excludeIds) {
+      (Array.isArray(opts.excludeIds) ? opts.excludeIds : []).forEach(function (id) { excludeIds.add(id); });
+      if (opts.excludeIds instanceof Set) opts.excludeIds.forEach(function (id) { excludeIds.add(id); });
+    }
+
+    let pool = all().filter(function (q) { return !mastered[q.id]; });
+    let filtered = pool.filter(function (q) { return !excludeIds.has(q.id); });
+    /* 如果排除后不够组卷，则回退到仅排除已掌握题，避免卡死 */
+    if (filtered.length < Math.min(n || cfg().count, pool.length)) filtered = pool;
+    pool = filtered;
+
+    const want = Math.max(1, Math.min(n || cfg().count, pool.length || 1));
+    return pickPool(want, pool).map(function (q) {
       const order = shuffle(q.options.map(function (_, i) { return i; }));
       return {
         qid: q.id,
         subject: q.subject,
         stem: q.stem,
         options: order.map(function (i) { return q.options[i]; }),
-        answer: order.indexOf(q.answer),   /* 正确项在新顺序里的位置 */
+        answer: q.answer.map(function (i) { return order.indexOf(i); }).sort(function (a, b) { return a - b; }),
+        multi: q.multi,
         explain: q.explain
       };
     });
   }
 
   /* ---------------- 判卷 ---------------- */
+  function sameArray(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+  function asArray(v) {
+    if (Array.isArray(v)) return v.slice().sort(function (a, b) { return a - b; });
+    if (typeof v === 'number' && v >= 0) return [v];
+    return [];
+  }
   function passLine(total) {
     return Math.max(1, Math.ceil((total || 0) * cfg().passRate));
   }
   function grade(paper, answers) {
     let correct = 0;
     const detail = (paper || []).map(function (p, i) {
-      const a = (answers && answers[i] !== undefined && answers[i] !== null) ? answers[i] : -1;
-      const ok = a === p.answer;
+      const picked = asArray(answers && answers[i]);
+      const ans = asArray(p.answer);
+      const ok = sameArray(picked, ans);
       if (ok) correct++;
-      return { i: i, picked: a, answer: p.answer, ok: ok };
+      return { i: i, picked: picked, answer: ans, ok: ok };
     });
     const total = detail.length;
     const line = passLine(total);
@@ -246,27 +308,46 @@ window.QBank = (function () {
       const options = [];
       let answer = null, explain = '', subject = '';
 
+      let forceMulti = false;
       parts.forEach(function (p) {
-        /* 答案栏要求「整格就是 关键词 + 单个答案记号」，否则 "正确选项 A" 这种
-           选项文本会被误当成答案栏吃掉（踩过这个坑）。 */
-        const mA = p.match(/^\s*(?:答案|answer|正确答案|correct)\s*[:：]?\s*([A-Ha-h]|[1-9])\s*$/i);
+        /* 答案栏：支持单选 A/1，也支持多选 A,C,D / 1,2,3。必须整格匹配，防止选项文本被误吃。 */
+        const mA = p.match(/^\s*(?:答案|answer|正确答案|correct)\s*[:：]?\s*([A-Ha-h,，、\d\s]+)\s*$/i);
         const mE = p.match(/^\s*(?:解析|explain|说明|分析)\s*[:：]?\s*([\s\S]*)$/i);
         const mS = p.match(/^\s*(?:科目|subject|kemu)\s*[:：]?\s*(.+)$/i);
-        if (mA) { answer = answerIndex(mA[1], 0); return; }
+        const mType = p.match(/^\s*(?:题型|type)\s*[:：]?\s*(multi|single|tf|判断|多选|单选)\s*$/i);
+        if (mA) {
+          const raw = mA[1].trim();
+          if (/[,，、]/.test(raw) || (raw.length > 1 && /^[A-Ha-h]+$/.test(raw))) {
+            answer = answerIndices(raw, 0);
+            forceMulti = true;
+          } else {
+            answer = answerIndex(raw, 0);
+          }
+          return;
+        }
         if (mE) { explain = mE[1].trim(); return; }
         if (mS) { subject = normSubject(mS[1]); return; }
+        if (mType) {
+          const t = mType[1].toLowerCase();
+          if (t === 'multi' || t === '多选') forceMulti = true;
+          return;
+        }
         options.push(stripLabel(p));
       });
 
       if (!stem) { res.errors.push(no + '没读到题干'); return; }
       if (options.length < 2) { res.errors.push(no + '选项少于 2 个'); return; }
-      if (answer === null) { res.errors.push(no + '没找到「答案:」（写成 答案:A 或 答案:1）'); return; }
-      if (!(answer >= 0 && answer < options.length)) {
-        res.errors.push(no + '答案超出选项范围（只有 ' + options.length + ' 个选项）');
+
+      let q;
+      if (Array.isArray(answer) && answer.length) {
+        q = normalize({ stem: stem, options: options, answer: answer, explain: explain, subject: subject, multi: forceMulti || answer.length > 1 });
+      } else if (typeof answer === 'number' && answer >= 0) {
+        q = normalize({ stem: stem, options: options, answer: answer, explain: explain, subject: subject, multi: forceMulti });
+      } else {
+        res.errors.push(no + '没找到「答案:」（写成 答案:A 或 答案:ABD 或 答案:1,2,3）');
         return;
       }
-      const q = normalize({ stem: stem, options: options, answer: answer, explain: explain, subject: subject });
-      if (!q) { res.errors.push(no + '字段不完整'); return; }
+      if (!q) { res.errors.push(no + '字段不完整或答案超出选项范围（只有 ' + options.length + ' 个选项）'); return; }
       if (seen[sig(q)]) { res.errors.push(no + '和前面某题重复，已跳过'); return; }
       seen[sig(q)] = 1;
       res.list.push(q);
@@ -313,6 +394,29 @@ window.QBank = (function () {
     return before - s.qbank.length;
   }
 
+  /* 已掌握题目：答对后就不再出现在破壳测验里 */
+  function markMastered(ids) {
+    const s = st();
+    if (!s) return 0;
+    s.masteredQuestions = s.masteredQuestions || {};
+    let n = 0;
+    (ids || []).forEach(function (id) {
+      if (id && !s.masteredQuestions[id]) { s.masteredQuestions[id] = Date.now(); n++; }
+    });
+    if (n) window.Store.save(true);
+    return n;
+  }
+  function unmarkMastered(id) {
+    const s = st();
+    if (!s || !id || !s.masteredQuestions) return false;
+    if (s.masteredQuestions[id]) { delete s.masteredQuestions[id]; window.Store.save(true); return true; }
+    return false;
+  }
+  function masteredCount() {
+    const s = st();
+    return s && s.masteredQuestions ? Object.keys(s.masteredQuestions).length : 0;
+  }
+
   /* 本次测验成绩记账 + 存档一份凭证 */
   function recordResult(res, capId, speciesName) {
     const s = st();
@@ -348,6 +452,9 @@ window.QBank = (function () {
     clearCustom: clearCustom,
     removeOne: removeOne,
     recordResult: recordResult,
+    markMastered: markMastered,
+    unmarkMastered: unmarkMastered,
+    masteredCount: masteredCount,
     normalize: normalize,
     normSubject: normSubject,
     subjectName: subjectName,

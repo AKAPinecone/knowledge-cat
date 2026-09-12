@@ -47,6 +47,7 @@ window.Store = (function () {
       pity: 0,
       saves: [],                   /* 存档槽：每项是一枚可带走的快照（含存档码） */
       save: { lastAt: 0, sinceTake: 0, lastTakeAt: 0, autoCount: 0 },  /* 存档统计 + 唠叨计数 */
+      masteredQuestions: {},  /* 破壳测验里已答对的题 id -> timestamp；不再重复出现 */
       study: {
         tasksDate: '',
         taskVer: 0,         /* 任务库版本；升级后强制重算今日任务 */
@@ -147,6 +148,8 @@ window.Store = (function () {
     ['lastAt', 'sinceTake', 'lastTakeAt', 'autoCount'].forEach(function (k) {
       if (s.save[k] === undefined) s.save[k] = 0;
     });
+    /* 老存档补已掌握题目集合 */
+    if (!s.masteredQuestions || typeof s.masteredQuestions !== 'object') s.masteredQuestions = {};
   }
 
   /* localStorage 只有 5MB 上下，而证据库里每条凭证都带一张 base64 缩略图。

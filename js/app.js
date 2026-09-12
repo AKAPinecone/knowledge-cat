@@ -1639,7 +1639,8 @@
       capId: capId,
       sp: sp,
       paper: paper,
-      answers: paper.map(function () { return -1; }),
+      answers: paper.map(function () { return []; }),
+      previousIds: [],
       idx: 0,
       endsAt: Date.now() + (cfg.minutes || 5) * 60000,
       timer: null,
@@ -1672,7 +1673,7 @@
 
     const p = qz.paper[qz.idx];
     const left = Math.max(0, Math.round((qz.endsAt - Date.now()) / 1000));
-    const answered = qz.answers.filter(function (a) { return a >= 0; }).length;
+    const answered = qz.answers.filter(function (a) { return Array.isArray(a) && a.length > 0; }).length;
     const line = window.QBank.passLine(qz.paper.length);
 
     let h = '<div class="qz-bar">' +
@@ -1680,14 +1681,17 @@
       '<span class="qz-pill">第 ' + (qz.idx + 1) + ' / ' + qz.paper.length + ' 题</span>' +
       '<span class="qz-pill">已答 ' + answered + '</span>' +
       '<span class="qz-pill">答对 ' + line + ' 题及格</span>' +
+      (p.multi ? '<span class="qz-pill qz-multi">多选</span>' : '') +
       '</div>';
     h += '<div class="qz-progress"><i style="width:' + ((qz.idx + 1) / qz.paper.length * 100) + '%"></i></div>';
 
     h += '<div class="qz-stem">' + esc(p.stem) + '</div>';
 
     h += '<div class="qz-opts">';
+    const selected = qz.answers[qz.idx] || [];
     p.options.forEach(function (o, i) {
-      h += '<button class="qz-opt' + (qz.answers[qz.idx] === i ? ' on' : '') + '" data-qz="pick" data-i="' + i + '">' +
+      const on = p.multi ? (selected.indexOf(i) >= 0) : (selected.length === 1 && selected[0] === i);
+      h += '<button class="qz-opt' + (on ? ' on' : '') + '" data-qz="pick" data-i="' + i + '">' +
         '<b>' + 'ABCDEFGH'.charAt(i) + '</b><span>' + esc(o) + '</span></button>';
     });
     h += '</div>';
@@ -1695,7 +1699,7 @@
     h += '<div class="qz-sheet"><span class="qz-sheet-k">答题卡</span>' +
       qz.paper.map(function (_, i) {
         const cur = i === qz.idx ? ' cur' : '';
-        const on = qz.answers[i] >= 0 ? ' on' : '';
+        const on = (qz.answers[i] && qz.answers[i].length > 0) ? ' on' : '';
         return '<button class="qz-dot' + on + cur + '" data-qz="jump" data-i="' + i + '">' + (i + 1) + '</button>';
       }).join('') +
       '<span class="qz-sheet-h">点题号可以跳过去</span></div>';
@@ -1717,7 +1721,18 @@
   function onQuizAct(act, i) {
     if (!qz || qz.done) return;
     const mask = activeMask();
-    if (act === 'pick') { qz.answers[qz.idx] = i; return renderQuiz(mask); }
+    if (act === 'pick') {
+      const p = qz.paper[qz.idx];
+      const arr = qz.answers[qz.idx] || [];
+      if (p.multi) {
+        const pos = arr.indexOf(i);
+        if (pos >= 0) arr.splice(pos, 1); else arr.push(i);
+        qz.answers[qz.idx] = arr;
+      } else {
+        qz.answers[qz.idx] = [i];
+      }
+      return renderQuiz(mask);
+    }
     if (act === 'jump') { qz.idx = Math.max(0, Math.min(qz.paper.length - 1, i)); return renderQuiz(mask); }
     if (act === 'prev') { qz.idx = Math.max(0, qz.idx - 1); return renderQuiz(mask); }
     if (act === 'next') { qz.idx = Math.min(qz.paper.length - 1, qz.idx + 1); return renderQuiz(mask); }
@@ -1749,8 +1764,12 @@
     window.QBank.recordResult(res, qz.capId, qz.sp.name);
 
     if (res.passed) {
+      const masteredIds = [];
+      qz.paper.forEach(function (p, i) { if (res.detail[i].ok) masteredIds.push(p.qid); });
+      const masteredN = window.QBank.markMastered(masteredIds);
       window.Game.markQuizPassed(qz.capId, res);
       confetti(qz.sp.rarity >= 2 ? 50 : 24);
+      if (masteredN > 0) window.Store.pushLog('🎯 破壳测验答对 ' + masteredN + ' 题，已加入“已掌握”，以后不会再出现。');
     } else if (timeout) {
       toast('⏰ 时间到，已自动交卷。', 'warn');
     }
@@ -1764,6 +1783,10 @@
     const r = qz.result, sp = qz.sp;
     const pct = Math.round(r.rate * 100);
 
+    function letterArr(arr) {
+      return (arr || []).map(function (i) { return 'ABCDEFGH'.charAt(i); }).join('');
+    }
+
     let h = '<div class="qz-score ' + (r.passed ? 'ok' : 'no') + '">' +
       '<div class="qz-score-num">' + r.correct + '<span>/' + r.total + '</span></div>' +
       '<div class="qz-score-sub">正确率 ' + pct + '%　及格线 ' + r.line + ' 题' +
@@ -1774,23 +1797,30 @@
         : '还差 ' + (r.line - r.correct) + ' 题，它得再等等') +
       '</div></div>';
 
+    if (r.passed) {
+      const okIds = qz.paper.filter(function (_, i) { return r.detail[i].ok; }).map(function (p) { return p.qid; });
+      h += '<div class="okbox" style="margin-top:12px">🎯 答对 ' + okIds.length + ' 题已加入“已掌握”，以后破壳测验里不会再出现。</div>';
+    }
+
     const wrong = r.detail.filter(function (d) { return !d.ok; });
     if (wrong.length) {
       h += '<div class="qz-review"><div class="qz-review-h">📝 这 ' + wrong.length + ' 题再看一眼（不看下一份还是错）</div>';
       wrong.forEach(function (d) {
         const p = qz.paper[d.i];
+        const pickedLetters = letterArr(d.picked);
+        const answerLetters = letterArr(d.answer);
+        const pickedText = pickedLetters ? pickedLetters + ' · ' + d.picked.map(function (i) { return esc(p.options[i]); }).join(' / ') : '没答';
+        const answerText = answerLetters + ' · ' + d.answer.map(function (i) { return esc(p.options[i]); }).join(' / ');
         h += '<div class="qz-rv">' +
-          '<div class="qz-rv-q">' + (d.i + 1) + '. ' + esc(p.stem) + '</div>' +
-          '<div class="qz-rv-a">你选了：<b class="no">' +
-          (d.picked >= 0 ? 'ABCDEFGH'.charAt(d.picked) + '. ' + esc(p.options[d.picked]) : '没答') + '</b></div>' +
-          '<div class="qz-rv-a">正确答案：<b class="ok">' +
-          'ABCDEFGH'.charAt(d.answer) + '. ' + esc(p.options[d.answer]) + '</b></div>' +
+          '<div class="qz-rv-q">' + (d.i + 1) + '. ' + esc(p.stem) + (p.multi ? ' <span class="badge">多选</span>' : '') + '</div>' +
+          '<div class="qz-rv-a">你选了：<b class="no">' + pickedText + '</b></div>' +
+          '<div class="qz-rv-a">正确答案：<b class="ok">' + answerText + '</b></div>' +
           (p.explain ? '<div class="qz-rv-e">💡 ' + esc(p.explain) + '</div>' : '') +
           '</div>';
       });
       h += '</div>';
-    } else {
-      h += '<div class="okbox" style="margin-top:12px">全对。这只小生物是你实打实答出来的，带着走吧。</div>';
+    } else if (!r.passed) {
+      h += '<div class="okbox" style="margin-top:12px">这次虽然没过，但没有错题——只是没答完。</div>';
     }
 
     body.innerHTML = h;
@@ -1814,11 +1844,12 @@
     if (!qz) return;
     const gate = window.Game.quizGate(qz.capId);
     const cfg = window.Game.quizCfg();
-    const paper = window.QBank.makePaper(gate.count);
+    qz.previousIds = qz.paper.map(function (p) { return p.qid; });
+    const paper = window.QBank.makePaper(gate.count, { excludeIds: qz.previousIds });
     if (!paper.length) return closeModal();
 
     qz.paper = paper;
-    qz.answers = paper.map(function () { return -1; });
+    qz.answers = paper.map(function () { return []; });
     qz.idx = 0;
     qz.endsAt = Date.now() + (cfg.minutes || 5) * 60000;
     qz.done = false;
