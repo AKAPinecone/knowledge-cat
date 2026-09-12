@@ -193,18 +193,24 @@ h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:.2px;}
   font-size:12px;color:var(--ink-2);margin-top:9px;
 }
 
-.kolb{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:6px;}
-@media (max-width:760px){.kolb{grid-template-columns:1fr 1fr;}}
-.kolb-cell{
-  border:1px dashed var(--line);border-radius:14px;padding:11px 12px;background:var(--panel-2);
-  transition:all .2s ease;position:relative;
+.kolb-wrap{display:flex;justify-content:center;margin-top:6px;}
+.kolb-ring{width:min(280px,82%);height:auto;max-width:280px;}
+.kr-emoji{font-size:22px;}
+.kr-name{font-size:13px;font-weight:700;fill:#2E4A39;}
+.kr-count{font-size:11px;font-weight:600;fill:#8AA394;}
+.kr-count.on{fill:#2E7A4C;}
+.kr-center{font-size:14px;font-weight:800;fill:#2E7A4C;}
+.kr-center-num{font-size:12px;font-weight:700;fill:#6B7E70;}
+/* 环形图下方的四象限图例，保留「做了什么」的说明文字 */
+.kolb-legend{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;}
+.kolb-leg{
+  display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:12px;
+  background:var(--panel-2);border:1px solid var(--line);
 }
-.kolb-cell.on{border-style:solid;background:#fff;box-shadow:var(--shadow-sm);}
-.kolb-cell .k-emoji{font-size:19px;}
-.kolb-cell .k-name{font-size:13.5px;font-weight:700;margin-top:3px;}
-.kolb-cell .k-sub{font-size:10.5px;color:var(--ink-3);letter-spacing:.3px;}
-.kolb-cell .k-count{position:absolute;top:10px;right:12px;font-size:12px;color:var(--ink-3);font-weight:700;}
-.kolb-cell.on .k-count{color:var(--green-deep);}
+.kolb-leg.on{background:#fff;box-shadow:var(--shadow-sm);}
+.kl-dot{font-size:17px;line-height:1;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;}
+.kl-name{font-size:13px;font-weight:700;margin-top:2px;}
+.kl-desc{font-size:11px;color:var(--ink-3);line-height:1.5;}
 .kolb-arrow{text-align:center;font-size:12px;color:var(--ink-3);margin-top:8px;letter-spacing:1px;}
 
 .task-list{display:flex;flex-direction:column;gap:11px;}
@@ -291,6 +297,16 @@ h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:.2px;}
 }
 .act:hover{background:#fff;border-color:var(--mint);transform:translateY(-1px);}
 .act:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+/* 物资角标：直接贴在照顾按钮右上角，省掉单独背包 */
+.act{position:relative;padding-right:22px;}
+.act-badge{
+  position:absolute;top:-8px;right:-8px;min-width:18px;height:18px;padding:0 4px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
+  line-height:1;border-radius:9px;background:var(--mint,#4CA96B);color:#fff;
+  box-shadow:0 1px 3px rgba(0,0,0,.18);
+}
+.act-badge.empty{background:#B0BEB4;color:#fff;}
+.act:disabled .act-badge{opacity:.55;}
 
 /* 胶囊（待孵化） */
 .caps{
@@ -743,10 +759,6 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
   .feed-slots{grid-template-columns:repeat(3,1fr);gap:7px;margin:12px 0 10px;}
   .feed-slot{padding:8px 4px;}
   .feed-slot .fs-name{font-size:11px;}
-  .kolb{grid-template-columns:1fr 1fr;gap:8px;}
-  .kolb-cell{padding:10px 11px;border-radius:12px;}
-  .kolb-cell .k-count{top:8px;right:10px;font-size:11.5px;}
-  .kolb-cell .k-sub{font-size:10px;}
   .kolb-arrow{font-size:11.5px;line-height:1.7;}
 
   /* 任务卡：改成竖排，按钮通栏 —— 这是手机上看得最多的一块 */
@@ -885,8 +897,7 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
   .feed-num{font-size:27px;}
   .feed-slots{grid-template-columns:repeat(3,1fr);gap:6px;}
   .feed-slot .fs-ico{font-size:15px;}
-  .kolb{border-radius:11px;}
-  .kolb-cell .k-sub{display:none;}
+  .kolb-legend{gap:6px;}
   .task{padding:11px 12px;}
   .bookpick{grid-template-columns:1fr;}
   .modal-body{padding:14px 13px;}
@@ -1214,3 +1225,43 @@ img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
   .potted .pp-pot .pot-svg{width:32px;height:32px;}
   .potted img.pp-img{width:36px;height:36px;}
 }
+
+/* ============ v1.7 每日签到 / 完成任务奖励 / 环形库伯圈 / 物资角标 ============ */
+
+/* ---- 顶栏签到胶囊 ---- */
+.chip-checkin{cursor:pointer;font-size:inherit;line-height:inherit;min-height:38px;padding:4px 12px;
+  background:linear-gradient(135deg,#F3E7DC,#EBD8C8);border-color:#D4B69A;transition:transform .1s,box-shadow .2s;}
+.chip-checkin .chip-k{color:#8B5E3C;font-size:13px;}
+.chip-checkin .chip-v{color:#8B5E3C;font-size:12.5px;}
+.chip-checkin.ready{background:linear-gradient(135deg,#E3A33C,#C9842B);border-color:#B8791C;
+  box-shadow:0 2px 10px rgba(227,163,60,.35);animation:pulseGold 1.6s ease-in-out infinite;}
+.chip-checkin.ready .chip-k,.chip-checkin.ready .chip-v{color:#fff;}
+.chip-checkin:active{transform:translateY(1px);}
+@keyframes pulseGold{0%,100%{box-shadow:0 2px 10px rgba(227,163,60,.35);}50%{box-shadow:0 4px 16px rgba(227,163,60,.6);}}
+
+/* ---- 签到弹窗：抽象翻转卡片 ---- */
+.daily-hint{font-size:13px;color:var(--ink-2);text-align:center;margin-bottom:14px;}
+.daily-cards{display:flex;gap:12px;justify-content:center;perspective:800px;margin:6px 0 18px;}
+.dcard{width:92px;height:120px;cursor:pointer;perspective:800px;}
+.dcard-inner{position:relative;width:100%;height:100%;transition:transform .55s cubic-bezier(.4,.2,.2,1);transform-style:preserve-3d;border-radius:16px;}
+.dcard.flipped .dcard-inner{transform:rotateY(180deg);}
+.dcard-front,.dcard-back{position:absolute;width:100%;height:100%;backface-visibility:hidden;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1.5px solid var(--line);}
+.dcard-front{background:linear-gradient(135deg,var(--panel),var(--panel-2));box-shadow:var(--shadow-sm);}
+.dcard-back{background:linear-gradient(135deg,#FCF2DC,#F3E7DC);border-color:#E3A33C;transform:rotateY(180deg);box-shadow:0 4px 14px rgba(227,163,60,.22);}
+.dcard-sym{font-size:40px;color:var(--ink-3);line-height:1;}
+.dcard-tip{font-size:11px;color:var(--ink-3);margin-top:8px;}
+.dcard-reward{font-size:38px;line-height:1;}
+.dcard-reward-name{font-size:13px;font-weight:700;color:#8B5E3C;margin-top:8px;}
+.daily-result{text-align:center;font-size:14px;font-weight:700;color:var(--ink);padding:8px 0;}
+
+/* ---- 投喂单全满奖励弹窗 ---- */
+.feed-bonus-body{display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0 4px;text-align:center;}
+.feed-bonus-cat{font-size:64px;line-height:1;animation:bounceCat .7s ease-in-out infinite alternate;}
+.feed-bonus-text{font-size:14px;color:var(--ink-2);max-width:240px;}
+.feed-bonus-prize{font-size:16px;font-weight:700;color:var(--ink);background:var(--gold-soft);border:1px solid #F0DDB4;border-radius:14px;padding:10px 18px;}
+@keyframes bounceCat{from{transform:translateY(0);}to{transform:translateY(-6px);}}
+
+/* ---- 免题券钱包 ---- */
+.cur-freeq .cur-ico{font-size:15px;}
+.cur-freeq .cur-num{color:#6B4C35;}
+.cur-freeq .cur-name{color:#8B5E3C;}

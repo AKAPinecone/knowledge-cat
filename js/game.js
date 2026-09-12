@@ -121,10 +121,10 @@ window.Game = (function () {
   }
 
   /* ---------------- 破壳测验闸门 ----------------
-   * 小生物要从温室 / 孵化仓出来，先过一份卷子（默认 10 题 / 5 分钟 / 70%）。
+   * 小生物要从温室 / 孵化仓出来，先过 1 道题（限时 5 分钟 / 70%）。
    * 题库是空的（端口已接、题还没来）→ 闸门自动放行，不挡路。 */
   function quizCfg() {
-    return window.GAME_DATA.HATCH_QUIZ || { count: 10, minutes: 5, passRate: 0.7, minCount: 1 };
+    return window.GAME_DATA.HATCH_QUIZ || { count: 1, minutes: 5, passRate: 0.7, minCount: 1, maxAttempts: 2 };
   }
   function quizAvailable() {
     return !!(window.QBank && window.QBank.count() > 0);

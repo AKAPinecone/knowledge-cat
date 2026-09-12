@@ -221,6 +221,90 @@
     });
   }
 
+  /* ---------------- 每日签到 ---------------- */
+  function canClaimDailyReward() {
+    return S.study.dailyRewardDate !== window.Store.today();
+  }
+  function rollDailyReward() {
+    const r = Math.random();
+    if (r < 0.45) return { type: 'beans', amount: 10 + Math.floor(Math.random() * 21), label: '可可豆', icon: '🌰' };
+    if (r < 0.75) return { type: 'tickets', amount: 1, label: '抽奖券', icon: '🎟️' };
+    return { type: 'freeQuestions', amount: 1, label: '免题券', icon: '🧾' };
+  }
+  function applyDailyReward(reward) {
+    if (reward.type === 'beans') S.cur.beans += reward.amount;
+    else if (reward.type === 'tickets') S.cur.tickets += reward.amount;
+    else if (reward.type === 'freeQuestions') S.cur.freeQuestions = (S.cur.freeQuestions || 0) + reward.amount;
+    S.study.dailyRewardDate = window.Store.today();
+    window.Store.save(true);
+    renderTop();
+  }
+  function openDailyRewardModal(auto) {
+    if (!canClaimDailyReward()) {
+      if (!auto) toast('今日签到奖励已经领过啦，明天再来。', 'ok');
+      return;
+    }
+    let picked = false;
+    const reward = rollDailyReward();
+    const cardHtml = function (i) {
+      return '<div class="dcard" id="dcard-' + i + '" data-i="' + i + '">' +
+        '<div class="dcard-inner">' +
+          '<div class="dcard-front">' +
+            '<div class="dcard-sym">' + ['◐', '◑', '◒'][i] + '</div>' +
+            '<div class="dcard-tip">点我翻开</div>' +
+          '</div>' +
+          '<div class="dcard-back" id="dcard-back-' + i + '"></div>' +
+        '</div>' +
+      '</div>';
+    };
+    openModal({
+      title: '🎁 每日签到 · 今日运势',
+      body: '<div class="daily-hint">每天首次打开都会有一次抽象签运。翻一张卡片，看看今天猫给你叼来了什么。</div>' +
+        '<div class="daily-cards">' + cardHtml(0) + cardHtml(1) + cardHtml(2) + '</div>' +
+        '<div id="daily-result" class="daily-result" style="display:none"></div>',
+      foot: '<button class="btn btn-primary" id="daily-claim" style="display:none">收下奖励</button>',
+      dismissable: false,
+      onMount: function (mask) {
+        $$('.dcard', mask).forEach(function (c) {
+          c.onclick = function () {
+            if (picked) return;
+            picked = true;
+            const idx = parseInt(c.dataset.i, 10);
+            const back = $('#dcard-back-' + idx, mask);
+            back.innerHTML = '<div class="dcard-reward">' + reward.icon + '</div>' +
+              '<div class="dcard-reward-name">' + reward.label + ' × ' + reward.amount + '</div>';
+            c.classList.add('flipped');
+            const res = $('#daily-result', mask);
+            res.textContent = '今日签运：' + reward.icon + ' ' + reward.label + ' × ' + reward.amount;
+            res.style.display = '';
+            $('#daily-claim', mask).style.display = '';
+          };
+        });
+        $('#daily-claim', mask).onclick = function () {
+          applyDailyReward(reward);
+          closeModal();
+          toast('🎁 签到成功：获得 ' + reward.icon + ' ' + reward.label + ' × ' + reward.amount, 'ok', 4000);
+        };
+      }
+    });
+  }
+
+  /* ---------------- 每日投喂单全满奖励弹窗 ---------------- */
+  function openFeedBonusModal() {
+    openModal({
+      title: '🍽️ 今日投喂单全满！',
+      body: '<div class="feed-bonus-body">' +
+        '<div class="feed-bonus-cat">🐱</div>' +
+        '<div class="feed-bonus-text">你喂满了今天的全部核心任务，猫很满意。</div>' +
+        '<div class="feed-bonus-prize">🎟️ +2 抽奖券　🌰 +50 可可豆</div>' +
+      '</div>',
+      foot: '<button class="btn btn-primary" id="fb-ok">收下奖励</button>',
+      onMount: function (mask) {
+        $('#fb-ok', mask).onclick = closeModal;
+      }
+    });
+  }
+
   /* ---------------- 弹窗 ---------------- */
   function openModal(opts) {
     /* opts: {title, body, foot, wide, onMount, dismissable} */
@@ -317,6 +401,8 @@
     if (syncChip) syncChip.onclick = openSyncModal;
     const saveChip = $('#chip-save');
     if (saveChip) saveChip.onclick = openSaveModal;
+    const checkinChip = $('#chip-checkin');
+    if (checkinChip) checkinChip.onclick = function () { openDailyRewardModal(false); };
 
     /* 背景音乐：顶栏的小胶囊，点开选曲 / 暂停。默认关，不硬塞给用户。 */
     const musicChip = $('#music-chip');
@@ -338,6 +424,11 @@
     render();
     afterOffline(report);
     if (dayReset) toast('☀️ 新的一天，投喂单已经刷新。', 'ok');
+
+    /* 每日签到：首次进入自动弹出（如果还没领），也可点顶栏 🎁 手动打开 */
+    if (canClaimDailyReward()) {
+      setTimeout(function () { openDailyRewardModal(true); }, 600);
+    }
 
     setInterval(function () {
       const r = window.Store.advanceOffline();
@@ -361,7 +452,7 @@
     const bits = [];
     if (report.hatched && report.hatched.length) {
       bits.push(report.hatched.length + ' 颗胶囊已经孵化完成' +
-        (window.QBank && window.QBank.count() ? '（点「答题破壳」，先过 10 题的小卷）' : '（可以破壳了）'));
+        (window.QBank && window.QBank.count() ? '（点「答题破壳」，答对 1 道题就能请它出来）' : '（可以破壳了）'));
     }
     if (report.sick && report.sick.length) bits.push(report.sick.length + ' 只小生物生病了');
     if (report.minutes >= 5) bits.push('离开了 ' + fmtHM(report.minutes));
@@ -424,10 +515,16 @@
     const info = window.Store.currentPhase();
     $('#chip-phase .chip-v').textContent = info.phase.name + ' D' + info.day;
     $('#chip-streak .chip-v').textContent = (S.stats.streak || 0) + ' 天';
+    const checkinEl = $('#chip-checkin');
+    if (checkinEl) checkinEl.classList.toggle('ready', canClaimDailyReward());
+    const checkinV = $('#chip-checkin-v');
+    if (checkinV) checkinV.textContent = canClaimDailyReward() ? '签到' : '已签';
     const svEl = $('#chip-save-v');
     if (svEl) svEl.textContent = '存档 ' + window.Store.saveMeta().count;
     $('#cur-tickets').textContent = S.cur.tickets;
     $('#cur-beans').textContent = Math.floor(S.cur.beans);
+    const fqEl = $('#cur-freeq');
+    if (fqEl) fqEl.textContent = S.cur.freeQuestions || 0;
 
     const ts = window.Study.todayTaskStats();
     const dot = $('#dot-study');
@@ -459,6 +556,54 @@
   }
 
   /* ---------------- 学习页 ---------------- */
+  /* 库伯学习圈做成真正的环形图：四个象限首尾相连、顺时针闭环 */
+  function kolbRingSvg(kolb) {
+    const cx = 140, cy = 140, R = 118, r = 64;
+    function pt(ang, rad) {                 /* ang: 0=正上方，顺时针增大 */
+      const a = (ang - 90) * Math.PI / 180;
+      return [cx + rad * Math.cos(a), cy + rad * Math.sin(a)];
+    }
+    function fmt(p) { return Math.round(p[0]) + ',' + Math.round(p[1]); }
+    const order = [
+      { key: 'CE', a1: 0,   a2: 90  },
+      { key: 'RO', a1: 90,  a2: 180 },
+      { key: 'AC', a1: 180, a2: 270 },
+      { key: 'AE', a1: 270, a2: 360 }
+    ];
+    let svg = '<svg viewBox="0 0 280 280" class="kolb-ring" role="img" aria-label="库伯学习圈">';
+    order.forEach(function (s) {
+      const k = kolbOf(s.key);
+      const on = (kolb[s.key] || 0) > 0;
+      const o1 = pt(s.a1, R), o2 = pt(s.a2, R), i2 = pt(s.a2, r), i1 = pt(s.a1, r);
+      const d = 'M' + fmt(o1) + ' A' + R + ' ' + R + ' 0 0 1 ' + fmt(o2) +
+                ' L' + fmt(i2) + ' A' + r + ' ' + r + ' 0 0 0 ' + fmt(i1) + ' Z';
+      svg += '<path d="' + d + '" fill="' + (on ? k.color : '#E6ECE7') + '" ' +
+             (on ? '' : 'opacity="0.6" ') + 'stroke="#fff" stroke-width="3"/>';
+      const mid = (s.a1 + s.a2) / 2;
+      const lp = pt(mid, (R + r) / 2);
+      svg += '<text x="' + Math.round(lp[0]) + '" y="' + Math.round(lp[1] - 7) + '" text-anchor="middle" class="kr-emoji">' + k.emoji + '</text>';
+      svg += '<text x="' + Math.round(lp[0]) + '" y="' + Math.round(lp[1] + 9) + '" text-anchor="middle" class="kr-name">' + k.name + '</text>';
+      svg += '<text x="' + Math.round(lp[0]) + '" y="' + Math.round(lp[1] + 23) + '" text-anchor="middle" class="kr-count' + (on ? ' on' : '') + '">' +
+             (on ? ('今日 ' + kolb[s.key] + ' 次') : '未做') + '</text>';
+    });
+    /* 四段箭头：沿环顺时针指向，连成闭环 */
+    [90, 180, 270, 360].forEach(function (ang) {
+      const rm = (R + r) / 2;
+      const c = Math.cos((ang - 90) * Math.PI / 180), s = Math.sin((ang - 90) * Math.PI / 180);
+      const px = cx + rm * c, py = cy + rm * s;
+      const tx = -s, ty = c, nx = -ty, ny = tx;          /* 切线(顺时针) + 法线 */
+      const tip = [px + tx * 13, py + ty * 13];
+      const b1 = [px - tx * 4 + nx * 8, py - ty * 4 + ny * 8];
+      const b2 = [px - tx * 4 - nx * 8, py - ty * 4 - ny * 8];
+      svg += '<polygon points="' + fmt(tip) + ' ' + fmt(b1) + ' ' + fmt(b2) + '" fill="#3C8C5A"/>';
+    });
+    const lit = order.filter(function (s) { return (kolb[s.key] || 0) > 0; }).length;
+    svg += '<text x="' + cx + '" y="' + (cy - 4) + '" text-anchor="middle" class="kr-center">库伯学习圈</text>';
+    svg += '<text x="' + cx + '" y="' + (cy + 15) + '" text-anchor="middle" class="kr-center-num">' + lit + ' / 4 闭环</text>';
+    svg += '</svg>';
+    return svg;
+  }
+
   function viewStudy() {
     const info = window.Store.currentPhase();
     const ts = window.Study.todayTaskStats();
@@ -466,6 +611,14 @@
 
     let h = '';
     h += saveNagHtml();
+
+    /* 阶段卡（Step 1 …）：置顶，放在「今日投喂单」上面，一眼看清今天处在哪个阶段 */
+    h += '<div class="panel">';
+    h += '<div class="panel-head"><h2>' + info.phase.tag + ' · ' + info.phase.name + '</h2>' +
+      '<span class="hint">第 ' + info.day + ' 天 / 第 ' + info.dayInPhase + ' 天（本阶段共 ' + info.phase.days + ' 天）</span></div>';
+    h += '<div style="font-size:13.5px;color:#5B7263">' + esc(info.phase.detail) + '</div>';
+    h += '<div class="warnbox" style="margin:12px 0 0">🎯 ' + esc(info.phase.focus) + '</div>';
+    h += '</div>';
 
     /* 顶部：今日投喂单 —— 6 个小格子，这是每天的主线。
        进度条只数这 6 件；碎片和加餐退到下面当辅助信息。 */
@@ -496,31 +649,22 @@
     h += '<div class="warnbox" style="margin-top:12px">✅ <b>做了就是做了。</b>没有计时器，也不攒碎片——做完登记一下，奖励马上发，今天的格子立刻亮一个。</div>';
     h += '</div>';
 
-    /* 库伯四象限 */
+    /* 库伯四象限：真正的环形闭环图 */
     h += '<div style="margin-top:16px">';
     h += '<div style="font-size:13px;font-weight:700;color:#2E7A4C;margin-bottom:8px">🔄 库伯学习圈 · 今日闭环情况</div>';
-    h += '<div class="kolb">';
+    h += '<div class="kolb-wrap">' + kolbRingSvg(kolb) + '</div>';
+    let legend = '<div class="kolb-legend">';
     D.KOLB.forEach(function (k) {
       const on = (kolb[k.key] || 0) > 0;
-      h += '<div class="kolb-cell' + (on ? ' on' : '') + '" style="' + (on ? 'border-color:' + k.color + '33' : '') + '">' +
-        '<div class="k-count">' + (kolb[k.key] || 0) + '</div>' +
-        '<div class="k-emoji">' + k.emoji + '</div>' +
-        '<div class="k-name" style="color:' + k.color + '">' + k.name + '</div>' +
-        '<div class="k-sub">' + k.sub + '</div>' +
-        '<div style="font-size:11px;color:#8AA394;margin-top:6px">' + k.desc + '</div>' +
-        '</div>';
+      legend += '<div class="kolb-leg' + (on ? ' on' : '') + '" style="border-color:' + (on ? k.color : '#E3ECE4') + '">' +
+        '<span class="kl-dot" style="background:' + (on ? k.color : '#CDD8CF') + '">' + k.emoji + '</span>' +
+        '<span class="kl-name" style="color:' + (on ? k.color : '#6B7E70') + '">' + k.name + '</span>' +
+        '<span class="kl-desc">' + k.desc + '</span></div>';
     });
-    h += '</div>';
+    legend += '</div>';
+    h += legend;
     h += '<div class="kolb-arrow">具体经验 → 反思观察 → 抽象概念化 → 主动实验 →（回到新的经验）四格都亮 = +1 胶囊券 / +30 可可豆</div>';
     h += '</div>';
-    h += '</div>';
-
-    /* 阶段卡 */
-    h += '<div class="panel">';
-    h += '<div class="panel-head"><h2>' + info.phase.tag + ' · ' + info.phase.name + '</h2>' +
-      '<span class="hint">第 ' + info.day + ' 天 / 第 ' + info.dayInPhase + ' 天（本阶段共 ' + info.phase.days + ' 天）</span></div>';
-    h += '<div style="font-size:13.5px;color:#5B7263">' + esc(info.phase.detail) + '</div>';
-    h += '<div class="warnbox" style="margin:12px 0 0">🎯 ' + esc(info.phase.focus) + '</div>';
     h += '</div>';
 
     /* 投喂单：固定的那几件 */
@@ -1038,20 +1182,11 @@
       const act = D.CARE[a];
       const own = S.bag[act.item] || 0;
       body += '<button class="act" data-care="' + a + '"' + ((own <= 0 || p.illness) ? ' disabled' : '') +
-        ' title="' + D.ITEM_MAP[act.item].name + ' ×' + own + '">' +
+        ' title="' + D.ITEM_MAP[act.item].name + ' 还剩 ' + own + ' 个">' +
+        '<span class="act-badge' + (own <= 0 ? ' empty' : '') + '">' + own + '</span>' +
         act.emoji + ' ' + act.label + (own <= 0 ? '（缺货）' : '') + '</button>';
     });
     body += '</div>';
-
-    /* 物资库存：照顾时随时能看到手里的道具与货币 */
-    body += '<div class="cm-bag"><div class="cm-bag-h">🎒 物资库存</div><div class="cm-bag-row">';
-    ['water', 'fert', 'pest', 'food', 'soap', 'shovel'].forEach(function (it) {
-      const itm = D.ITEM_MAP[it]; const n = S.bag[it] || 0;
-      body += '<span class="cm-bag-item' + (n <= 0 ? ' empty' : '') + '" title="' + itm.name + '">' + itm.emoji + ' ' + n + '</span>';
-    });
-    body += '<span class="cm-bag-sep"></span>' +
-      '<span class="cm-bag-item" title="胶囊券">🎟️ ' + S.cur.tickets + '</span>' +
-      '<span class="cm-bag-item" title="可可豆">🌰 ' + Math.floor(S.cur.beans) + '</span></div></div>';
 
     body += '<div class="hint" style="margin-top:10px">出生 ' + fmtWhen(p.bornAt) + ' · 陪伴你 ' + fmtHM(mins) +
       ' · 被照顾 ' + p.careCount + ' 次 · 出身 ' + esc(sp.home) + '</div>';
@@ -1600,7 +1735,7 @@
 
     h += '<h3>三、养一只小生物的全流程</h3>';
     h += '<div class="step"><b>1</b><div>扭蛋拿到<b>胶囊</b>。胶囊里是植物 / 真菌 / 藻类，就去<b>温室</b>；是动物，就去<b>孵化仓</b>。放错地方不孵化。</div></div>';
-    h += '<div class="step"><b>2</b><div>等孵化进度走完（普通 15 分钟 / 稀有 40 分钟 / 传说 80 分钟），点<b>破壳</b>。离线也会继续孵化。<br><span style="color:#B8791C">⚠️ 破壳前要先过一份「破壳测验」：10 题、限时 5 分钟、答对 70% 以上才准出生——见第七节。</span></div></div>';
+    h += '<div class="step"><b>2</b><div>等孵化进度走完（普通 15 分钟 / 稀有 40 分钟 / 传说 80 分钟），点<b>破壳</b>。离线也会继续孵化。<br><span style="color:#B8791C">⚠️ 破壳前要先过「破壳测验」：<b>答对 1 道题</b>就能出生（答错可再答一次，并看解析）——见第七节。</span></div></div>';
     h += '<div class="step"><b>3</b><div>破壳后开始照顾：<b>水分、营养、清洁</b>三条状态会随时间下滑。植物用浇水/施肥/除虫，动物用喂食/洗澡/清窝。</div></div>';
     h += '<div class="step"><b>4</b><div>某项状态归零超过 2 小时，它就可能<b>生病</b>。要买对症的药水（买错了不生效），病超过 24 小时会进入休眠。</div></div>';
     h += '<div class="step"><b>5</b><div>成长值到 100 / 300 / 700 会进阶：幼体 → 成长 → 成熟 → 圆满，每次进阶都有额外可可豆。</div></div>';
@@ -1633,7 +1768,7 @@
     h += '<div class="hintbox" style="margin-top:10px">📌 另外：<b>这里没有错题本</b>。你另一个 App 已经在管错题了，这个游戏不再碰它。反思象限换成「昨日回照」，就写两句话，不抄题、不整理。</div>';
 
     h += '<h3>七、破壳测验（小生物出生前的关卡）</h3>';
-    h += '<p>小生物要从温室 / 孵化仓出来的那一刻，先过一份小卷子：默认 <b>10 道题</b>、<b>限时 5 分钟</b>、正确率 <b>70% 及以上</b>（10 题对 7 题）才准出生。没到线就再来一份，不限次数、不扣任何东西。</p>';
+    h += '<p>小生物要从温室 / 孵化仓出来的那一刻，先过「破壳测验」：<b>每次 1 道题</b>，<b>答对就破壳</b>。答错了不破壳，可以再答一题；第二次还错，会给你看这道题的解析，看完同样能破壳（无限次数、不扣任何东西）。这样既挡住乱点破壳，又不让人卡住。</p>';
     h += '<p>这是整个游戏<b>唯一</b>带倒计时的地方，因为它要的就是考场那点限时感。学习任务那边仍然没有任何倒计时，两者是两回事，别混。</p>';
     h += '<table class="mini"><tr><th>它在做什么</th><th>怎么做的</th></tr>' +
       '<tr><td>抽题</td><td>四科轮流取，一张卷子尽量四科都沾到；每次都是<b>新抽</b>的。</td></tr>' +
@@ -1681,7 +1816,7 @@
     h += '<div class="step"><b>3</b><div>点「📝 去记录 / ✍️ 去登记」：写一段今日收获、登记题量，或者传截图。做完当场结算——做了就是做了，奖励马上发。</div></div>';
     h += '<div class="step"><b>4</b><div>导游词点「🎙️ 去录音」：可以分几次录，累计够时长就行。结算后拿券和豆。</div></div>';
     h += '<div class="step"><b>5</b><div>6 件全喂满会额外给 +2 券 / +50 豆。用挣来的资源去扭蛋、养小生物——它们会催你明天再来。</div></div>';
-    h += '<div class="step"><b>6</b><div>孵化好了先别急着点破壳——会弹一份 10 题的小卷（5 分钟 / 答对 7 题）。答过了它才出来。</div></div>';
+    h += '<div class="step"><b>6</b><div>孵化好了先别急着点破壳——会弹 <b>1 道题</b>的破壳测验（答错可再答一次、看解析）。答对了它才出来。</div></div>';
 
     h += '<h3>十二、换设备 / 换浏览器怎么办</h3>';
     h += '<p><b>登录一次，处处同步</b>：点顶栏的云朵 ☁️，用一个邮箱登录（收 6 位验证码即可）。之后进度自动上云——手机、电脑、iPad、任何浏览器，打开就是最新进度，什么都不用管。</p>';
@@ -1826,7 +1961,7 @@
 
   /* =========================================================
    * 破壳测验
-   * 小生物出生前的关卡：默认 10 题 / 限时 5 分钟 / 正确率 70% 以上。
+   * 小生物出生前的关卡：每次 1 题，答对即破壳；答错可再答一次并看解析。
    * 这是全游戏唯一带倒计时的地方 —— 因为它就是要模拟考场那点限时感。
    * 学习任务仍然没有任何倒计时（那是另一回事）。
    * ========================================================= */
@@ -1848,6 +1983,7 @@
       paper: paper,
       answers: paper.map(function () { return []; }),
       previousIds: [],
+      attempt: 1,
       idx: 0,
       endsAt: Date.now() + (cfg.minutes || 5) * 60000,
       timer: null,
@@ -2032,10 +2168,11 @@
 
     body.innerHTML = h;
 
+    const canRetry = qz.attempt < (window.Game.quizCfg().maxAttempts || 2);
     foot.innerHTML = r.passed
       ? '<button class="btn btn-primary" data-qz="hatch">🐣 破壳，请它出来</button>'
       : '<button class="btn btn-ghost" data-qz="later">待会儿再来</button>' +
-        '<button class="btn btn-primary" data-qz="retry">再答一份新卷</button>';
+        (canRetry ? '<button class="btn btn-primary" data-qz="retry">再答一题</button>' : '');
 
     $$('[data-qz]', mask).forEach(function (el) {
       el.onclick = function () {
@@ -2058,6 +2195,7 @@
     qz.paper = paper;
     qz.answers = paper.map(function () { return []; });
     qz.idx = 0;
+    qz.attempt = (qz.attempt || 1) + 1;
     qz.endsAt = Date.now() + (cfg.minutes || 5) * 60000;
     qz.done = false;
     qz.result = null;
@@ -2159,11 +2297,7 @@
       '<input type="text" id="tb-title" maxlength="20" placeholder="例如：睡前跟读 1 篇导游词"></div>';
     body += '<div class="field" id="tb-target-wrap" style="display:none"><label id="tb-target-label">目标</label>' +
       '<input type="number" id="tb-target" min="1" value="20"></div>';
-    body += '<div class="field"><label>③ 奖励（选填，默认 🎟️ 1 / 🌰 15）</label>' +
-      '<div class="inline">' +
-        '<div><span style="font-size:11.5px;color:#8AA394">胶囊券</span><input type="number" id="tb-tk" min="0" value="1"></div>' +
-        '<div><span style="font-size:11.5px;color:#8AA394">可可豆</span><input type="number" id="tb-bn" min="0" value="15"></div>' +
-      '</div></div>';
+    body += '<div class="okbox" style="margin:2px 0 4px">🎁 自建任务奖励固定为 <b>🎟️ 1 券 + 🌰 15 可可豆</b>，做完当场发。</div>';
     body += '<div id="tb-err"></div>';
 
     openModal({
@@ -2196,9 +2330,7 @@
           if (!title) { $('#tb-err', m).innerHTML = '<div class="errbox">先给它起个名字吧。</div>'; return; }
           window.Study.addUserTask({
             type: model.type, title: title, desc: model.desc,
-            target: parseInt($('#tb-target', m).value || '0', 10) || model.defaultTarget,
-            tickets: parseInt($('#tb-tk', m).value || '1', 10),
-            beans: parseInt($('#tb-bn', m).value || '15', 10)
+            target: parseInt($('#tb-target', m).value || '0', 10) || model.defaultTarget
           });
           closeModal();
           toast('🧩 加好了：「' + title + '」已经在加餐里等你。', 'ok', 5000);
@@ -2651,6 +2783,9 @@
       toast(msg, 'ok', 6500);
       autoSave('任务 · ' + task.title);   /* 每完成一项任务，自动存档一次 */
       res.extra.forEach(function (x) { setTimeout(function () { toast(x, 'ok', 6500); }, 350); });
+      if (res.feedBonus) {
+        setTimeout(function () { openFeedBonusModal(); confetti(60); }, 900);
+      }
       if (fmCards.some(function (f) { return f.pastedChars > 300; })) {
         setTimeout(function () {
           toast('ℹ️ 检测到费曼卡里有大段粘贴内容。粘贴不是作弊罪，但费曼法要的是"你自己的话"——下次试着先合上资料讲一遍。', 'warn', 9000);

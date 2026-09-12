@@ -79,8 +79,9 @@ window.Study = (function () {
     else if (type === 'record') verify.minMinutes = tpl.target || 3;
     else if (type === 'feynman') verify.minCards = tpl.target || 1;
     else if (type === 'note') verify.minChars = tpl.target || 20;
+    else if (type === 'online') verify.minChars = tpl.target || 20;
     else if (type === 'reading') verify.minChars = 6;
-    const ICON = { reading: '📖', quiz: '✍️', record: '🎙️', feynman: '🗣️', note: '📝' };
+    const ICON = { reading: '📖', quiz: '✍️', record: '🎙️', feynman: '🗣️', note: '📝', online: '🖥️' };
     return {
       uid: uid,
       libId: 'user_' + tpl.id,
@@ -482,12 +483,14 @@ window.Study = (function () {
     }
 
     /* 投喂单 6 件全满：每天只发一次的额外奖励 */
+    let feedBonusGiven = false;
     const coreTasks = S.study.tasks.filter(function (x) { return x.core; });
     const coreDone = coreTasks.filter(function (x) { return x.state === 'done'; }).length;
     if (coreTasks.length && coreDone >= coreTasks.length && S.study.feedBonusDate !== window.Store.today()) {
       S.study.feedBonusDate = window.Store.today();
       S.stats.fullFeedDays = (S.stats.fullFeedDays || 0) + 1;
       S.cur.tickets += 2; S.cur.beans += 50;
+      feedBonusGiven = true;
       extra.push('🍽️ 今天的投喂单喂满了（' + coreTasks.length + ' 件）：+2 券 / +50 豆');
       window.Store.pushLog('🍽️ 投喂单清空：读书 + 四科刷题 + 导游词，6 件全喂满了。');
     }
@@ -501,7 +504,8 @@ window.Study = (function () {
       ok: true,
       gain: { tickets: tickets, beans: beans },
       extra: extra,
-      kolb: task.kolb
+      kolb: task.kolb,
+      feedBonus: feedBonusGiven
     };
   }
 
@@ -542,8 +546,9 @@ window.Study = (function () {
       title: String(tpl.title || '').trim() || '我的任务',
       desc: String(tpl.desc || '').trim(),
       target: parseInt(tpl.target, 10) || 0,
-      tickets: tpl.tickets != null ? parseInt(tpl.tickets, 10) : 1,
-      beans: tpl.beans != null ? parseInt(tpl.beans, 10) : 15,
+      /* 自建任务奖励统一：1 个券配 15 个可可豆（不再让玩家填） */
+      tickets: 1,
+      beans: 15,
       createdAt: Date.now()
     };
     S.study.userTasks.push(t);

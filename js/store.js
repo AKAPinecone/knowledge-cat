@@ -38,7 +38,7 @@ window.Store = (function () {
       createdAt: today,
       planStart: today,
       examDate: window.GAME_DATA.EXAM_DATE,
-      cur: { tickets: 5, beans: 60 },      /* 开局小礼包 */
+      cur: { tickets: 5, beans: 60, freeQuestions: 0 },  /* 开局小礼包；freeQuestions=每日签到可能抽到的“1道题”免题券 */
       profile: { nick: '', avatar: '' },   /* 「我的」页：昵称 + 头像（emoji） */
       bag: { water: 5, fert: 3, pest: 2, food: 5, soap: 2, shovel: 3 },
       capsules: [],
@@ -57,6 +57,7 @@ window.Store = (function () {
         kolbToday: { CE: 0, RO: 0, AC: 0, AE: 0 },
         kolbBonusDate: '',
         feedBonusDate: '',  /* 投喂单 6 件全满的奖励日期（每天只发一次） */
+        dailyRewardDate: '',/* 每日签到奖励最后领取日期 */
         userTasks: [],      /* 自建加餐任务模板（跨天保留） */
         quizAccum: {}       /* taskUid -> {q, correct} 刷题任务的累计进度 */
       },
@@ -156,10 +157,13 @@ window.Store = (function () {
     if (!s.settings || typeof s.settings !== 'object') s.settings = { bgmOn: false, bgmTrack: 0 };
     if (typeof s.settings.bgmOn !== 'boolean') s.settings.bgmOn = false;
     if (typeof s.settings.bgmTrack !== 'number') s.settings.bgmTrack = 0;
-    /* 老存档补自建任务列表 + 刷题累计进度 */
+    /* 老存档补自建任务列表 + 刷题累计进度 + 每日签到 + 免题券 */
     if (!s.study || typeof s.study !== 'object') s.study = {};
     if (!Array.isArray(s.study.userTasks)) s.study.userTasks = [];
     if (!s.study.quizAccum || typeof s.study.quizAccum !== 'object') s.study.quizAccum = {};
+    if (s.study.dailyRewardDate === undefined) s.study.dailyRewardDate = '';
+    if (!s.cur || typeof s.cur !== 'object') s.cur = {};
+    if (s.cur.freeQuestions === undefined) s.cur.freeQuestions = 0;
   }
 
   /* localStorage 只有 5MB 上下，而证据库里每条凭证都带一张 base64 缩略图。
