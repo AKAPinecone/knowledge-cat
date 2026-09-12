@@ -11,7 +11,7 @@ window.Study = (function () {
   let S = null;
 
   /* 任务库版本：升级后强制重算当天任务，避免老存档里的旧任务结构残留 */
-  const TASK_VER = 5;  /* v5：刷题任务改为"每次任意题数、累计达标即完成"；新增用户自建加餐任务 */
+  const TASK_VER = 6;  /* v6：导游词任务 record→opinion（截图+看法，看法可录可选音）；新增核心任务「面试问答 10 道」；投喂单 6→7 件 */
 
   /* 前端回调，由 app.js 挂载 */
   const hooks = {
@@ -70,18 +70,19 @@ window.Study = (function () {
     return best || D.SUBJECTS[0];
   }
 
-  /* 用户自建加餐任务：从既有任务模型（reading/quiz/record/feynman/note）里选一种，跨天保留 */
+  /* 用户自建加餐任务：从既有任务模型（reading/quiz/opinion/feynman/note/online）里选一种，跨天保留 */
   function buildUserTask(tpl, day) {
     const uid = 'user_' + tpl.id + '#' + day;
     const type = tpl.type;
     const verify = { type: type };
     if (type === 'quiz') verify.minQuestions = tpl.target || 20;
     else if (type === 'record') verify.minMinutes = tpl.target || 3;
+    else if (type === 'opinion') { verify.minChars = tpl.target || 8; }
     else if (type === 'feynman') verify.minCards = tpl.target || 1;
     else if (type === 'note') verify.minChars = tpl.target || 20;
     else if (type === 'online') verify.minChars = tpl.target || 20;
     else if (type === 'reading') verify.minChars = 6;
-    const ICON = { reading: '📖', quiz: '✍️', record: '🎙️', feynman: '🗣️', note: '📝', online: '🖥️' };
+    const ICON = { reading: '📖', quiz: '✍️', record: '🎙️', opinion: '🎧', feynman: '🗣️', note: '📝', online: '🖥️' };
     return {
       uid: uid,
       libId: 'user_' + tpl.id,
@@ -92,7 +93,7 @@ window.Study = (function () {
       reward: { tickets: tpl.tickets != null ? tpl.tickets : 1, beans: tpl.beans != null ? tpl.beans : 15 },
       core: false, coreLabel: '',
       split: '', pick: type === 'reading' ? 'book' : '',
-      verify: verify, need: {},
+      verify: verify, need: type === 'opinion' ? { photo: true } : {},
       ctx: { scriptId: '', scriptName: '', bookId: '', bookName: '', subjectId: '', subjectName: '' },
       quizCount: 0,
       state: S.study.done[uid] ? 'done' : 'pending',
@@ -366,7 +367,18 @@ window.Study = (function () {
     if (task.pick === 'book' && v.type !== 'reading' && !proof.bookId) {
       errs.push('还没选这套习题是哪一科的');
     }
-    if (need.photo && !proof.photo) errs.push('缺少凭证截图（准题库的完成页 / 成绩页 / 网课播放页截一张）');
+    /* 看法（截图 + 看法：看法可打字，也可录一段音代替） */
+    if (v.type === 'opinion') {
+      const op = proof.opinion || {};
+      const txt = String(op.text || '').trim();
+      const hasAudio = !!(op.audios && op.audios.length);
+      if (!txt && !hasAudio) {
+        errs.push('还没留下「看法」：在另一个 App 练完导游词，截一张图带过来，再写一句（或录一段）今天顺不顺、哪里还卡。');
+      } else if (txt && txt.length < (v.minChars || 4)) {
+        errs.push('「看法」太短了（至少 ' + (v.minChars || 4) + ' 个字，或改录一段语音代替）。');
+      }
+    }
+    if (need.photo && !proof.photo) errs.push('缺少凭证截图（在另一个 App 练完导游词，截一张图带过来）');
     if (need.feynman && (proof.feynmanCount || 0) < need.feynman) {
       errs.push('本任务需要 ' + need.feynman + ' 张费曼卡，当前 ' + (proof.feynmanCount || 0) + ' 张');
     }
@@ -430,6 +442,15 @@ window.Study = (function () {
       });
     }
 
+    /* 看法登记：把文字「看法」留一份进证据库（录音段已在下方统一存为 audio 证据） */
+    if (task.verify.type === 'opinion' && proof.opinion && String(proof.opinion.text || '').trim()) {
+      window.Store.addEvidence({
+        type: 'note', taskId: uid,
+        label: '看法 · ' + task.title,
+        text: String(proof.opinion.text).trim()
+      });
+    }
+
     /* 文字登记：把写的内容留一份进证据库 */
     if (task.verify.type === 'note' && String(proof.note || '').trim()) {
       window.Store.addEvidence({
@@ -482,7 +503,7 @@ window.Study = (function () {
       window.Store.pushLog('🎯 学习圈闭合：具体经验→反思观察→抽象概念化→主动实验，今天你走完了一整圈。');
     }
 
-    /* 投喂单 6 件全满：每天只发一次的额外奖励 */
+    /* 投喂单全满：每天只发一次的额外奖励 */
     let feedBonusGiven = false;
     const coreTasks = S.study.tasks.filter(function (x) { return x.core; });
     const coreDone = coreTasks.filter(function (x) { return x.state === 'done'; }).length;
@@ -492,7 +513,7 @@ window.Study = (function () {
       S.cur.tickets += 2; S.cur.beans += 50;
       feedBonusGiven = true;
       extra.push('🍽️ 今天的投喂单喂满了（' + coreTasks.length + ' 件）：+2 券 / +50 豆');
-      window.Store.pushLog('🍽️ 投喂单清空：读书 + 四科刷题 + 导游词，6 件全喂满了。');
+      window.Store.pushLog('🍽️ 投喂单清空：今天 ' + coreTasks.length + ' 件全喂满了。');
     }
 
     window.Store.markCheckin();
@@ -517,7 +538,7 @@ window.Study = (function () {
   }
 
   /* 今日进度：核心「投喂单」+ 加餐。
-     进度条只数核心那几件（阶段一正好 6 件：读书 1 + 四科刷题 4 + 导游词 1）——
+     进度条只数核心那几件（阶段一正好 7 件：读书 1 + 四科刷题 4 + 导游词 1 + 面试 1）——
      加餐做不做都行，不该让人多出一份"今天还差两件"的负罪感。 */
   function todayTaskStats() {
     const tasks = ensureTodayTasks();

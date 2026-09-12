@@ -56,7 +56,7 @@ window.Store = (function () {
         shards: {},         /* taskUid -> [{idx, text, at}] 今日拾光碎片 */
         kolbToday: { CE: 0, RO: 0, AC: 0, AE: 0 },
         kolbBonusDate: '',
-        feedBonusDate: '',  /* 投喂单 6 件全满的奖励日期（每天只发一次） */
+        feedBonusDate: '',  /* 投喂单全满的奖励日期（每天只发一次） */
         dailyRewardDate: '',/* 每日签到奖励最后领取日期 */
         userTasks: [],      /* 自建加餐任务模板（跨天保留） */
         quizAccum: {}       /* taskUid -> {q, correct} 刷题任务的累计进度 */

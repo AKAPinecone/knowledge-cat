@@ -9,8 +9,8 @@ window.GAME_DATA = (function () {
   const PHASES = [
     {
       id: 1, name: '全刷夯基', days: 35, tag: 'Step 1',
-      motto: '每天喂满 6 样：读书 1 + 四科各 30 道 + 导游词 1。',
-      detail: '每天的投喂单固定 6 件：精读课本 1 次（哪本你定，一本 8 天）、四科各刷 30 道、导游词通读 1 篇。这 6 件之外还有"加餐"——课后练习、章节框架、合书自测，有精力就做，没有也没人扣你分。',
+      motto: '每天喂满 7 样：读书 1 + 四科各 30 道 + 导游词 1 + 面试问答 10 道。',
+      detail: '每天的投喂单固定 7 件：精读课本 1 次（哪本你定，一本 8 天）、四科各刷 30 道、导游词通读 1 篇、面试问答 10 道。这 7 件之外还有"加餐"——课后练习、章节框架、合书自测，有精力就做，没有也没人扣你分。',
       focus: '不求全懂，只求全覆盖。先把四科的"地图"画进脑子里。'
     },
     {
@@ -22,7 +22,7 @@ window.GAME_DATA = (function () {
     {
       id: 3, name: '冲刺定型', days: 14, tag: 'Step 3',
       motto: '套题 + 全科回照 + 导游词全流程口述。',
-      detail: '每天套题/模考；全科回照（把学过的框架串一遍）；12 篇导游词全程口述录音；法规与时政速记。',
+      detail: '每天套题/模考；全科回照（把学过的框架串一遍）；12 篇导游词全程口述（在另一个 App 讲完，截图+看法带回来）；法规与时政速记。',
       focus: '把状态调到考试那天。稳住节奏，不学新东西，只把会的变熟。'
     }
   ];
@@ -340,16 +340,17 @@ window.GAME_DATA = (function () {
 
   /* ---------- 任务库 ---------- */
   /* kolb: CE 具体经验 / RO 反思观察 / AC 抽象概念化 / AE 主动实验 */
-  /* verify: quiz 刷题登记 | record 录音 | feynman 费曼卡 | reading 精读登记
+  /* verify: quiz 刷题登记 | record 录音 | opinion 截图+看法 | feynman 费曼卡 | reading 精读登记
    *         note 一句话登记（做了就是做了：写一句当场发奖，不攒碎片、不设间隔）
    *   note:   { minChars 这句至少几个字, prompts 引导语（第一条展示在输入框上） }
    *   reading:{ minChars 必答「读了什么」最少几个字, optionalPhoto 是否给一个选填的上传位 }
+   *   opinion:{ minChars 看法至少几个字, need.photo 必须传截图；看法可打字，也可录一段音(选填，代替/补充打字) }
    * split: 'subject' 这条任务会按四科拆成四条独立任务，各算各的
    * pick:  'book'    结算时由你自己决定这道题属于哪一本课本
    *
-   * core: true  = 每日投喂单的固定 6 件之一（进度条只数这 6 件）
+   * core: true  = 每日投喂单的固定 7 件之一（进度条只数这 7 件）
    * coreLabel   = 进度条上那个小格子的名字（四科刷题填 '{subject}'，会换成"法规/业务/全导/地导"）
-   * 没有 core 的 = 加餐：做不做都行，不计入 6 件，也不影响当天"全清"。
+   * 没有 core 的 = 加餐：做不做都行，不计入 7 件，也不影响当天"全清"。
    */
   const TASK_LIBRARY = [
     /* ============ 阶段一 ============ */
@@ -372,12 +373,20 @@ window.GAME_DATA = (function () {
     {
       id: 'p1_script_read', phase: [1], title: '导游词通读：{script}', core: true, coreLabel: '导游词',
       kolb: 'CE', icon: '🎧',
-      desc: '出声朗读今日导游词，按官方讲解顺序走一遍。可以分两三次录，累计够 3 分钟就行——等电梯、走路上都能念一段。这一阶段只要求"读顺"。',
+      desc: '在另一个 App 里把今日导游词通读一遍（读顺就行），截一张图带过来，再写/录一句「今天顺不顺、哪里还卡」。不必在这里录音了。',
       reward: { tickets: 1, beans: 30 },
-      verify: { type: 'record', minMinutes: 3 }
+      verify: { type: 'opinion', minChars: 8 },
+      need: { photo: true }
+    },
+    {
+      id: 'p_interview', phase: [1, 2, 3], title: '面试问答训练 10 道', core: true, coreLabel: '面试',
+      kolb: 'AE', icon: '🗣️',
+      desc: '科目五面试：每天自己练或跟人答 10 道问答题（导游规范题、应变能力题、综合题都算）。在另一个 App 或对着镜子练都行，回来登记题量和答得顺不顺。',
+      reward: { tickets: 1, beans: 15 },
+      verify: { type: 'quiz', minQuestions: 10 }
     },
 
-    /* ===== 加餐：不计入每日 6 件，做不做都行 ===== */
+    /* ===== 加餐：不计入每日 7 件，做不做都行 ===== */
     {
       id: 'p1_exercise', phase: [1], title: '课后练习 · 今日章节配套习题', kolb: 'AE', icon: '📝',
       pick: 'book',
@@ -405,9 +414,10 @@ window.GAME_DATA = (function () {
     {
       id: 'p1_script_recite', phase: [1], title: '合稿默讲：{script}', kolb: 'AE', icon: '🎤',
       repeat: { every: 2 },
-      desc: '合上稿子把这篇讲一遍并录音。系统会自动轮换景点，每篇讲够 2 次就算拿下——差不多就是"每 4 天背下一篇"的节奏。卡壳的地方记下来，下一轮重点攻。',
+      desc: '合上稿子把这篇讲一遍（在另一个 App 里讲，或对着镜子讲）。截一张图带过来，再写/录一句「哪段最顺、哪段卡壳」。每篇讲够 2 次就算拿下——差不多就是"每 4 天背下一篇"。',
       reward: { tickets: 2, beans: 50 },
-      verify: { type: 'record', minMinutes: 2 }
+      verify: { type: 'opinion', minChars: 8 },
+      need: { photo: true }
     },
     {
       id: 'p1_reflect', phase: [1, 2, 3], title: '昨日回照 · 两句话', kolb: 'RO', icon: '🔍',
@@ -458,9 +468,10 @@ window.GAME_DATA = (function () {
     {
       id: 'p2_script', phase: [2], title: '导游词梳理背诵：{script}', core: true, coreLabel: '导游词',
       kolb: 'RO', icon: '🎤',
-      desc: '不再照着读。先默讲，再回看稿子补漏，然后录第二遍。两遍之间的差距就是你的进步。可以分次录。',
+      desc: '不再照着读。在另一个 App 里先默讲、再回看稿子补漏，截一张图带过来，再写/录一句「这次比上次顺在哪、还差哪段」。',
       reward: { tickets: 1, beans: 40 },
-      verify: { type: 'record', minMinutes: 3 }
+      verify: { type: 'opinion', minChars: 8 },
+      need: { photo: true }
     },
     {
       id: 'p2_quiz_keep', phase: [2, 3], title: '保持手感 · {subject} 15 道', core: true, coreLabel: '{subject}',
@@ -484,9 +495,10 @@ window.GAME_DATA = (function () {
     {
       id: 'p3_script_full', phase: [3], title: '导游词全流程口述：{script}', core: true, coreLabel: '导游词',
       kolb: 'AE', icon: '🎙️',
-      desc: '从"各位游客大家好"开始，到"谢谢大家"结束，一次讲完不停顿。这就是考场上的样子。',
+      desc: '从"各位游客大家好"到"谢谢大家"，一次讲完不停顿——这就是考场上的样子。在另一个 App 里讲完，截一张图带过来，再写/录一句「全程顺下来没有、卡在哪」。',
       reward: { tickets: 2, beans: 50 },
-      verify: { type: 'record', minMinutes: 4 }
+      verify: { type: 'opinion', minChars: 8 },
+      need: { photo: true }
     },
     {
       id: 'p3_law', phase: [3], title: '法规与时政速记', kolb: 'AC', icon: '⚖️',
@@ -503,12 +515,12 @@ window.GAME_DATA = (function () {
   /* ---------- 自建加餐任务可选的任务模型 ----------
      松果想自己加一条加餐任务时，从这里挑一种「已有的模型」，而不是凭空造一个新玩法：
      每种模型都对应现成的验证方式与结算流程（reward 默认 1 券 / 15 豆，可改）。
-     target 的含义随类型不同：quiz 题数 / record 分钟 / feynman 卡片数 / note 字数；
+     target 的含义随类型不同：quiz 题数 / record 分钟 / opinion 看法字数 / feynman 卡片数 / note 字数；
      reading 不需要 target（选书 + 写读了什么）。 */
   const TASK_MODELS = [
     { type: 'reading', name: '精读课本', emoji: '📖', desc: '挑一本课本，登记今天读了哪本、读了什么', targetLabel: '', defaultTarget: 0 },
     { type: 'quiz',    name: '刷题',     emoji: '✍️', desc: '登记本次题量与答对题数，累计达标才算完成', targetLabel: '累计题数', defaultTarget: 20 },
-    { type: 'record',  name: '读 / 背导游词', emoji: '🎙️', desc: '录一段音，可分几次录、累计够时长就行', targetLabel: '累计分钟', defaultTarget: 3 },
+    { type: 'opinion', name: '读 / 背导游词（截图+看法）', emoji: '🎧', desc: '在另一个 App 练完导游词，截一张图带过来，再写/录一句「看法」', targetLabel: '看法最少字数', defaultTarget: 8 },
     { type: 'feynman', name: '费曼卡',   emoji: '🗣️', desc: '用大白话讲给没学过的人听，产出卡片', targetLabel: '卡片数', defaultTarget: 1 },
     { type: 'note',    name: '文字登记', emoji: '📝', desc: '写一段今日收获，做完当场结算', targetLabel: '最少字数', defaultTarget: 30 },
     { type: 'online',  name: '网课',     emoji: '🖥️', desc: '听一节网课，登记今天听了谁的、讲了什么', targetLabel: '最少字数', defaultTarget: 30 }
@@ -549,8 +561,8 @@ window.GAME_DATA = (function () {
     { id: 'ach_mock_10',    name: '十次模考',   desc: '完成 10 次模考',            reward: { tickets: 3, beans: 120 }, check: function (s) { return s.stats.mockCount >= 10; } },
     { id: 'ach_species_20', name: '物种图谱',   desc: '收集 20 个不同物种',        reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.uniqueSpecies >= 20; } },
     { id: 'ach_kolb_7',     name: '完整学习圈', desc: '7 天集齐库伯四象限',        reward: { tickets: 5, beans: 180 }, check: function (s) { return s.stats.kolbFullDays >= 7; } },
-    { id: 'ach_feed_7',     name: '七日喂饱',   desc: '7 天把投喂单的 6 件全喂满', reward: { tickets: 3, beans: 100 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 7; } },
-    { id: 'ach_feed_30',    name: '喂猫成瘾',   desc: '30 天把投喂单的 6 件全喂满', reward: { tickets: 8, beans: 300 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 30; } },
+    { id: 'ach_feed_7',     name: '七日喂饱',   desc: '7 天把投喂单的 7 件全喂满', reward: { tickets: 3, beans: 100 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 7; } },
+    { id: 'ach_feed_30',    name: '喂猫成瘾',   desc: '30 天把投喂单的 7 件全喂满', reward: { tickets: 8, beans: 300 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 30; } },
     { id: 'ach_phase1_clear', name: '全刷完成', desc: '走完 35 天全刷阶段',        reward: { tickets: 6, beans: 250 }, check: function (s) { return s.stats.daysPassed >= 35; } },
     { id: 'ach_no_sick_7',  name: '零生病周',   desc: '连续 7 天没有生物生病',     reward: { tickets: 2, beans: 80 }, check: function (s) { return s.stats.noSickStreak >= 7; } }
   ];

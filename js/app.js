@@ -621,15 +621,15 @@
     h += '<div class="warnbox" style="margin:12px 0 0">🎯 ' + esc(info.phase.focus) + '</div>';
     h += '</div>';
 
-    /* 顶部：今日投喂单 —— 6 个小格子，这是每天的主线。
-       进度条只数这 6 件；碎片和加餐退到下面当辅助信息。 */
+    /* 顶部：今日投喂单 —— 7 个小格子，这是每天的主线。
+       进度条只数这 7 件；碎片和加餐退到下面当辅助信息。 */
     h += '<div class="panel feed">';
     h += '<div class="feed-head">';
     h += '<div class="feed-num">' + ts.done + '<small>/ ' + ts.total + '</small></div>';
     h += '<div style="flex:1;min-width:0">' +
       '<div class="feed-title">🍽️ 今日投喂单</div>' +
       '<div class="hint" style="font-size:12px;color:#8AA394">' +
-      (ts.full ? '6 样全喂满了，今天这只猫吃饱了' : '喂满这 ' + ts.total + ' 样，猫今天就不会饿') + '</div></div>';
+      (ts.full ? (ts.total + ' 样全喂满了，今天这只猫吃饱了') : '喂满这 ' + ts.total + ' 样，猫今天就不会饿') + '</div></div>';
     h += '<div class="feed-badge' + (ts.full ? ' on' : '') + '">' + (ts.full ? '✅ 喂饱' : ts.pct + '%') + '</div>';
     h += '</div>';
 
@@ -719,7 +719,8 @@
     let verifyTag = '';
     if (v.type === 'note') verifyTag = '📝 写一段今日收获';
     else if (v.type === 'quiz') verifyTag = v.needScore ? '✍️ 登记题量 / 正确率' : ('✍️ 刷题累计满 ' + v.minQuestions + ' 道（可分批交）');
-    else if (v.type === 'record') verifyTag = '🎙️ 录音 ≥' + v.minMinutes + ' 分钟（可分段）';
+    else     if (v.type === 'record') verifyTag = '🎙️ 录音 ≥' + v.minMinutes + ' 分钟（可分段）';
+    else if (v.type === 'opinion') verifyTag = '📸 截图 + 💬 看法（看法可录一段音）';
     else if (v.type === 'feynman') verifyTag = '🗣️ 费曼卡 ×' + (v.minCards || 1);
     else if (v.type === 'reading') verifyTag = '📖 登记：读哪本 + 读了什么';
 
@@ -737,8 +738,9 @@
     if (!done) {
       const label = v.type === 'reading' ? '📖 去精读'
         : (v.type === 'record' ? '🎙️ 去录音'
+        : (v.type === 'opinion' ? '📸 去凭证'
         : (v.type === 'quiz' ? '✍️ 去登记'
-        : (v.type === 'note' ? '📝 去记录' : '去完成')));
+        : (v.type === 'note' ? '📝 去记录' : '去完成'))));
       side = '<button class="btn btn-primary btn-sm" data-act="task-verify" data-uid="' + t.uid + '">' + label + '</button>';
     }
 
@@ -1741,15 +1743,16 @@
     h += '<div class="step"><b>4</b><div>某项状态归零超过 2 小时，它就可能<b>生病</b>。要买对症的药水（买错了不生效），病超过 24 小时会进入休眠。</div></div>';
     h += '<div class="step"><b>5</b><div>成长值到 100 / 300 / 700 会进阶：幼体 → 成长 → 成熟 → 圆满，每次进阶都有额外可可豆。</div></div>';
 
-    h += '<h3>四、每天喂哪 6 样：投喂单 + 加餐</h3>';
-    h += '<p>学习页最上面是<b>「今日投喂单」</b>——每天固定 6 样，进度条只数这 6 件：</p>';
+    h += '<h3>四、每天喂哪 7 样：投喂单 + 加餐</h3>';
+    h += '<p>学习页最上面是<b>「今日投喂单」</b>——每天固定 7 样，进度条只数这 7 件：</p>';
     h += '<table class="mini"><tr><th>#</th><th>喂什么</th><th>怎么算喂到</th></tr>' +
       '<tr><td>1</td><td>📖 读书</td><td>精读任务登记一次（哪一本你定，一本 8 天）</td></tr>' +
       '<tr><td>2–5</td><td>✍️ 四科刷题</td><td>法规 / 业务 / 全导 / 地导，每科 30 道，各算一笔</td></tr>' +
-      '<tr><td>6</td><td>🎤 导游词</td><td>今天那篇通读一遍并录音（≥3 分钟，可分段）</td></tr>' +
+      '<tr><td>6</td><td>🎤 导游词</td><td>在另一个 App 里通读/背诵，截一张图带过来，再写/录一句「看法」</td></tr>' +
+      '<tr><td>7</td><td>🗣️ 面试问答</td><td>自己练或跟人答 10 道问答题（规范 / 应变 / 综合都算）</td></tr>' +
       '</table>';
-    h += '<p>6 件全喂满，当天额外 <b>+2 券 / +50 豆</b>，连着喂满 7 天和 30 天还有成就。</p>';
-    h += '<p>6 件之外是<b>「加餐」</b>：课后练习、章节框架图、合书自测、昨日回照、费曼工作坊、合稿默讲……这些<b>做不做都行</b>，不计入 6 件，少做一件也不会让你"今天没做完"。有精力就加一口，没精力就明天再说。</p>';
+    h += '<p>7 件全喂满，当天额外 <b>+2 券 / +50 豆</b>，连着喂满 7 天和 30 天还有成就。</p>';
+    h += '<p>7 件之外是<b>「加餐」</b>：课后练习、章节框架图、合书自测、昨日回照、费曼工作坊、合稿默讲……这些<b>做不做都行</b>，不计入 7 件，少做一件也不会让你"今天没做完"。有精力就加一口，没精力就明天再说。</p>';
 
     h += '<h3>五、课本精读：登记式，三步走完</h3>';
     h += '<p>精读是一张登记表——<b>能填出这两栏，就说明你今天真的翻过书</b>：</p>';
@@ -1763,7 +1766,7 @@
     h += '<table class="mini"><tr><th>关卡</th><th>它怎么防止你糊弄</th></tr>' +
       '<tr><td>① 精读登记</td><td>「选哪本 + 读了什么」两栏必答，内容进证据库。这一栏逼你把"读过"变成一句能说出来的话。</td></tr>' +
       '<tr><td>② 文字记录</td><td>回照、网课、框架图这类任务，交的时候要写一段<b>自己的话</b>（有最低字数），写完当场结算存档。写作这一动作就完成了一次「复述」。</td></tr>' +
-      '<tr><td>③ 凭证上传</td><td>刷题、网课、模考任务要传一张<b>准题库的完成页/成绩页截图</b>；导游词任务要真录音，而且<b>可以分几段录、累计够时长就行</b>，音频存档可回放。</td></tr>' +
+      '<tr><td>③ 凭证上传</td><td>刷题、网课、模考任务要传一张<b>准题库的完成页/成绩页截图</b>；导游词任务改成<b>截图 + 看法</b>：在另一个 App 练完截一张图带过来，再写/录一句「看法」（看法可录一段音代替打字）。</td></tr>' +
       '<tr><td>④ 输出与成像</td><td>深挖、框架图、法规速记都要写<b>费曼卡</b>或拍框架图（粘贴会被记录）；反思象限用「昨日回照」两句话逼你说出"还是模糊的那一点"。</td></tr></table>';
     h += '<div class="warnbox">⚠️ 坦白说：如果你铁了心要作弊，总能找到办法（比如随便传张旧截图）。但这个链路的目标是<b>让作弊比学习更麻烦</b>，同时又不至于让"今天只学了 15 分钟"变成一件有负担的事。真正能约束你的只有一个东西：11 月 21 日那天考场上只有你一个人。</div>';
     h += '<div class="hintbox" style="margin-top:10px">📌 另外：<b>这里没有错题本</b>。你另一个 App 已经在管错题了，这个游戏不再碰它。反思象限换成「昨日回照」，就写两句话，不抄题、不整理。</div>';
@@ -1812,11 +1815,11 @@
     h += '<p style="font-size:12.5px;color:#8AA394">说明：这份名单和讲解顺序来自云南省 2025 年科目五考试大纲（中文类 12 个景点）。考试形式通常是抽取若干景点后选择一个讲解，所以 12 篇都要准备。导游词正文请以官方指定教材或云南省文旅培训中心的材料为准，本游戏只负责排进度和逼你开口。</p>';
 
     h += '<h3>十一、每天怎么用</h3>';
-    h += '<div class="step"><b>1</b><div>打开「今日投喂」，最上面就是投喂单的 6 个格子——今天喂了几样，一眼看得见。下面「加餐」区是额外的，不用管它。</div></div>';
+    h += '<div class="step"><b>1</b><div>打开「今日投喂」，最上面就是投喂单的 7 个格子——今天喂了几样，一眼看得见。下面「加餐」区是额外的，不用管它。</div></div>';
     h += '<div class="step"><b>2</b><div>精读点「📖 去精读」：选一本、填今天读到哪儿，交了就完事。笔记想写两句就写，不想写就空着。</div></div>';
     h += '<div class="step"><b>3</b><div>点「📝 去记录 / ✍️ 去登记」：写一段今日收获、登记题量，或者传截图。做完当场结算——做了就是做了，奖励马上发。</div></div>';
-    h += '<div class="step"><b>4</b><div>导游词点「🎙️ 去录音」：可以分几次录，累计够时长就行。结算后拿券和豆。</div></div>';
-    h += '<div class="step"><b>5</b><div>6 件全喂满会额外给 +2 券 / +50 豆。用挣来的资源去扭蛋、养小生物——它们会催你明天再来。</div></div>';
+    h += '<div class="step"><b>4</b><div>导游词点「📸 去凭证」：在另一个 App 里通读/背诵，截一张图带过来，再写/录一句「看法」。结算后拿券和豆。</div></div>';
+    h += '<div class="step"><b>5</b><div>7 件全喂满会额外给 +2 券 / +50 豆。用挣来的资源去扭蛋、养小生物——它们会催你明天再来。</div></div>';
     h += '<div class="step"><b>6</b><div>孵化好了先别急着点破壳——会弹 <b>1 道题</b>的破壳测验（答错可再答一次、看解析）。答对了它才出来。</div></div>';
 
     h += '<h3>十二、换设备 / 换浏览器怎么办</h3>';
@@ -2401,27 +2404,42 @@
         '<div class="fh"><span id="vf-note-cnt">0 字</span></div></div>';
     }
 
-    /* 截图：刷题 / 网课是必答凭证；精读给一个选填的笔记照片位 */
+    /* 截图：刷题 / 网课 / 导游词(看法) 是必答凭证；精读给一个选填的笔记照片位 */
     if (need.photo || v.optionalPhoto) {
       const isOpt = !need.photo && v.optionalPhoto;
-      body += '<div class="field"><label>' +
-        (isOpt ? '📎 上传笔记 / 感想照片（选填）' : '📸 上传学习凭证截图（准题库的完成页 / 成绩页 / 网课播放页）') + '</label>' +
+      const upLabel = isOpt
+        ? '📎 上传笔记 / 感想照片（选填）'
+        : (v.type === 'opinion' ? '📸 上传导游词练习截图（在另一个 App 练完，截一张带过来）' : '📸 上传学习凭证截图（准题库的完成页 / 成绩页 / 网课播放页）');
+      body += '<div class="field"><label>' + upLabel + '</label>' +
         '<div class="photo-drop" id="vf-drop">点这里选一张图片，或把图片拖进来<br><span style="font-size:11px;color:#8AA394">会压缩后存入本机证据库，可随时回看</span></div>' +
         '<input type="file" accept="image/*" id="vf-file" class="hidden">' +
         '<div id="vf-prev"></div></div>';
     }
 
-    /* 录音 */
-    if (v.type === 'record') {
-      const sc = task.ctx && task.ctx.scriptId ? D.SCRIPTS.filter(function (x) { return x.id === task.ctx.scriptId; })[0] : null;
-      body += '<div class="field"><label>🎙️ 朗读 / 背诵录音（累计 ≥' + v.minMinutes + ' 分钟，可分几次录）</label>';
+    /* 看法（读 / 背导游词的凭证：可打字，也可录一段音代替） */
+    if (v.type === 'opinion') {
+      const mChars = v.minChars || 8;
+      body += '<div class="field"><label>💬 今天对这篇导游词的「看法」<span class="req">必答</span></label>' +
+        '<textarea id="vf-opinion" style="min-height:84px" placeholder="今天顺不顺？哪段最熟、哪段还卡？在另一个 App 里发现了什么讲解顺序？写一句，或者点下面录一段语音代替。"></textarea>' +
+        '<div class="fh"><span id="vf-opinion-cnt">0 / ' + mChars + ' 字起（也可录语音代替）</span></div></div>';
+    }
+
+    /* 录音：record 任务强制；opinion 任务里「看法」可录一段音 */
+    if (v.type === 'record' || v.type === 'opinion') {
+      const isOpinion = v.type === 'opinion';
+      const sc = (!isOpinion && task.ctx && task.ctx.scriptId) ? D.SCRIPTS.filter(function (x) { return x.id === task.ctx.scriptId; })[0] : null;
+      body += '<div class="field"><label>' + (isOpinion ? '🎙️ 录一段「看法」（选填，可代替打字）' : '🎙️ 朗读 / 背诵录音（累计 ≥' + v.minMinutes + ' 分钟，可分几次录）') + '</label>';
       if (sc) {
         body += '<div style="font-size:12.5px;color:#5B7263;margin-bottom:8px">按官方讲解顺序走一遍：</div>' +
           '<div class="script-flow">' + sc.nodes.map(function (n) { return '<span>' + esc(n) + '</span>'; }).join('') + '</div>';
       }
-      body += '<div class="hintbox" style="margin:6px 0 8px">碎片时间就录一段，凑够总时长即可——不必一次坐下来讲完。</div>' +
-        '<button class="btn btn-primary rec-btn" id="vf-rec">🎙️ 开始录音</button>' +
-        '<div id="vf-rec-info" style="margin-top:10px;font-size:12.5px;color:#8AA394">还没有录音。录音需要麦克风权限。</div>' +
+      if (isOpinion) {
+        body += '<div class="hintbox" style="margin:6px 0 8px">不想打字就录一段：说一句今天顺不顺、哪段卡壳。录不录都行，但截图必须有。</div>';
+      } else {
+        body += '<div class="hintbox" style="margin:6px 0 8px">碎片时间就录一段，凑够总时长即可——不必一次坐下来讲完。</div>';
+      }
+      body += '<button class="btn btn-primary rec-btn" id="vf-rec">' + (isOpinion ? '🎙️ 录一段看法' : '🎙️ 开始录音') + '</button>' +
+        '<div id="vf-rec-info" style="margin-top:10px;font-size:12.5px;color:#8AA394">' + (isOpinion ? '还没录音（选填）。也可以直接在上面写一句看法。' : '还没有录音。录音需要麦克风权限。') + '</div>' +
         '<div id="vf-rec-list" class="seg-list" style="margin-top:8px"></div></div>';
     }
 
@@ -2485,8 +2503,9 @@
           }
         }
 
-        /* 录音：每录一段就存一段，累计时长够就行（碎片时间友好） */
-        if (v.type === 'record') {
+        /* 录音：每录一段就存一段（record 强制、opinion 选填） */
+        if (v.type === 'record' || v.type === 'opinion') {
+          const isRec = v.type === 'record';
           const btn = $('#vf-rec', m), info = $('#vf-rec-info', m), holder = $('#vf-rec-list', m);
           let iv = null;
           function totalDur() {
@@ -2494,13 +2513,20 @@
           }
           function paint() {
             const tot = totalDur();
-            const need = v.minMinutes * 60;
-            info.innerHTML = vf.audios.length
-              ? (tot >= need
-                ? '<span style="color:#2E7A4C;font-weight:600">✅ 已录 ' + vf.audios.length + ' 段，累计 ' + fmtClock(tot) + '，达标</span>'
-                : '<span style="color:#B03B37;font-weight:600">已录 ' + vf.audios.length + ' 段，累计 ' + fmtClock(tot) +
-                  '，还差 ' + fmtClock(need - tot) + '（接着录，或者晚点再录都行）</span>')
-              : '还没有录音。可以分几次录，累计够 ' + v.minMinutes + ' 分钟就行。';
+            const has = vf.audios.length > 0;
+            if (isRec) {
+              const need = v.minMinutes * 60;
+              info.innerHTML = has
+                ? (tot >= need
+                  ? '<span style="color:#2E7A4C;font-weight:600">✅ 已录 ' + vf.audios.length + ' 段，累计 ' + fmtClock(tot) + '，达标</span>'
+                  : '<span style="color:#B03B37;font-weight:600">已录 ' + vf.audios.length + ' 段，累计 ' + fmtClock(tot) +
+                    '，还差 ' + fmtClock(need - tot) + '（接着录，或者晚点再录都行）</span>')
+                : '还没有录音。可以分几次录，累计够 ' + v.minMinutes + ' 分钟就行。';
+            } else {
+              info.innerHTML = has
+                ? '已录 ' + vf.audios.length + ' 段（选填，可代替打字）：累计 ' + fmtClock(tot)
+                : '还没录音（选填）。也可以直接在上面写一句看法。';
+            }
             holder.innerHTML = vf.audios.map(function (x, i) {
               return '<div class="seg-item"><span class="seg-i">第 ' + (i + 1) + ' 段</span>' +
                 '<span class="seg-d">' + fmtClock(x.duration) + '</span>' +
@@ -2516,21 +2542,30 @@
                 btn.className = 'btn btn-warn rec-btn';
                 btn.textContent = '⏹ 停止这一段';
                 const t0 = Date.now();
-                const left = Math.max(30, Math.round((v.minMinutes * 60 - totalDur()) / 60));
-                info.innerHTML = '<div class="rec-live"><span class="rec-dot"></span><span id="vf-rt">00:00</span>　还差约 ' + left + ' 分钟，随时可以停</div>' +
-                  '<div class="bar bar-thin" style="margin-top:8px"><i id="vf-rb" style="width:0%;background:linear-gradient(90deg,#D9534F,#E8846F)"></i></div>';
-                iv = setInterval(function () {
-                  const sec = (Date.now() - t0) / 1000;
-                  const e1 = $('#vf-rt', m), e2 = $('#vf-rb', m);
-                  if (e1) e1.textContent = fmtClock(sec);
-                  if (e2) e2.style.width = Math.min(100, (totalDur() + sec) / (v.minMinutes * 60) * 100) + '%';
-                }, 500);
+                if (isRec) {
+                  const left = Math.max(30, Math.round((v.minMinutes * 60 - totalDur()) / 60));
+                  info.innerHTML = '<div class="rec-live"><span class="rec-dot"></span><span id="vf-rt">00:00</span>　还差约 ' + left + ' 分钟，随时可以停</div>' +
+                    '<div class="bar bar-thin" style="margin-top:8px"><i id="vf-rb" style="width:0%;background:linear-gradient(90deg,#D9534F,#E8846F)"></i></div>';
+                  iv = setInterval(function () {
+                    const sec = (Date.now() - t0) / 1000;
+                    const e1 = $('#vf-rt', m), e2 = $('#vf-rb', m);
+                    if (e1) e1.textContent = fmtClock(sec);
+                    if (e2) e2.style.width = Math.min(100, (totalDur() + sec) / (v.minMinutes * 60) * 100) + '%';
+                  }, 500);
+                } else {
+                  info.innerHTML = '<div class="rec-live"><span class="rec-dot"></span><span id="vf-rt">00:00</span>　录完点停止即可（选填）</div>';
+                  iv = setInterval(function () {
+                    const sec = (Date.now() - t0) / 1000;
+                    const e1 = $('#vf-rt', m);
+                    if (e1) e1.textContent = fmtClock(sec);
+                  }, 500);
+                }
               });
             } else {
               clearInterval(iv);
               window.Study.stopRecord().then(function (r) {
                 btn.className = 'btn btn-primary rec-btn';
-                btn.textContent = vf.audios.length ? '🎙️ 再录一段' : '🎙️ 开始录音';
+                btn.textContent = vf.audios.length ? (isRec ? '🎙️ 再录一段' : '🎙️ 再录一段看法') : (isRec ? '🎙️ 开始录音' : '🎙️ 录一段看法');
                 if (!r.ok) { toast('❌ ' + r.msg, 'err'); return; }
                 if (r.duration < 3) { toast('这一段不到 3 秒，没存。', 'warn'); paint(); return; }
                 vf.audios.push({ blob: r.blob, duration: r.duration, url: URL.createObjectURL(r.blob) });
@@ -2538,6 +2573,18 @@
               });
             }
           };
+        }
+
+        /* 看法文字：实时字数提示（opinion 任务） */
+        if (v.type === 'opinion') {
+          const mc = v.minChars || 8;
+          const el = $('#vf-opinion', m), cnt = $('#vf-opinion-cnt', m);
+          function upd() {
+            const n = el.value.trim().length;
+            cnt.textContent = n + ' / ' + mc + ' 字起' + (vf.audios.length ? '（已录 ' + vf.audios.length + ' 段音，可代替）' : '（也可录语音代替）');
+            cnt.className = n >= mc ? 'ok' : '';
+          }
+          el.oninput = upd; upd();
         }
 
         /* 选课本：精读 / 课后练习共用 */
@@ -2637,6 +2684,7 @@
     if (v.type === 'note') parts.push('写一段今日收获（至少 ' + (v.minChars || 10) + ' 字）');
     if (v.type === 'quiz') parts.push(v.needScore ? ('登记 ≥' + v.minQuestions + ' 题 + 分数') : ('刷题累计满 ' + v.minQuestions + ' 道（可分次交）'));
     if (v.type === 'record') parts.push('录音累计 ≥' + v.minMinutes + ' 分钟');
+    if (v.type === 'opinion') parts.push('传一张导游词练习截图 + 写/录一句「看法」（看法可打字可录音）');
     if (v.type === 'reading') parts.push('选课本 + 填「今天读了什么」（笔记和照片选填）');
     else if (task.pick === 'book') parts.push('选定这套题属于哪一科');
     if (task.need && task.need.photo) parts.push('凭证截图');
@@ -2666,6 +2714,15 @@
         bookId: vf.bookId,
         read: String((($('#vf-read', mask) || {}).value) || '').trim(),
         note: String((($('#vf-note', mask) || {}).value) || '').trim()
+      };
+    }
+
+    /* 收集看法（opinion：截图 + 看法文字；可录一段音代替打字） */
+    let opinion = null;
+    if (v.type === 'opinion') {
+      opinion = {
+        text: String((($('#vf-opinion', mask) || {}).value) || '').trim(),
+        audios: (vf.audios || [])
       };
     }
 
@@ -2708,10 +2765,11 @@
     /* 截图（精读的笔记照片是选填，不拦） */
     if ((task.need && task.need.photo) && !vf.photo) errs.push('缺少凭证截图');
 
-    /* 前置校验：交给 Study.validate 复核（文字登记 / 题量 / 录音 / 费曼卡 / 精读登记 / 选书） */
+    /* 前置校验：交给 Study.validate 复核（文字登记 / 题量 / 录音 / 看法 / 费曼卡 / 精读登记 / 选书） */
     const proof = {
       photo: vf.photo, quiz: quiz, feynmanCount: fmCards.length,
       reading: reading,
+      opinion: opinion,
       note: noteText,
       record: v.type === 'record' ? { duration: recTotal, segments: vf.audios.length } : null,
       bookId: (task.pick === 'book' || v.type === 'reading') ? vf.bookId : ''
@@ -2748,8 +2806,9 @@
     if (noteText) summary.push('写了 ' + noteText.length + ' 字收获');
     if (quiz) summary.push('刷题 ' + quiz.questions + ' 道' + (quiz.score !== undefined ? '，模考 ' + quiz.score + ' 分' : ''));
     if (fmCards.length) summary.push('费曼卡 ' + fmCards.length + ' 张');
-    if (vf.audios && vf.audios.length) summary.push('录音 ' + vf.audios.length + ' 段 / ' + fmtClock(recTotal));
-    if (vf.photo) summary.push(v.type === 'reading' ? '已存笔记照片' : '已存截图');
+    if (opinion && opinion.text) summary.push('写了看法 ' + opinion.text.length + ' 字');
+    if (vf.audios && vf.audios.length) summary.push((v.type === 'opinion' ? '看法录音 ' : '录音 ') + vf.audios.length + ' 段 / ' + fmtClock(recTotal));
+    if (vf.photo) summary.push(v.type === 'reading' ? '已存笔记照片' : (v.type === 'opinion' ? '已存导游词练习截图' : '已存截图'));
     if (reading && reading.bookId) {
       const bk = D.SUBJECTS.filter(function (x) { return x.id === reading.bookId })[0];
       if (bk) {
