@@ -40,7 +40,7 @@ window.Store = (function () {
       examDate: window.GAME_DATA.EXAM_DATE,
       cur: { tickets: 5, beans: 60, freeQuestions: 0 },  /* 开局小礼包；freeQuestions=每日签到可能抽到的“1道题”免题券 */
       profile: { nick: '', avatar: '' },   /* 「我的」页：昵称 + 头像（emoji） */
-      bag: { water: 5, fert: 3, pest: 2, food: 5, soap: 2, shovel: 3 },
+      bag: { water: 5, fert: 3, pest: 2, food: 5, soap: 2 },
       capsules: [],
       pets: [],
       slots: { greenhouse: 4, hatchery: 4 },

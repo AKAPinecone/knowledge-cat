@@ -136,7 +136,6 @@ window.GAME_DATA = (function () {
     /* 孵化仓用品 */
     { id: 'food',    name: '饲料',       kind: 'hatchery',   price: 4,  emoji: '🥣', desc: '喂一次食，填饱肚子。' },
     { id: 'soap',    name: '洗澡泡沫',   kind: 'hatchery',   price: 5,  emoji: '🧼', desc: '洗一次澡，动物精神一整天。' },
-    { id: 'shovel',  name: '清洁工具',   kind: 'hatchery',   price: 3,  emoji: '🧹', desc: '清理一次窝，本园最不浪漫但最重要的工作。' },
     /* 药水 */
     { id: 'med_powder', name: '白粉病灵', kind: 'medicine', price: 14, emoji: '🩹', desc: '专治叶面白粉病。' },
     { id: 'med_fungus', name: '菌斑净',   kind: 'medicine', price: 14, emoji: '🩹', desc: '专治菌伞斑点。' },
@@ -156,14 +155,14 @@ window.GAME_DATA = (function () {
 
   /* ---------- 护理动作 ---------- */
   const CARE = {
-    /* 温室 */
+    /* 温室（植物 / 真菌 / 藻类）：水分、营养、清洁 */
     water: { label: '浇水', item: 'water', stat: 'water', amount: 35, grow: 6,  beans: 1, emoji: '💧', verb: '给' },
     fert:  { label: '施肥', item: 'fert',  stat: 'nutri', amount: 42, grow: 14, beans: 2, emoji: '🧪', verb: '给' },
     pest:  { label: '除虫', item: 'pest',  stat: 'clean', amount: 32, grow: 8,  beans: 1, emoji: '🧴', verb: '给' },
-    /* 孵化仓 */
+    /* 孵化仓（动物）：水分、食物、清洁 —— 三项各一个，不再有重复 */
+    drink: { label: '喂水', item: 'water', stat: 'water', amount: 35, grow: 6,  beans: 1, emoji: '💧', verb: '喂' },
     food:  { label: '喂食', item: 'food',   stat: 'nutri', amount: 42, grow: 8,  beans: 1, emoji: '🥣', verb: '喂' },
-    bath:  { label: '洗澡', item: 'soap',   stat: 'clean', amount: 38, grow: 6,  beans: 1, emoji: '🧼', verb: '给' },
-    clean: { label: '清窝', item: 'shovel', stat: 'clean', amount: 22, grow: 5,  beans: 1, emoji: '🧹', verb: '帮' }
+    bath:  { label: '洗澡', item: 'soap',   stat: 'clean', amount: 38, grow: 6,  beans: 1, emoji: '🧼', verb: '给' }
   };
 
   /* 状态条定义 */
@@ -335,7 +334,7 @@ window.GAME_DATA = (function () {
   ].join('\n');
 
   /* 状态衰减：每分钟衰减点数（约 45 分钟掉 1 点） */
-  const DECAY_PER_MIN = 1 / 45;
+  const DECAY_PER_MIN = 1 / 30; /* 状态每分钟下滑约 0.033（原 1/45≈0.022）。稍快一点，形成「每天回来看看」的节奏，逼自己学习 */
   const NEGLECT_MINUTES_BEFORE_SICK = 120; /* 某项归零持续 2 小时后开始可能生病 */
   const SICK_CHANCE_PER_HOUR = 0.22;
 

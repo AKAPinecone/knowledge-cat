@@ -161,6 +161,7 @@
   function playSfx(act) {
     switch (act) {
       case 'water': tone(820, 0.18, 'sine', 0.2, 0); tone(520, 0.16, 'sine', 0.15, 0.08); break;
+      case 'drink': tone(820, 0.18, 'sine', 0.2, 0); tone(520, 0.16, 'sine', 0.15, 0.08); break;
       case 'fert':  tone(1100, 0.10, 'triangle', 0.16, 0); tone(1500, 0.10, 'triangle', 0.14, 0.09); break;
       case 'pest':  noiseBurst(0.22, 0.14); break;
       case 'food':  tone(520, 0.10, 'sine', 0.18, 0); tone(680, 0.12, 'sine', 0.16, 0.1); break;
@@ -176,9 +177,9 @@
   /* 照顾动作小动画：在头像处飘出对应表情，并轻微弹一下 */
   function careFx(act, container) {
     if (!container) return;
-    const map = { water: '💧', fert: '✨', pest: '🧴', food: '🥣', bath: '🫧', clean: '✨' };
+    const map = { water: '💧', drink: '💧', fert: '✨', pest: '🧴', food: '🥣', bath: '🫧', clean: '✨' };
     const emo = map[act] || '✨';
-    const n = (act === 'water' || act === 'bath') ? 5 : 3;
+    const n = (act === 'water' || act === 'drink' || act === 'bath') ? 5 : 3;
     for (let i = 0; i < n; i++) {
       const s = document.createElement('span');
       s.className = 'care-fx';
@@ -1736,7 +1737,7 @@
     h += '<h3>三、养一只小生物的全流程</h3>';
     h += '<div class="step"><b>1</b><div>扭蛋拿到<b>胶囊</b>。胶囊里是植物 / 真菌 / 藻类，就去<b>温室</b>；是动物，就去<b>孵化仓</b>。放错地方不孵化。</div></div>';
     h += '<div class="step"><b>2</b><div>等孵化进度走完（普通 15 分钟 / 稀有 40 分钟 / 传说 80 分钟），点<b>破壳</b>。离线也会继续孵化。<br><span style="color:#B8791C">⚠️ 破壳前要先过「破壳测验」：<b>答对 1 道题</b>就能出生（答错可再答一次，并看解析）——见第七节。</span></div></div>';
-    h += '<div class="step"><b>3</b><div>破壳后开始照顾：<b>水分、营养、清洁</b>三条状态会随时间下滑。植物用浇水/施肥/除虫，动物用喂食/洗澡/清窝。</div></div>';
+    h += '<div class="step"><b>3</b><div>破壳后开始照顾：<b>水分、营养、清洁</b>三条状态会随时间下滑。植物用浇水/施肥/除虫，动物用喂水/喂食/洗澡。</div></div>';
     h += '<div class="step"><b>4</b><div>某项状态归零超过 2 小时，它就可能<b>生病</b>。要买对症的药水（买错了不生效），病超过 24 小时会进入休眠。</div></div>';
     h += '<div class="step"><b>5</b><div>成长值到 100 / 300 / 700 会进阶：幼体 → 成长 → 成熟 → 圆满，每次进阶都有额外可可豆。</div></div>';
 

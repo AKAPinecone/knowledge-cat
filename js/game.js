@@ -216,7 +216,7 @@ window.Game = (function () {
 
   function careActionsFor(pet) {
     const sp = speciesById(pet.speciesId);
-    if (sp.kind === 'animal') return ['food', 'bath', 'clean'];
+    if (sp.kind === 'animal') return ['drink', 'food', 'bath'];
     return ['water', 'fert', 'pest'];
   }
 
