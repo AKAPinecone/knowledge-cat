@@ -53,6 +53,38 @@ window.GAME_DATA = (function () {
     { id: 's12', name: '普洱景迈山古茶林文化景观', group: '商务团', place: '普洱·澜沧', nodes: ['景区概况', '民族团结誓词碑', '景迈山古茶林', '普洱茶文化', '翁基古寨', '糯干古寨'], minutes: 8 }
   ];
 
+  /* ---------- 面试综合知识问答（11 题） ----------
+     这些题只放进「练习台」，不进破壳测验题库。 */
+  const INTERVIEW_QA = [
+    { id: 'iq01', q: '在第43届世界遗产大会上，中国有哪几个地方入选世界遗产？截止2020年7月，我国世界遗产有几项？在世界排名第几名？',
+      a: '中国黄（渤）海候鸟栖息地（第一期）和良渚古城遗址列入《世界遗产名录》。截止2020年7月，中国拥有的世界遗产数量达到55项，位居世界第一位。' },
+    { id: 'iq02', q: '中国旅游日活动时间定于每年哪一天？其形象宣传口号是什么？并简述渊源？',
+      a: '2011年3月30日，国务院常务会议通过决议，自2011年起，每年5月19日为“中国旅游日”。形象宣传口号是“爱旅游，爱生活”。\n中国旅游日源自天台山《徐霞客游记》开篇《游天台山记》：“癸丑之三月晦（公元1613年5月19日），自宁海出西门，云散日朗，人意山光，俱有喜态。”《徐霞客游记》开篇的短短24个字，为后人留下了文化旅游的瑰宝。' },
+    { id: 'iq03', q: '《中华人民共和国旅游法》何时由我国第十二届全国人民代表大会常务委员会第二次会议通过？何时开始施行？',
+      a: '2013年4月25日通过；2013年10月1日施行。' },
+    { id: 'iq04', q: '请简述世界旅游联盟。',
+      a: '世界旅游联盟（WTA）由中国发起成立，是第一个全球性、综合性、非政府、非营利国际旅游组织。\n联盟总部和秘书处设在中国杭州，截至目前，共有198个会员，来自中国、美国、法国、德国、日本、澳大利亚、马来西亚、巴西等39个国家和地区。\n世界旅游联盟以“旅游让世界更美好”为核心理念，以旅游促进发展、旅游促进减贫、旅游促进和平为目标，加强全球旅游业界的国际交流，增进共识、分享经验、深化合作，推动全球旅游业可持续、包容性发展。' },
+    { id: 'iq05', q: '简述亚洲基础设施投资银行。',
+      a: '亚洲基础设施投资银行（Asian Infrastructure Investment Bank，简称亚投行，AIIB）是一个政府间性质的亚洲区域多边开发机构。\n其宗旨是通过在基础设施及其他生产性领域的投资，促进亚洲经济可持续发展、创造财富并改善基础设施互联互通；与其他多边和双边开发机构紧密合作，推进区域合作和伙伴关系，应对发展挑战。\n亚投行是首个由中国倡议设立的多边金融机构，总部设在北京。' },
+    { id: 'iq06', q: '“一带一路”的具体内容指什么？',
+      a: '“一带一路”是“丝绸之路经济带”和“21世纪海上丝绸之路”的简称。\n它不是一个实体和机制，而是合作发展的理念和倡议，是依靠中国与有关国家既有的双多边机制，借助既有的、行之有效的区域合作平台，旨在借用古代“丝绸之路”的历史符号，高举和平发展的旗帜，主动发展与沿线国家的经济合作伙伴关系，共同打造政治互信、经济融合、文化包容的利益共同体、命运共同体和责任共同体。' },
+    { id: 'iq07', q: '“一带一路”中的“五通三同”具体指的是什么？',
+      a: '“五通”就是政策沟通、设施联通、贸易畅通、资金融通、民心相通。\n“三同”就是利益共同体、命运共同体和责任共同体。' },
+    { id: 'iq08', q: '请简述中央八项规定的主要内容。',
+      a: '改进调查研究；精简会议活动；精简文件简报；规范出访活动；改进警卫工作；改进新闻报道；严格文稿发表；厉行勤俭节约。' },
+    { id: 'iq09', q: '简述三大攻坚战的内容。',
+      a: '按照党的十九大要求，今后3年要重点抓好决胜全面建成小康社会的防范化解重大风险、精准脱贫、污染防治三大攻坚战。' },
+    { id: 'iq10', q: '“三严三实”的内容是什么？',
+      a: '严以修身、严以用权、严以律己，谋事要实、创业要实、做人要实。' },
+    { id: 'iq11', q: '“五大发展理念”是什么？',
+      a: '创新、协调、绿色、开放、共享的发展理念。' }
+  ];
+
+  /* ---------- 练习台配置 ----------
+     RECITE_START_DAY：第几天起从「读导游词」切换到「背导游词」
+     INTERVIEW_TARGET：面试问答每日核心任务需练够多少题 */
+  const PRACTICE = { RECITE_START_DAY: 13, INTERVIEW_TARGET: 10 };
+
   /* ---------- 物种池 ----------
    * kind: plant 植物 / fungus 真菌 / algae 藻类 → 温室
    *       animal 动物 → 孵化仓
@@ -371,19 +403,18 @@ window.GAME_DATA = (function () {
       need: { photo: true }
     },
     {
-      id: 'p1_script_read', phase: [1], title: '导游词通读：{script}', core: true, coreLabel: '导游词',
-      kolb: 'CE', icon: '🎧',
-      desc: '在另一个 App 里把今日导游词通读一遍（读顺就行），截一张图带过来，再写/录一句「今天顺不顺、哪里还卡」。不必在这里录音了。',
+      id: 'p_script', phase: [1, 2, 3], title: '{scriptMode}：任意一篇', core: true, coreLabel: '导游词',
+      kolb: 'CE', icon: '🎤',
+      desc: '在练习台里挑一篇导游词，通读（读顺）或合上稿子默讲。前 12 天以通读为主，第 13 天起每天背一篇。哪一篇完全由你定，不必是系统推荐的那一篇。',
       reward: { tickets: 1, beans: 30 },
-      verify: { type: 'opinion', minChars: 8 },
-      need: { photo: true }
+      verify: { type: 'practice' }
     },
     {
       id: 'p_interview', phase: [1, 2, 3], title: '面试问答训练 10 道', core: true, coreLabel: '面试',
       kolb: 'AE', icon: '🗣️',
-      desc: '科目五面试：每天自己练或跟人答 10 道问答题（导游规范题、应变能力题、综合题都算）。在另一个 App 或对着镜子练都行，回来登记题量和答得顺不顺。',
+      desc: '科目五面试：每天在练习台里练 10 道综合知识问答题。点题看参考答案，觉得练过就标记「我练过这一道」。练够 10 道即完成今日面试任务。',
       reward: { tickets: 1, beans: 15 },
-      verify: { type: 'quiz', minQuestions: 10 }
+      verify: { type: 'practice' }
     },
 
     /* ===== 加餐：不计入每日 7 件，做不做都行 ===== */
@@ -411,14 +442,6 @@ window.GAME_DATA = (function () {
       verify: { type: 'quiz', minQuestions: 10 }
     },
 
-    {
-      id: 'p1_script_recite', phase: [1], title: '合稿默讲：{script}', kolb: 'AE', icon: '🎤',
-      repeat: { every: 2 },
-      desc: '合上稿子把这篇讲一遍（在另一个 App 里讲，或对着镜子讲）。截一张图带过来，再写/录一句「哪段最顺、哪段卡壳」。每篇讲够 2 次就算拿下——差不多就是"每 4 天背下一篇"。',
-      reward: { tickets: 2, beans: 50 },
-      verify: { type: 'opinion', minChars: 8 },
-      need: { photo: true }
-    },
     {
       id: 'p1_reflect', phase: [1, 2, 3], title: '昨日回照 · 两句话', kolb: 'RO', icon: '🔍',
       desc: '翻回昨天学过的一节，写两句话：一句是"我现在能讲清楚的"，一句是"我还是模糊的"。不抄题、不整理，就两句话。模糊的那句，明天你会自然想去补它。',
@@ -466,14 +489,6 @@ window.GAME_DATA = (function () {
       need: { photo: true }
     },
     {
-      id: 'p2_script', phase: [2], title: '导游词梳理背诵：{script}', core: true, coreLabel: '导游词',
-      kolb: 'RO', icon: '🎤',
-      desc: '不再照着读。在另一个 App 里先默讲、再回看稿子补漏，截一张图带过来，再写/录一句「这次比上次顺在哪、还差哪段」。',
-      reward: { tickets: 1, beans: 40 },
-      verify: { type: 'opinion', minChars: 8 },
-      need: { photo: true }
-    },
-    {
       id: 'p2_quiz_keep', phase: [2, 3], title: '保持手感 · {subject} 15 道', core: true, coreLabel: '{subject}',
       kolb: 'CE', icon: '✍️',
       split: 'subject',
@@ -490,14 +505,6 @@ window.GAME_DATA = (function () {
       desc: '按考试时间完整刷一套。不查资料、不暂停，逼出真实水平。',
       reward: { tickets: 3, beans: 70 },
       verify: { type: 'quiz', minQuestions: 100, needScore: true },
-      need: { photo: true }
-    },
-    {
-      id: 'p3_script_full', phase: [3], title: '导游词全流程口述：{script}', core: true, coreLabel: '导游词',
-      kolb: 'AE', icon: '🎙️',
-      desc: '从"各位游客大家好"到"谢谢大家"，一次讲完不停顿——这就是考场上的样子。在另一个 App 里讲完，截一张图带过来，再写/录一句「全程顺下来没有、卡在哪」。',
-      reward: { tickets: 2, beans: 50 },
-      verify: { type: 'opinion', minChars: 8 },
       need: { photo: true }
     },
     {
@@ -581,6 +588,8 @@ window.GAME_DATA = (function () {
     BOOK_DAYS: BOOK_DAYS,
     SUBJECTS: SUBJECTS,
     SCRIPTS: SCRIPTS,
+    INTERVIEW_QA: INTERVIEW_QA,
+    PRACTICE: PRACTICE,
     SPECIES: SPECIES_ALL,
     SPECIES_ACTIVE: SPECIES_ACTIVE,
     ITEMS: ITEMS,

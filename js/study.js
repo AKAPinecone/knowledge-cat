@@ -11,7 +11,7 @@ window.Study = (function () {
   let S = null;
 
   /* 任务库版本：升级后强制重算当天任务，避免老存档里的旧任务结构残留 */
-  const TASK_VER = 6;  /* v6：导游词任务 record→opinion（截图+看法，看法可录可选音）；新增核心任务「面试问答 10 道」；投喂单 6→7 件 */
+  const TASK_VER = 7;  /* v7：面试问答与导游词改为「练习台」模式；导游词不再限定每日具体篇目；面试问答不再登记题量，而是在练习台练够 10 道即完成 */
 
   /* 前端回调，由 app.js 挂载 */
   const hooks = {
@@ -29,6 +29,7 @@ window.Study = (function () {
     return String(str)
       .replace('{book}', ctx.book || '')
       .replace('{script}', ctx.script || '')
+      .replace('{scriptMode}', ctx.scriptMode || '')
       .replace('{subject}', ctx.subject || '')
       .replace('{pet}', ctx.pet || '小生物');
   }
@@ -102,8 +103,12 @@ window.Study = (function () {
   }
 
   /* 这些任务才和「导游词」有关——只有它们才带景点节点气泡。
-     之前所有非拆分任务都被塞了 scriptId，导致加餐卡片上也冒出导游词内容。 */
-  const SCRIPT_LIBS = { p1_script_read: 1, p1_script_recite: 1, p2_script: 1, p3_script_full: 1 };
+     现在只有 p_script 一个通用导游词任务，不再绑定具体篇目。 */
+  const SCRIPT_LIBS = { p_script: 1 };
+
+  function scriptModeForDay(day) {
+    return day < D.PRACTICE.RECITE_START_DAY ? '导游词通读 1 篇' : '导游词默讲 1 篇';
+  }
 
   function ensureTodayTasks() {
     const t = window.Store.today();
@@ -127,11 +132,12 @@ window.Study = (function () {
         const sb = sub || nextSubject();
         const uid = lib.id + (sub ? '@' + sub.id : '') + '#' + day;
         const isScript = !!SCRIPT_LIBS[lib.id];
-        const sc = isScript ? nextScript() : null;
+        const sc = isScript ? null : null; /* 通用导游词任务不再绑定具体篇目 */
+        const mode = isScript ? scriptModeForDay(day) : '';
         list.push({
           uid: uid,
           libId: lib.id,
-          title: subst(lib.title, { book: bk.name, script: sc ? sc.name : '', subject: sb.name, pet: pet }),
+          title: subst(lib.title, { book: bk.name, script: sc ? sc.name : '', scriptMode: mode, subject: sb.name, pet: pet }),
           desc: lib.desc,
           kolb: lib.kolb,
           icon: lib.icon,
@@ -143,7 +149,7 @@ window.Study = (function () {
           verify: JSON.parse(JSON.stringify(lib.verify)),
           need: lib.need || {},
           ctx: {
-            scriptId: sc ? sc.id : '', scriptName: sc ? sc.name : '',
+            scriptId: sc ? sc.id : '', scriptName: sc ? sc.name : '', scriptMode: mode,
             bookId: bk.id, bookName: bk.name,
             subjectId: sb.id, subjectName: sb.name
           },
@@ -167,6 +173,74 @@ window.Study = (function () {
 
   function taskByUid(uid) {
     return S.study.tasks.filter(function (x) { return x.uid === uid; })[0];
+  }
+
+  function coreTaskByLib(libId) {
+    const t = window.Store.today();
+    if (S.study.tasksDate !== t) ensureTodayTasks();
+    return S.study.tasks.filter(function (x) { return x.libId === libId && x.core; })[0];
+  }
+
+  /* ================= 练习台：今日进度 ================= */
+  function interviewToday(date) {
+    if (!S.study.interviewPractice) S.study.interviewPractice = {};
+    const k = date || window.Store.today();
+    if (!S.study.interviewPractice[k]) S.study.interviewPractice[k] = [];
+    return S.study.interviewPractice[k];
+  }
+  function scriptPracticeToday(date) {
+    if (!S.study.scriptPractice) S.study.scriptPractice = {};
+    const k = date || window.Store.today();
+    if (!S.study.scriptPractice[k]) S.study.scriptPractice[k] = { read: [], recite: [] };
+    return S.study.scriptPractice[k];
+  }
+  function interviewCount(date) { return interviewToday(date).length; }
+  function scriptDidToday(scriptId, type, date) {
+    const p = scriptPracticeToday(date);
+    const arr = type === 'read' ? p.read : p.recite;
+    return arr.indexOf(scriptId) >= 0;
+  }
+
+  /* 在练习台里标记练过某道面试题；练够目标题数时自动结算今日面试核心任务 */
+  function finishInterview(qid) {
+    const arr = interviewToday();
+    if (arr.indexOf(qid) < 0) arr.push(qid);
+    window.Store.save(true);
+
+    const task = coreTaskByLib('p_interview');
+    if (!task || task.state === 'done') return { ok: true, taskDone: false, count: arr.length, task: task };
+    if (arr.length >= D.PRACTICE.INTERVIEW_TARGET) {
+      const r = finish(task.uid, { practice: true, summary: '练习台面试问答已练 ' + arr.length + ' 道' });
+      return { ok: r.ok, taskDone: r.ok, count: arr.length, task: task, errs: r.errs };
+    }
+    return { ok: true, taskDone: false, count: arr.length, task: task };
+  }
+
+  /* 在练习台里标记今天读了/背了某篇导游词，并完成当日导游词核心任务 */
+  function finishScriptCore(scriptId, type) {
+    if (!scriptId || (type !== 'read' && type !== 'recite')) return { ok: false, msg: '参数错误' };
+    /* 同一天同一篇同类型只记一次，避免误触重复累计 */
+    if (!scriptDidToday(scriptId, type)) {
+      const p = scriptPracticeToday();
+      if (type === 'read') p.read.push(scriptId); else p.recite.push(scriptId);
+      window.Store.save(true);
+    }
+
+    const info = window.Store.currentPhase();
+    const expected = info.day < D.PRACTICE.RECITE_START_DAY ? 'read' : 'recite';
+    const task = coreTaskByLib('p_script');
+    if (!task || task.state === 'done') return { ok: true, taskDone: false, task: task };
+    /* 第13天起要求背；之前读就算完成。做了相反类型也认可（读顺了顺便会背）。 */
+    if (type === expected || type === 'recite') {
+      const r = finish(task.uid, {
+        practice: true,
+        scriptId: scriptId,
+        practiceType: type,
+        summary: '练习台导游词：' + (type === 'read' ? '通读' : '默讲') + '《' + ((D.SCRIPTS.filter(function (s) { return s.id === scriptId; })[0] || {}).name || scriptId) + '》'
+      });
+      return { ok: r.ok, taskDone: r.ok, task: task, errs: r.errs };
+    }
+    return { ok: true, taskDone: false, task: task };
   }
 
   /* ================= 截图压缩 ================= */
@@ -332,6 +406,9 @@ window.Study = (function () {
     const v = task.verify;
     const need = task.need || {};
 
+    /* 练习台任务：由练习行为直接驱动，验证直接通过 */
+    if (v.type === 'practice') return errs;
+
     /* 文字登记（做了就是做了：写完当场结算，不再攒碎片） */
     if (v.type === 'note') {
       const t = String(proof.note || '').trim();
@@ -394,6 +471,13 @@ window.Study = (function () {
     if (errs.length) return { ok: false, errs: errs };
 
     const v0 = task.verify;
+
+    /* 练习台任务：不收集额外凭证，由面板行为驱动；但如果是导游词任务，把练习的篇目标记进脚本进度 */
+    if (v0.type === 'practice') {
+      if (task.libId === 'p_script' && proof.scriptId && proof.practiceType) {
+        markScript(proof.scriptId, proof.practiceType);
+      }
+    }
 
     /* ── 累计型刷题（不含模考）：每次任意题数，多次相加，累计 ≥ 目标才结算 ──
        今天交 8 道、明天再交 12 道都行；没攒够就只记进度、不发奖、不标记完成。 */
@@ -483,10 +567,7 @@ window.Study = (function () {
         }
       }
     }
-    if (task.libId === 'p1_script_read') markScript(task.ctx.scriptId, 'read');
-    if (task.libId === 'p1_script_recite' || task.libId === 'p2_script' || task.libId === 'p3_script_full') {
-      markScript(task.ctx.scriptId, 'recite');
-    }
+    /* 导游词核心任务通过练习台完成，进度已在 finish 上方 practice 块中标记 */
     if (task.verify.type === 'quiz' && task.verify.needScore) S.stats.mockCount++;
     if (task.libId === 'p2_deep') {
       const sid = 'deep_' + task.ctx.subjectId;
@@ -599,6 +680,9 @@ window.Study = (function () {
     markScript: markScript, finish: finish, validate: validate,
     kolbProgress: kolbProgress, todayTaskStats: todayTaskStats,
     quizProgress: quizProgress, addUserTask: addUserTask, removeUserTask: removeUserTask,
-    evidenceFor: evidenceFor
+    evidenceFor: evidenceFor,
+    interviewCount: interviewCount,
+    finishInterview: finishInterview, finishScriptCore: finishScriptCore,
+    interviewToday: interviewToday, scriptPracticeToday: scriptPracticeToday
   };
 })();

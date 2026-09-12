@@ -1265,3 +1265,60 @@ img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
 .cur-freeq .cur-ico{font-size:15px;}
 .cur-freeq .cur-num{color:#6B4C35;}
 .cur-freeq .cur-name{color:#8B5E3C;}
+
+/* ============ v1.8 练习台：面试问答 + 导游词 ============ */
+.practice-card-panel .panel-head{margin-bottom:10px;}
+.practice-card{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  background:linear-gradient(135deg,#F6FBF5,#EDF6EC);
+  border:1.5px dashed var(--green);border-radius:var(--radius-sm);padding:14px 16px;
+  cursor:pointer;transition:transform .1s,box-shadow .2s;
+}
+.practice-card:active{transform:translateY(1px);}
+.practice-card-main{flex:1;min-width:120px;}
+.practice-card-title{font-size:15px;font-weight:700;color:var(--ink);}
+.practice-card-meta{font-size:12.5px;color:var(--ink-3);margin-top:2px;}
+.practice-card .btn{min-height:38px;}
+
+/* 弹窗内练习台 */
+.practice-tabs{display:flex;gap:8px;margin:-6px 0 14px;border-bottom:1.5px solid var(--line);padding-bottom:8px;}
+.practice-tab{
+  flex:1;background:transparent;border:0;border-radius:12px;padding:10px 8px;font-size:15px;
+  color:var(--ink-3);font-weight:700;cursor:pointer;min-height:42px;
+}
+.practice-tab.on{background:var(--green-soft);color:var(--green-deep);}
+.practice-hint{margin-bottom:14px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px 14px;font-size:13.5px;}
+.practice-hint b{color:var(--green-deep);font-size:15px;}
+
+/* 面试问答 */
+.qa-list{display:flex;flex-direction:column;gap:12px;max-height:64vh;overflow:auto;padding-bottom:12px;}
+.qa-item{background:var(--panel);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:12px 14px;}
+.qa-item.done{border-color:var(--mint);background:#F4FBF4;}
+.qa-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;}
+.qa-no{
+  flex-shrink:0;width:26px;height:26px;border-radius:50%;background:var(--green-soft);color:var(--green-deep);
+  font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;
+}
+.qa-q{flex:1;font-size:15px;font-weight:700;color:var(--ink);line-height:1.55;}
+.qa-answer{display:none;margin:8px 0;padding:12px;background:#F7FBF7;border:1px solid var(--line-2);border-radius:10px;font-size:14px;color:var(--ink-2);line-height:1.7;white-space:pre-line;}
+.qa-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.qa-done{font-size:13px;color:var(--green-deep);font-weight:700;}
+.qa-actions .hidden{display:none !important;}
+
+/* 导游词 */
+.sp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;max-height:64vh;overflow:auto;padding-bottom:12px;}
+.sp-card{background:var(--panel);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:12px 14px;}
+.sp-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.sp-head span:first-child{font-size:18px;}
+.sp-name{font-size:14.5px;font-weight:700;color:var(--ink);flex:1;}
+.sp-meta{font-size:11.5px;color:var(--ink-3);margin-bottom:6px;}
+.sp-counts{font-size:12px;color:var(--ink-2);margin:8px 0;}
+.sp-actions{display:flex;gap:8px;}
+.sp-actions .btn{flex:1;min-height:38px;font-size:13px;padding:6px 4px;}
+
+@media (max-width:400px){
+  .practice-card{padding:12px;}
+  .practice-card-main{min-width:90px;}
+  .practice-card-title{font-size:14px;}
+  .sp-grid{grid-template-columns:1fr;}
+}

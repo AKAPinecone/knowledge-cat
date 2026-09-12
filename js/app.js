@@ -708,6 +708,27 @@
     });
     h += '</div></div>';
 
+    /* 练习台：面试问答 + 导游词，点进去随时练 */
+    const phInfo = window.Store.currentPhase();
+    const scriptModeText = phInfo.day < D.PRACTICE.RECITE_START_DAY
+      ? '前 12 天：每天通读 1 篇'
+      : '第 13 天起：每天默讲 1 篇';
+    const interviewCnt = window.Study.interviewCount();
+    h += '<div class="panel practice-card-panel">';
+    h += '<div class="panel-head"><h2>📚 练习台</h2><span class="hint">面试问答、导游词，点进去随时练</span></div>';
+    h += '<div class="practice-card" data-act="practice-open">' +
+      '<div class="practice-card-main">' +
+      '<div class="practice-card-title">🗣️ 面试问答</div>' +
+      '<div class="practice-card-meta">今日已练 ' + interviewCnt + ' / ' + D.PRACTICE.INTERVIEW_TARGET + ' 道</div>' +
+      '</div>' +
+      '<div class="practice-card-main">' +
+      '<div class="practice-card-title">🎤 导游词</div>' +
+      '<div class="practice-card-meta">' + scriptModeText + '</div>' +
+      '</div>' +
+      '<button class="btn btn-primary" data-act="practice-open">📚 开始练习</button>' +
+      '</div>';
+    h += '</div>';
+
     return h;
   }
 
@@ -723,6 +744,7 @@
     else if (v.type === 'opinion') verifyTag = '📸 截图 + 💬 看法（看法可录一段音）';
     else if (v.type === 'feynman') verifyTag = '🗣️ 费曼卡 ×' + (v.minCards || 1);
     else if (v.type === 'reading') verifyTag = '📖 登记：读哪本 + 读了什么';
+    else if (v.type === 'practice') verifyTag = '📚 去练习台完成';
 
     let needTag = [];
     if (t.need && t.need.photo) needTag.push('📸 凭证截图');
@@ -740,7 +762,9 @@
         : (v.type === 'record' ? '🎙️ 去录音'
         : (v.type === 'opinion' ? '📸 去凭证'
         : (v.type === 'quiz' ? '✍️ 去登记'
-        : (v.type === 'note' ? '📝 去记录' : '去完成'))));
+        : (v.type === 'note' ? '📝 去记录'
+        : (v.type === 'practice' ? '📚 去练习'
+        : '去完成')))));
       side = '<button class="btn btn-primary btn-sm" data-act="task-verify" data-uid="' + t.uid + '">' + label + '</button>';
     }
 
@@ -1748,8 +1772,8 @@
     h += '<table class="mini"><tr><th>#</th><th>喂什么</th><th>怎么算喂到</th></tr>' +
       '<tr><td>1</td><td>📖 读书</td><td>精读任务登记一次（哪一本你定，一本 8 天）</td></tr>' +
       '<tr><td>2–5</td><td>✍️ 四科刷题</td><td>法规 / 业务 / 全导 / 地导，每科 30 道，各算一笔</td></tr>' +
-      '<tr><td>6</td><td>🎤 导游词</td><td>在另一个 App 里通读/背诵，截一张图带过来，再写/录一句「看法」</td></tr>' +
-      '<tr><td>7</td><td>🗣️ 面试问答</td><td>自己练或跟人答 10 道问答题（规范 / 应变 / 综合都算）</td></tr>' +
+      '<tr><td>6</td><td>🎤 导游词</td><td>在「练习台」里任选一篇：前 12 天通读，第 13 天起默讲</td></tr>' +
+      '<tr><td>7</td><td>🗣️ 面试问答</td><td>在「练习台」里看参考答案，练够 10 道问答题</td></tr>' +
       '</table>';
     h += '<p>7 件全喂满，当天额外 <b>+2 券 / +50 豆</b>，连着喂满 7 天和 30 天还有成就。</p>';
     h += '<p>7 件之外是<b>「加餐」</b>：课后练习、章节框架图、合书自测、昨日回照、费曼工作坊、合稿默讲……这些<b>做不做都行</b>，不计入 7 件，少做一件也不会让你"今天没做完"。有精力就加一口，没精力就明天再说。</p>';
@@ -1802,11 +1826,11 @@
       h += '<tr><td><b>' + p.tag + ' ' + p.name + '</b></td><td>' + p.days + ' 天</td><td>' + esc(p.detail) + '</td></tr>';
     });
     h += '</table>';
-    h += '<p>阶段一每天固定的 6 件是：精读 1 次 + 四科各 30 道 + 导游词通读 1 篇（每 4 天拿下一篇新的）。阶段二换成网课 + 四科保持手感 + 导游词梳理；阶段三换成套题 + 四科保持手感 + 12 篇全程口述。不管哪个阶段，进度条上都只有 6 格。</p>';
+    h += '<p>阶段一每天固定的 7 件是：精读 1 次 + 四科各 30 道 + 导游词 1 篇 + 面试问答 10 道。导游词不指定具体篇目，你在「练习台」里任选一篇：前 12 天通读，第 13 天起默讲。阶段二、三同样保持这 7 件主线，只是导游词的要求随天数自动切换。</p>';
     h += '<div class="hintbox">📖 <b>读哪本由你定。</b>精读登记的第一步就是四选一，进度按本记录，每本 8 天。上来先读法规读不下去？那就先读导游业务或全导，顺序不影响结果。</div>';
 
     h += '<h3>十、12 篇导游词（2025 云南考区科目五 · 中文类）</h3>';
-    h += '<p>你还没找到导游词，我按官方大纲把这 12 个景点和<b>每个景点的讲解顺序</b>做进了游戏，任务里会依次点名，点开就能看到顺序节点，背到哪一段一目了然。</p>';
+    h += '<p>我把这 12 个景点和<b>每个景点的讲解顺序</b>做进了「练习台」，任务不再限定你今天必须读哪一篇。你可以按自己的节奏任选：哪篇不熟练哪篇，每天一篇，12 天后进入默讲阶段。</p>';
     h += '<table class="mini"><tr><th>#</th><th>景点</th><th>模拟团型</th><th>讲解顺序</th></tr>';
     D.SCRIPTS.forEach(function (sc, i) {
       h += '<tr><td>' + (i + 1) + '</td><td>' + esc(sc.name) + '</td><td>' + sc.group + '</td><td style="font-size:11.5px">' + sc.nodes.join(' → ') + '</td></tr>';
@@ -1845,6 +1869,8 @@
 
   function onAction(act, el) {
     const ds = el.dataset;
+    if (act === 'practice-open') return openPracticePanel(practiceTab || 'interview');
+    if (act === 'practice-tab') return openPracticePanel(ds.tab);
     if (act === 'task-verify') return openVerifyModal(window.Study.taskByUid(ds.uid));
     if (act === 'task-log') return showTaskLog(ds.uid);
     if (act === 'task-new') return openTaskBuilder();
@@ -2347,6 +2373,10 @@
   function openVerifyModal(task) {
     if (!task) return;
     const v = task.verify, need = task.need || {};
+    /* 练习台任务：不打开验证弹窗，直接进练习台对应标签 */
+    if (v.type === 'practice') {
+      return openPracticePanel(task.libId === 'p_interview' ? 'interview' : 'script');
+    }
     const isReading = v.type === 'reading';
     const isNote = v.type === 'note';
     vf = {
@@ -2686,6 +2716,7 @@
     if (v.type === 'record') parts.push('录音累计 ≥' + v.minMinutes + ' 分钟');
     if (v.type === 'opinion') parts.push('传一张导游词练习截图 + 写/录一句「看法」（看法可打字可录音）');
     if (v.type === 'reading') parts.push('选课本 + 填「今天读了什么」（笔记和照片选填）');
+    if (v.type === 'practice') parts.push('在练习台完成对应练习');
     else if (task.pick === 'book') parts.push('选定这套题属于哪一科');
     if (task.need && task.need.photo) parts.push('凭证截图');
     if (task.need && task.need.feynman) parts.push('费曼卡 ×' + task.need.feynman);
@@ -2852,6 +2883,116 @@
         }, 700);
       }
       render();
+    });
+  }
+
+  /* =========================================================
+   * 练习台：面试问答 + 导游词
+   * 用户随时点进来练，进度自动记入今日任务。
+   * ========================================================= */
+  let practiceTab = 'interview';
+  function openPracticePanel(tab) {
+    practiceTab = tab || 'interview';
+    const info = window.Store.currentPhase();
+    const reciteMode = info.day >= D.PRACTICE.RECITE_START_DAY;
+    const interviewDone = window.Study.interviewCount();
+    const interviewGoal = D.PRACTICE.INTERVIEW_TARGET;
+
+    let body = '<div class="practice-tabs">' +
+      '<button class="practice-tab' + (practiceTab === 'interview' ? ' on' : '') + '" data-act="practice-tab" data-tab="interview">🗣️ 面试问答</button>' +
+      '<button class="practice-tab' + (practiceTab === 'script' ? ' on' : '') + '" data-act="practice-tab" data-tab="script">🎤 导游词</button>' +
+      '</div>';
+
+    if (practiceTab === 'interview') {
+      body += '<div class="practice-hint">' +
+        '<div>今日已练 <b>' + interviewDone + '</b> / ' + interviewGoal + ' 道</div>' +
+        '<div class="hint">点题看参考答案，练过就点「我练过这一道」。练够 ' + interviewGoal + ' 道，今日面试任务自动完成。</div>' +
+        '</div>';
+      body += '<div class="qa-list">';
+      D.INTERVIEW_QA.forEach(function (q, i) {
+        const done = (window.Study.interviewToday().indexOf(q.id) >= 0);
+        body += '<div class="qa-item' + (done ? ' done' : '') + '" data-qid="' + q.id + '">' +
+          '<div class="qa-head"><span class="qa-no">' + (i + 1) + '</span><span class="qa-q">' + esc(q.q) + '</span></div>' +
+          '<div class="qa-answer" id="qa-ans-' + q.id + '">' + esc(q.a).replace(/\\n/g, '<br>') + '</div>' +
+          '<div class="qa-actions">' +
+          '<button class="btn btn-sm btn-ghost" data-act="qa-reveal" data-qid="' + q.id + '">👁 看答案</button>' +
+          '<button class="btn btn-sm btn-primary' + (done ? ' hidden' : '') + '" data-act="qa-mark" data-qid="' + q.id + '">✓ 我练过这一道</button>' +
+          '<span class="qa-done"' + (done ? '' : ' style="display:none"') + '>✅ 已练</span>' +
+          '</div></div>';
+      });
+      body += '</div>';
+    } else {
+      body += '<div class="practice-hint">' +
+        '<div>' + (reciteMode ? '第 13 天起：每天默讲 1 篇导游词' : '前 12 天：每天通读 1 篇导游词') + '</div>' +
+        '<div class="hint">点「今天读了这篇」或「今天背了这篇」即完成今日导游词任务。哪一篇完全由你定。</div>' +
+        '</div>';
+      body += '<div class="sp-grid">';
+      D.SCRIPTS.forEach(function (sc) {
+        const st = S.scripts[sc.id] || { read: 0, recite: 0, mastered: false };
+        const readToday = window.Study.scriptPracticeToday().read.indexOf(sc.id) >= 0;
+        const reciteToday = window.Study.scriptPracticeToday().recite.indexOf(sc.id) >= 0;
+        body += '<div class="sp-card">' +
+          '<div class="sp-head"><span>' + (st.mastered ? '🏵️' : '📄') + '</span><span class="sp-name">' + esc(sc.name) + '</span></div>' +
+          '<div class="sp-meta">' + esc(sc.place) + ' ｜ ' + esc(sc.group) + ' ｜ 约 ' + sc.minutes + ' 分钟</div>' +
+          '<div class="script-flow">' + sc.nodes.map(function (n) { return '<span>' + esc(n) + '</span>'; }).join('') + '</div>' +
+          '<div class="sp-counts">通读 ' + (st.read || 0) + ' 次 ｜ 默讲 ' + (st.recite || 0) + ' 次' + (st.mastered ? ' ｜ ✅已背下' : '') + '</div>' +
+          '<div class="sp-actions">' +
+          '<button class="btn btn-sm' + (readToday ? ' btn-ghost' : ' btn-primary') + '" data-act="sp-read" data-sid="' + sc.id + '"' + (readToday ? ' disabled' : '') + '>' + (readToday ? '✓ 今日已读' : '今天读了这篇') + '</button>' +
+          '<button class="btn btn-sm' + (reciteToday ? ' btn-ghost' : ' btn-primary') + '" data-act="sp-recite" data-sid="' + sc.id + '"' + (reciteToday ? ' disabled' : '') + '>' + (reciteToday ? '✓ 今日已背' : '今天背了这篇') + '</button>' +
+          '</div></div>';
+      });
+      body += '</div>';
+    }
+
+    openModal({
+      title: '📚 练习台 · ' + (practiceTab === 'interview' ? '面试问答' : '导游词'),
+      body: body, wide: true, dismissable: true,
+      foot: '<button class="btn btn-ghost" id="pr-close">关闭</button>',
+      onMount: function (m) {
+        $('#pr-close', m).onclick = closeModal;
+        /* 切换 面试问答 / 导游词 两个 tab（弹窗内按钮需自行绑定，openModal 不会自动接线） */
+        $$('[data-act="practice-tab"]', m).forEach(function (b) {
+          b.onclick = function () { openPracticePanel(b.dataset.tab); };
+        });
+        /* 答案展开 */
+        $$('[data-act="qa-reveal"]', m).forEach(function (b) {
+          b.onclick = function () {
+            const qid = b.dataset.qid;
+            const ans = $('#qa-ans-' + qid, m);
+            if (ans) { ans.style.display = 'block'; b.style.display = 'none'; }
+          };
+        });
+        /* 标记练过 */
+        $$('[data-act="qa-mark"]', m).forEach(function (b) {
+          b.onclick = function () {
+            const qid = b.dataset.qid;
+            const r = window.Study.finishInterview(qid);
+            if (r.taskDone) {
+              toast('🗣️ 今日面试问答任务完成：+' + r.task.reward.tickets + ' 券 / +' + r.task.reward.beans + ' 豆', 'ok', 5000);
+              confetti(42); playCheer();
+            }
+            render();
+            openPracticePanel('interview');
+            if (!r.taskDone) toast('已记录，今日 ' + r.count + ' / ' + D.PRACTICE.INTERVIEW_TARGET + ' 道', 'ok', 2000);
+          };
+        });
+        /* 导游词读/背 */
+        $$('[data-act="sp-read"], [data-act="sp-recite"]', m).forEach(function (b) {
+          b.onclick = function () {
+            const sid = b.dataset.sid;
+            const type = b.dataset.act === 'sp-read' ? 'read' : 'recite';
+            const r = window.Study.finishScriptCore(sid, type);
+            if (r.ok && r.taskDone && r.task) {
+              toast('🎤 今日导游词任务完成：+' + r.task.reward.tickets + ' 券 / +' + r.task.reward.beans + ' 豆', 'ok', 5000);
+              confetti(42); playCheer();
+            } else if (!r.ok) {
+              toast('❌ ' + (r.msg || (r.errs && r.errs.join('；')) || '记录失败'), 'err');
+            }
+            render();
+            openPracticePanel('script');
+          };
+        });
+      }
     });
   }
 

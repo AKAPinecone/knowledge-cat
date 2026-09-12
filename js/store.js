@@ -59,7 +59,9 @@ window.Store = (function () {
         feedBonusDate: '',  /* 投喂单全满的奖励日期（每天只发一次） */
         dailyRewardDate: '',/* 每日签到奖励最后领取日期 */
         userTasks: [],      /* 自建加餐任务模板（跨天保留） */
-        quizAccum: {}       /* taskUid -> {q, correct} 刷题任务的累计进度 */
+        quizAccum: {},       /* taskUid -> {q, correct} 刷题任务的累计进度 */
+        interviewPractice: {}, /* date -> [qid...] 练习台面试每日记录 */
+        scriptPractice: {}    /* date -> {read:[], recite:[]} 练习台导游词每日记录 */
       },
       stats: {
         totalPulls: 0, totalHatched: 0, uniqueSpecies: 0, legendOwned: 0,
