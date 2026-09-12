@@ -11,7 +11,7 @@ window.Study = (function () {
   let S = null;
 
   /* 任务库版本：升级后强制重算当天任务，避免老存档里的旧任务结构残留 */
-  const TASK_VER = 4;
+  const TASK_VER = 5;  /* v5：刷题任务改为"每次任意题数、累计达标即完成"；新增用户自建加餐任务 */
 
   /* 前端回调，由 app.js 挂载 */
   const hooks = {
@@ -70,6 +70,35 @@ window.Study = (function () {
     return best || D.SUBJECTS[0];
   }
 
+  /* 用户自建加餐任务：从既有任务模型（reading/quiz/record/feynman/note）里选一种，跨天保留 */
+  function buildUserTask(tpl, day) {
+    const uid = 'user_' + tpl.id + '#' + day;
+    const type = tpl.type;
+    const verify = { type: type };
+    if (type === 'quiz') verify.minQuestions = tpl.target || 20;
+    else if (type === 'record') verify.minMinutes = tpl.target || 3;
+    else if (type === 'feynman') verify.minCards = tpl.target || 1;
+    else if (type === 'note') verify.minChars = tpl.target || 20;
+    else if (type === 'reading') verify.minChars = 6;
+    const ICON = { reading: '📖', quiz: '✍️', record: '🎙️', feynman: '🗣️', note: '📝' };
+    return {
+      uid: uid,
+      libId: 'user_' + tpl.id,
+      tplId: tpl.id,
+      title: tpl.title || (ICON[type] + ' 我的任务'),
+      desc: tpl.desc || '你自己建的任务，做完登记一下就有奖励。',
+      kolb: 'CE', icon: ICON[type] || '🧩',
+      reward: { tickets: tpl.tickets != null ? tpl.tickets : 1, beans: tpl.beans != null ? tpl.beans : 15 },
+      core: false, coreLabel: '',
+      split: '', pick: type === 'reading' ? 'book' : '',
+      verify: verify, need: {},
+      ctx: { scriptId: '', scriptName: '', bookId: '', bookName: '', subjectId: '', subjectName: '' },
+      quizCount: 0,
+      state: S.study.done[uid] ? 'done' : 'pending',
+      at: S.study.done[uid] ? S.study.done[uid].at : 0
+    };
+  }
+
   /* 这些任务才和「导游词」有关——只有它们才带景点节点气泡。
      之前所有非拆分任务都被塞了 scriptId，导致加餐卡片上也冒出导游词内容。 */
   const SCRIPT_LIBS = { p1_script_read: 1, p1_script_recite: 1, p2_script: 1, p3_script_full: 1 };
@@ -120,6 +149,11 @@ window.Study = (function () {
           at: S.study.done[uid] ? S.study.done[uid].at : 0
         });
       });
+    });
+
+    /* 用户自建的加餐任务：从既有任务模型里选，跨天保留 */
+    (S.study.userTasks || []).forEach(function (tpl) {
+      list.push(buildUserTask(tpl, day));
     });
 
     S.study.tasks = list;
@@ -278,6 +312,19 @@ window.Study = (function () {
    * proof 结构由 UI 收集：
    * { photo, feynmanCount, quiz:{questions,correct,score}, record:{duration,segments}, bookId }
    * ========================================================= */
+  /* 刷题进度：同一任务（uid 含日期，天然按天）多次提交累加。
+     松果的习惯是碎片时间刷几道就交几道，攒够目标题数才算这件任务完成。 */
+  function quizAccumOf(uid) {
+    if (!S.study.quizAccum || typeof S.study.quizAccum !== 'object') S.study.quizAccum = {};
+    if (!S.study.quizAccum[uid]) S.study.quizAccum[uid] = { q: 0, correct: 0 };
+    return S.study.quizAccum[uid];
+  }
+  function quizProgress(uid) {
+    const t = taskByUid(uid);
+    const acc = (S.study.quizAccum && S.study.quizAccum[uid]) || { q: 0, correct: 0 };
+    return { count: acc.q, correct: acc.correct, target: t ? (t.verify.minQuestions || 0) : 0 };
+  }
+
   function validate(task, proof) {
     const errs = [];
     const v = task.verify;
@@ -292,7 +339,9 @@ window.Study = (function () {
     }
     if (v.type === 'quiz') {
       const q = proof.quiz || {};
-      if (!q.questions || q.questions < v.minQuestions) errs.push('题量不足：至少要登记 ' + v.minQuestions + ' 道');
+      /* 每次可以只交几道，累计到目标题数才算完成（模考例外，一次一整套） */
+      if (!q.questions || q.questions < 1) errs.push('至少要登记 1 道题');
+      if (q.correct && q.questions && q.correct > q.questions) errs.push('答对题数不能多于本次题量');
       if (v.needScore && (q.score === undefined || q.score === null || q.score === '')) errs.push('模考需要填写分数');
     }
     if (v.type === 'record') {
@@ -330,6 +379,29 @@ window.Study = (function () {
     proof = proof || {};
     const errs = validate(task, proof);
     if (errs.length) return { ok: false, errs: errs };
+
+    const v0 = task.verify;
+
+    /* ── 累计型刷题（不含模考）：每次任意题数，多次相加，累计 ≥ 目标才结算 ──
+       今天交 8 道、明天再交 12 道都行；没攒够就只记进度、不发奖、不标记完成。 */
+    if (v0.type === 'quiz' && !v0.needScore) {
+      const acc = quizAccumOf(uid);
+      const add = proof.quiz.questions || 0;
+      acc.q += add;
+      acc.correct += (proof.quiz.correct || 0);
+      S.stats.questions += add;
+      S.stats.correct += (proof.quiz.correct || 0);
+      window.Store.save(true);
+      if (acc.q < v0.minQuestions) {
+        return { ok: true, progress: true, count: acc.q, target: v0.minQuestions, title: task.title };
+      }
+      /* 达标：把累计数写进凭证，回顾时显示的是整段进度而不是最后一小截 */
+      proof.quiz.questions = acc.q;
+      proof.quiz.correct = Math.min(acc.correct, acc.q);
+    } else if (v0.type === 'quiz') {
+      S.stats.questions += (proof.quiz.questions || 0);
+      S.stats.correct += (proof.quiz.correct || 0);
+    }
 
     /* 发奖：做了就是做了，奖励足额发，不打折 */
     const tickets = task.reward.tickets;
@@ -373,12 +445,6 @@ window.Study = (function () {
     task.state = 'done';
     task.at = Date.now();
     S.study.kolbToday[task.kolb] = (S.study.kolbToday[task.kolb] || 0) + 1;
-
-    /* 学习数据统计 */
-    if (proof.quiz && proof.quiz.questions) {
-      S.stats.questions += proof.quiz.questions;
-      S.stats.correct += (proof.quiz.correct || 0);
-    }
 
     /* 课本精读进度 */
     if (task.libId === 'p1_read') {
@@ -467,6 +533,32 @@ window.Study = (function () {
     };
   }
 
+  /* ── 自建加餐任务：从既有任务模型里挑一种，填个标题就能加 ── */
+  function addUserTask(tpl) {
+    if (!Array.isArray(S.study.userTasks)) S.study.userTasks = [];
+    const t = {
+      id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36),
+      type: tpl.type || 'note',
+      title: String(tpl.title || '').trim() || '我的任务',
+      desc: String(tpl.desc || '').trim(),
+      target: parseInt(tpl.target, 10) || 0,
+      tickets: tpl.tickets != null ? parseInt(tpl.tickets, 10) : 1,
+      beans: tpl.beans != null ? parseInt(tpl.beans, 10) : 15,
+      createdAt: Date.now()
+    };
+    S.study.userTasks.push(t);
+    S.study.taskVer = 0;              /* 置 0 逼 ensureTodayTasks 重建，新任务立刻出现 */
+    window.Store.save(true);
+    return t;
+  }
+  function removeUserTask(id) {
+    if (!Array.isArray(S.study.userTasks)) return 0;
+    const before = S.study.userTasks.length;
+    S.study.userTasks = S.study.userTasks.filter(function (x) { return x.id !== id; });
+    if (S.study.userTasks.length !== before) { S.study.taskVer = 0; window.Store.save(true); }
+    return before - S.study.userTasks.length;
+  }
+
   /* 按条目查当天所有学习记录（供任务回顾用） */
   function evidenceFor(uid) {
     return S.evidence.filter(function (e) { return e.taskId === uid; });
@@ -480,6 +572,7 @@ window.Study = (function () {
     addFeynman: addFeynman,
     markScript: markScript, finish: finish, validate: validate,
     kolbProgress: kolbProgress, todayTaskStats: todayTaskStats,
+    quizProgress: quizProgress, addUserTask: addUserTask, removeUserTask: removeUserTask,
     evidenceFor: evidenceFor
   };
 })();

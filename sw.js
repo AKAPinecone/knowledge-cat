@@ -6,7 +6,7 @@
  * - 版本号 CACHE 升一位即全量换新缓存（发新版记得 bump）
  * - 只拦本站 GET；云端 API 是跨域请求，天然不受影响，联网失败自动降级本地模式
  * ========================================================= */
-var CACHE = 'knowledge-cat-v7';
+var CACHE = 'knowledge-cat-v8';
 var ASSETS = [
   './',
   './index.html',
@@ -24,6 +24,9 @@ var ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
+  './assets/audio/morning-dew.mp3',
+  './assets/audio/summer-night.mp3',
+  './assets/audio/cheer.mp3',
   './assets/creatures/baifujinji.webp',
   './assets/creatures/baochunhua.webp',
   './assets/creatures/daxiongmao.webp',

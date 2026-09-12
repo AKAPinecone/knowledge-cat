@@ -466,6 +466,19 @@ window.GAME_DATA = (function () {
     }
   ];
 
+  /* ---------- 自建加餐任务可选的任务模型 ----------
+     松果想自己加一条加餐任务时，从这里挑一种「已有的模型」，而不是凭空造一个新玩法：
+     每种模型都对应现成的验证方式与结算流程（reward 默认 1 券 / 15 豆，可改）。
+     target 的含义随类型不同：quiz 题数 / record 分钟 / feynman 卡片数 / note 字数；
+     reading 不需要 target（选书 + 写读了什么）。 */
+  const TASK_MODELS = [
+    { type: 'reading', name: '精读课本', emoji: '📖', desc: '挑一本课本，登记今天读了哪本、读了什么', targetLabel: '', defaultTarget: 0 },
+    { type: 'quiz',    name: '刷题',     emoji: '✍️', desc: '登记本次题量与答对题数，累计达标才算完成', targetLabel: '累计题数', defaultTarget: 20 },
+    { type: 'record',  name: '读 / 背导游词', emoji: '🎙️', desc: '录一段音，可分几次录、累计够时长就行', targetLabel: '累计分钟', defaultTarget: 3 },
+    { type: 'feynman', name: '费曼卡',   emoji: '🗣️', desc: '用大白话讲给没学过的人听，产出卡片', targetLabel: '卡片数', defaultTarget: 1 },
+    { type: 'note',    name: '文字登记', emoji: '📝', desc: '写一段今日收获，做完当场结算', targetLabel: '最少字数', defaultTarget: 30 }
+  ];
+
   /* ---------- 成就 ---------- */
   const ACHIEVEMENTS = [
     { id: 'ach_first_egg',  name: '第一颗胶囊', desc: '扭到你的第一颗胶囊',       reward: { tickets: 1, beans: 20 }, check: function (s) { return s.stats.totalPulls >= 1; } },
@@ -538,6 +551,7 @@ window.GAME_DATA = (function () {
     NEGLECT_MINUTES_BEFORE_SICK: NEGLECT_MINUTES_BEFORE_SICK,
     SICK_CHANCE_PER_HOUR: SICK_CHANCE_PER_HOUR,
     TASK_LIBRARY: TASK_LIBRARY,
+    TASK_MODELS: TASK_MODELS,
     ACHIEVEMENTS: ACHIEVEMENTS,
     KOLB: KOLB
   };

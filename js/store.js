@@ -56,7 +56,9 @@ window.Store = (function () {
         shards: {},         /* taskUid -> [{idx, text, at}] 今日拾光碎片 */
         kolbToday: { CE: 0, RO: 0, AC: 0, AE: 0 },
         kolbBonusDate: '',
-        feedBonusDate: ''   /* 投喂单 6 件全满的奖励日期（每天只发一次） */
+        feedBonusDate: '',  /* 投喂单 6 件全满的奖励日期（每天只发一次） */
+        userTasks: [],      /* 自建加餐任务模板（跨天保留） */
+        quizAccum: {}       /* taskUid -> {q, correct} 刷题任务的累计进度 */
       },
       stats: {
         totalPulls: 0, totalHatched: 0, uniqueSpecies: 0, legendOwned: 0,
@@ -150,6 +152,14 @@ window.Store = (function () {
     });
     /* 老存档补已掌握题目集合 */
     if (!s.masteredQuestions || typeof s.masteredQuestions !== 'object') s.masteredQuestions = {};
+    /* 老存档补音乐偏好 */
+    if (!s.settings || typeof s.settings !== 'object') s.settings = { bgmOn: false, bgmTrack: 0 };
+    if (typeof s.settings.bgmOn !== 'boolean') s.settings.bgmOn = false;
+    if (typeof s.settings.bgmTrack !== 'number') s.settings.bgmTrack = 0;
+    /* 老存档补自建任务列表 + 刷题累计进度 */
+    if (!s.study || typeof s.study !== 'object') s.study = {};
+    if (!Array.isArray(s.study.userTasks)) s.study.userTasks = [];
+    if (!s.study.quizAccum || typeof s.study.quizAccum !== 'object') s.study.quizAccum = {};
   }
 
   /* localStorage 只有 5MB 上下，而证据库里每条凭证都带一张 base64 缩略图。

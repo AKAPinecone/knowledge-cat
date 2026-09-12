@@ -78,6 +78,149 @@
     }
   }
 
+  /* ---------------- 音频系统 ---------------- */
+  const BGM_TRACKS = [
+    { id: 'morning-dew', name: '晨露轻闪', src: 'assets/audio/morning-dew.mp3' },
+    { id: 'summer-night', name: '夏夜翻书声', src: 'assets/audio/summer-night.mp3' }
+  ];
+  let _bgm = null, _bgmCur = -1, _actx = null;
+
+  function ensureSettings() {
+    if (!S || !S.settings) return;
+    if (typeof S.settings.bgmOn !== 'boolean') S.settings.bgmOn = false;
+    if (typeof S.settings.bgmTrack !== 'number') S.settings.bgmTrack = 0;
+  }
+  function bgmEl() {
+    if (!_bgm) { _bgm = new Audio(); _bgm.loop = true; _bgm.preload = 'auto'; _bgm.volume = 0.45; }
+    return _bgm;
+  }
+  function startBgm() {
+    ensureSettings(); if (!S || !S.settings) return;
+    const t = BGM_TRACKS[S.settings.bgmTrack] || BGM_TRACKS[0];
+    const a = bgmEl();
+    if (_bgmCur !== S.settings.bgmTrack) { a.src = t.src; _bgmCur = S.settings.bgmTrack; }
+    let p = null;
+    try { p = a.play(); } catch (e) { p = null; }
+    if (p && typeof p.then === 'function') {
+      p.then(function () {
+        if (S && S.settings) { S.settings.bgmOn = true; window.Store.save(); }
+        updateMusicChip();
+      }).catch(function () { /* 浏览器拦截自动播放，等用户手势 */ });
+      return;
+    }
+    /* 环境不支持播放（例如测试用的 jsdom）：把开关状态记下就好，别抛错 */
+    if (S && S.settings) { S.settings.bgmOn = true; window.Store.save(); }
+    updateMusicChip();
+  }
+  function stopBgm() {
+    if (_bgm) _bgm.pause();
+    if (S && S.settings) { S.settings.bgmOn = false; window.Store.save(); }
+    updateMusicChip();
+  }
+  function toggleBgm() {
+    ensureSettings(); if (!S || !S.settings) return;
+    if (S.settings.bgmOn) stopBgm(); else startBgm();
+  }
+  function updateMusicChip() {
+    const ico = $('#music-ico'), nm = $('#music-name');
+    if (!ico || !nm) return;
+    const on = S && S.settings && S.settings.bgmOn;
+    ico.textContent = on ? '🎶' : '🎵';
+    nm.textContent = on ? (BGM_TRACKS[S.settings.bgmTrack] || BGM_TRACKS[0]).name : '音乐关';
+  }
+  function audioCtx() {
+    if (!_actx) { try { _actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { _actx = null; } }
+    if (_actx && _actx.state === 'suspended') { try { _actx.resume(); } catch (e) {} }
+    return _actx;
+  }
+  function tone(freq, dur, type, vol, delay) {
+    const ctx = audioCtx(); if (!ctx) return;
+    const t0 = ctx.currentTime + (delay || 0);
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.18, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  function noiseBurst(dur, vol) {
+    const ctx = audioCtx(); if (!ctx) return;
+    const n = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const g = ctx.createGain(); g.gain.value = vol || 0.12;
+    const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 1200;
+    src.connect(f); f.connect(g); g.connect(ctx.destination);
+    src.start();
+  }
+  /* 照顾动作音效（Web Audio 合成，无需素材文件） */
+  function playSfx(act) {
+    switch (act) {
+      case 'water': tone(820, 0.18, 'sine', 0.2, 0); tone(520, 0.16, 'sine', 0.15, 0.08); break;
+      case 'fert':  tone(1100, 0.10, 'triangle', 0.16, 0); tone(1500, 0.10, 'triangle', 0.14, 0.09); break;
+      case 'pest':  noiseBurst(0.22, 0.14); break;
+      case 'food':  tone(520, 0.10, 'sine', 0.18, 0); tone(680, 0.12, 'sine', 0.16, 0.1); break;
+      case 'bath':  tone(600, 0.10, 'sine', 0.15, 0); tone(500, 0.10, 'sine', 0.13, 0.08); tone(660, 0.10, 'sine', 0.13, 0.16); break;
+      case 'clean': tone(440, 0.12, 'square', 0.12, 0); tone(700, 0.14, 'sine', 0.14, 0.1); break;
+      default: tone(700, 0.12, 'sine', 0.15, 0);
+    }
+  }
+  /* 任务完成欢呼（cheer.mp3） */
+  function playCheer() {
+    try { const a = new Audio('assets/audio/cheer.mp3'); a.volume = 0.75; a.play().catch(function () {}); } catch (e) {}
+  }
+  /* 照顾动作小动画：在头像处飘出对应表情，并轻微弹一下 */
+  function careFx(act, container) {
+    if (!container) return;
+    const map = { water: '💧', fert: '✨', pest: '🧴', food: '🥣', bath: '🫧', clean: '✨' };
+    const emo = map[act] || '✨';
+    const n = (act === 'water' || act === 'bath') ? 5 : 3;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('span');
+      s.className = 'care-fx';
+      s.textContent = emo;
+      s.style.left = (18 + Math.random() * 56) + '%';
+      s.style.animationDelay = (i * 0.07) + 's';
+      container.appendChild(s);
+      setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 1300);
+    }
+    container.classList.add('bounce');
+    setTimeout(function () { container.classList.remove('bounce'); }, 420);
+  }
+  function openMusicPanel() {
+    ensureSettings();
+    let body = '<div class="music-list">';
+    body += '<div class="music-row"><button class="btn btn-primary btn-sm" id="m-toggle">' +
+      ((S.settings && S.settings.bgmOn) ? '⏸️ 暂停' : '▶️ 播放') + '</button>' +
+      '<span class="hint" style="margin-left:8px">循环播放，做题时陪着你</span></div>';
+    BGM_TRACKS.forEach(function (t, i) {
+      const on = S.settings && S.settings.bgmTrack === i;
+      body += '<button class="music-track' + (on ? ' on' : '') + '" data-trk="' + i + '">' +
+        '<span class="mt-ico">🎵</span><span class="mt-name">' + t.name + '</span>' +
+        (on ? '<span class="mt-on">▶ 播放中</span>' : '<span class="mt-off">点击播放</span>') + '</button>';
+    });
+    body += '</div>';
+    openModal({
+      title: '🎵 背景音乐', body: body,
+      foot: '<button class="btn btn-ghost" id="m-close">关闭</button>',
+      onMount: function (m) {
+        $('#m-close', m).onclick = closeModal;
+        $('#m-toggle', m).onclick = function () { toggleBgm(); $('#m-toggle', m).textContent = (S.settings.bgmOn) ? '⏸️ 暂停' : '▶️ 播放'; };
+        $$('.music-track', m).forEach(function (b) {
+          b.onclick = function () {
+            S.settings.bgmTrack = parseInt(b.dataset.trk, 10);
+            startBgm(); window.Store.save(); updateMusicChip();
+            openMusicPanel();
+          };
+        });
+      }
+    });
+  }
+
   /* ---------------- 弹窗 ---------------- */
   function openModal(opts) {
     /* opts: {title, body, foot, wide, onMount, dismissable} */
@@ -174,6 +317,17 @@
     if (syncChip) syncChip.onclick = openSyncModal;
     const saveChip = $('#chip-save');
     if (saveChip) saveChip.onclick = openSaveModal;
+
+    /* 背景音乐：顶栏的小胶囊，点开选曲 / 暂停。默认关，不硬塞给用户。 */
+    const musicChip = $('#music-chip');
+    if (musicChip) musicChip.onclick = openMusicPanel;
+    ensureSettings();
+    updateMusicChip();
+    /* 上次开着音乐的话，等第一次点屏幕再接上（浏览器不许页面自动出声） */
+    if (S.settings && S.settings.bgmOn) {
+      const kick = function () { document.removeEventListener('pointerdown', kick); startBgm(); };
+      document.addEventListener('pointerdown', kick);
+    }
 
     /* 离线结算 */
     const report = window.Store.advanceOffline();
@@ -384,7 +538,8 @@
     h += '<div class="panel-head"><h2>🍰 加餐</h2>' +
       '<span class="hint">课后练习、框架图、自测这些——有精力就加一口，不做也不扣分</span>' +
       '<span class="spacer"></span>' +
-      '<span class="tag">' + ts.extraDone + ' / ' + ts.extraTotal + '</span></div>';
+      '<span class="tag">' + ts.extraDone + ' / ' + ts.extraTotal + '</span>' +
+      '<button class="btn btn-sm btn-ghost" data-act="task-new">＋ 自建任务</button></div>';
     h += '<div class="task-list">';
     ts.extra.forEach(function (t) { h += taskCard(t); });
     h += '</div></div>';
@@ -415,9 +570,10 @@
     const k = kolbOf(t.kolb);
     const done = t.state === 'done';
     const v = t.verify;
+    const isUser = !!(t.libId && t.libId.indexOf('user_') === 0);
     let verifyTag = '';
     if (v.type === 'note') verifyTag = '📝 写一段今日收获';
-    else if (v.type === 'quiz') verifyTag = '✍️ 登记题量 / 正确率';
+    else if (v.type === 'quiz') verifyTag = v.needScore ? '✍️ 登记题量 / 正确率' : ('✍️ 刷题累计满 ' + v.minQuestions + ' 道（可分批交）');
     else if (v.type === 'record') verifyTag = '🎙️ 录音 ≥' + v.minMinutes + ' 分钟（可分段）';
     else if (v.type === 'feynman') verifyTag = '🗣️ 费曼卡 ×' + (v.minCards || 1);
     else if (v.type === 'reading') verifyTag = '📖 登记：读哪本 + 读了什么';
@@ -448,6 +604,7 @@
           (t.core
             ? '<span class="tag tag-core">🍽️ 投喂单</span>'
             : '<span class="tag tag-extra">🍰 加餐</span>') +
+          (isUser ? '<span class="tag">🧩 自建</span>' : '') +
         '</div>' +
         '<div class="t-body">' + esc(t.desc) + '</div>' +
         (sc ? '<div class="script-flow">' + sc.nodes.map(function (n) { return '<span>' + esc(n) + '</span>'; }).join('') + '</div>' : '') +
@@ -464,6 +621,7 @@
             '<div style="font-size:11px;color:#4CA96B;text-align:center;font-weight:600">✓ 已结算</div>'
           : side + '<div style="font-size:10.5px;color:#8AA394;text-align:center">需通过验证</div>'
         ) +
+        (isUser ? '<button class="btn btn-ghost btn-sm" data-act="task-del" data-tpl="' + esc(t.tplId || '') + '" title="删掉这条自建任务">🗑 删除</button>' : '') +
       '</div>' +
     '</div>';
   }
@@ -510,6 +668,17 @@
     return '<span class="' + cls + '">' + sp.emoji + '</span>';
   }
 
+  /* 干净的花盆贴图（无植物）：植物立绘叠在上面 = "种在花盆里" */
+  function potSvg() {
+    return '<svg class="pot-svg" viewBox="0 0 48 48" aria-hidden="true">' +
+      '<path d="M9 17 L39 17 L34 41 Q24 46 14 41 Z" fill="#D9824A"/>' +
+      '<path d="M14 41 Q24 46 34 41 L33 37 Q24 40 15 37 Z" fill="#B5612F"/>' +
+      '<rect x="7" y="12" width="34" height="7" rx="3.5" fill="#EBA468"/>' +
+      '<rect x="7" y="12" width="34" height="3" rx="1.5" fill="#F4C089"/>' +
+      '<path d="M12 18 L36 18 L33 30 L15 30 Z" fill="#E0925A" opacity=".45"/>' +
+      '</svg>';
+  }
+
   function petFaceHtml(p) {
     const sp = window.Game.speciesById(p.speciesId);
     const mood = window.Game.moodOf(p);
@@ -522,22 +691,29 @@
       '<span class="pp-shadow"></span>';
   }
 
+  /* 有些老物种没有立绘、走 emoji 兜底；emoji 字形框自带上下留白，
+     投影得单独抬高一截，否则看着就像悬在半空。这里给容器打个标记。 */
+  function artKindCls(sp) { return sp.img ? '' : ' pet-emoji'; }
+
   function pottedPetHtml(p, i) {
     const pos = POT_RING[i % POT_RING.length];
-    return '<div class="park-pet potted' + (p.illness ? ' sick' : '') + (p.dormant ? ' dormant' : '') +
+    const sp = window.Game.speciesById(p.speciesId);
+    return '<div class="park-pet potted' + (p.illness ? ' sick' : '') + (p.dormant ? ' dormant' : '') + artKindCls(sp) +
       '" data-act="pet-open" data-id="' + p.id + '" style="left:' + pos[0] + '%;top:' + pos[1] + '%">' +
-      petFaceHtml(p) + '<span class="pp-pot">🪴</span></div>';
+      petFaceHtml(p) + '<span class="pp-pot">' + potSvg() + '</span></div>';
   }
 
   function pondPetHtml(p, i) {
     /* 坐标相对池塘元素（ pond 150×76 ），让藻类真的泡在水里 */
-    return '<div class="park-pet pond-pet' + (p.illness ? ' sick' : '') +
+    const sp = window.Game.speciesById(p.speciesId);
+    return '<div class="park-pet pond-pet' + (p.illness ? ' sick' : '') + artKindCls(sp) +
       '" data-act="pet-open" data-id="' + p.id + '" style="left:' + (24 + (i % 3) * 26) + '%;top:' + (28 + (i % 2) * 34) + '%">' +
       petFaceHtml(p) + '</div>';
   }
 
   function walkerPetHtml(p) {
-    return '<div class="park-pet walker' + (p.illness ? ' sick' : '') + (p.dormant ? ' dormant' : '') +
+    const sp = window.Game.speciesById(p.speciesId);
+    return '<div class="park-pet walker' + (p.illness ? ' sick' : '') + (p.dormant ? ' dormant' : '') + artKindCls(sp) +
       '" data-act="pet-open" data-id="' + p.id + '" data-pet="' + p.id + '">' +
       petFaceHtml(p) + '</div>';
   }
@@ -824,7 +1000,9 @@
     const mins = Math.round((Date.now() - p.bornAt) / 60000);
 
     let body = '<div class="cm-head">' +
-      '<span class="cm-face">' + sp.emoji + '</span>' +
+      '<span class="cm-face" id="cm-face">' +
+        (sp.img ? '<img class="cm-face-art" src="' + sp.img + '" alt="" draggable="false">' : sp.emoji) +
+      '</span>' +
       '<div style="flex:1;min-width:0">' +
       '<div class="field" style="margin:0"><input type="text" id="cm-name" value="' + esc(p.name) + '" maxlength="12">' +
       '<div class="fh"><span>' + esc(sp.name) + ' · ' + rarityName(sp.rarity) + ' · ' + st.emoji + ' ' + st.name + ' · ' + mood.emoji + ' ' + mood.text + '</span>' +
@@ -865,6 +1043,16 @@
     });
     body += '</div>';
 
+    /* 物资库存：照顾时随时能看到手里的道具与货币 */
+    body += '<div class="cm-bag"><div class="cm-bag-h">🎒 物资库存</div><div class="cm-bag-row">';
+    ['water', 'fert', 'pest', 'food', 'soap', 'shovel'].forEach(function (it) {
+      const itm = D.ITEM_MAP[it]; const n = S.bag[it] || 0;
+      body += '<span class="cm-bag-item' + (n <= 0 ? ' empty' : '') + '" title="' + itm.name + '">' + itm.emoji + ' ' + n + '</span>';
+    });
+    body += '<span class="cm-bag-sep"></span>' +
+      '<span class="cm-bag-item" title="胶囊券">🎟️ ' + S.cur.tickets + '</span>' +
+      '<span class="cm-bag-item" title="可可豆">🌰 ' + Math.floor(S.cur.beans) + '</span></div></div>';
+
     body += '<div class="hint" style="margin-top:10px">出生 ' + fmtWhen(p.bornAt) + ' · 陪伴你 ' + fmtHM(mins) +
       ' · 被照顾 ' + p.careCount + ' 次 · 出身 ' + esc(sp.home) + '</div>';
 
@@ -883,11 +1071,23 @@
         if (hb) hb.onclick = function () { openHealModal(p.id); };
         $$('.act[data-care]', m).forEach(function (el) {
           el.onclick = function () {
-            const r = window.Game.care(p.id, el.dataset.care);
-            closeModal();
-            toast(r.ok ? r.msg : '❌ ' + r.msg, r.ok ? 'ok' : 'err');
-            render();
-            if (r.ok) openCreatureModal(p.id);
+            const act = el.dataset.care;
+            const r = window.Game.care(p.id, act);
+            if (!r.ok) { toast('❌ ' + r.msg, 'err'); return; }
+            /* 先把动作演完：音效 + 头像上的小动画；这时状态其实已经结算好了 */
+            $$('.act[data-care]', m).forEach(function (b) { b.disabled = true; });
+            playSfx(act);
+            careFx(act, $('#cm-face', m));
+            toast(r.msg, 'ok');
+            render();                     /* 乐园场景里的状态气泡跟着变 */
+            /* 动画放完，原位刷新这张状态面板。
+               守卫：期间用户要是关了窗或点开了别的弹窗，就什么都不做——
+               绝不异步把别的界面顶掉（那会像"界面自己乱跳"）。 */
+            setTimeout(function () {
+              if (!document.documentElement.contains(m) || m !== activeMask()) return;
+              closeModal();
+              openCreatureModal(p.id);
+            }, 820);
           };
         });
       }
@@ -1508,6 +1708,13 @@
     const ds = el.dataset;
     if (act === 'task-verify') return openVerifyModal(window.Study.taskByUid(ds.uid));
     if (act === 'task-log') return showTaskLog(ds.uid);
+    if (act === 'task-new') return openTaskBuilder();
+    if (act === 'task-del') {
+      if (!confirm('删掉这条自建任务？之前的完成记录会留着，只是以后不再出现。')) return;
+      const n = window.Study.removeUserTask(ds.tpl);
+      toast(n ? '🗑 已删掉这条自建任务。' : '没找到这条任务，可能已经删过了。', n ? 'ok' : 'warn');
+      return render();
+    }
     if (act === 'me-edit') return openProfileModal();
     if (act === 'place') {
       const r = window.Game.placeCapsule(ds.id, ds.home);
@@ -1936,6 +2143,71 @@
   /* =========================================================
    * 验证弹窗
    * ========================================================= */
+  /* 自建加餐任务：从既有任务模型里挑一种（读书 / 刷题 / 读背导游词 / 费曼卡 / 文字登记），填个标题就能加 */
+  function openTaskBuilder() {
+    let model = D.TASK_MODELS[1];   /* 默认「刷题」 */
+    let body = '<div class="warnbox">加餐任务做不做都行。自己加的也走同一套验证：挑一个现成的模型，填个标题就成。</div>';
+    body += '<div class="field"><label>① 选一个任务模型<span class="req">必答</span></label><div class="tm-grid" id="tb-models">';
+    D.TASK_MODELS.forEach(function (m2, i) {
+      body += '<button class="tm-card' + (i === 1 ? ' on' : '') + '" data-mi="' + i + '">' +
+        '<span class="tm-emoji">' + m2.emoji + '</span>' +
+        '<span class="tm-name">' + m2.name + '</span>' +
+        '<span class="tm-desc">' + esc(m2.desc) + '</span></button>';
+    });
+    body += '</div></div>';
+    body += '<div class="field"><label>② 任务标题<span class="req">必答</span></label>' +
+      '<input type="text" id="tb-title" maxlength="20" placeholder="例如：睡前跟读 1 篇导游词"></div>';
+    body += '<div class="field" id="tb-target-wrap" style="display:none"><label id="tb-target-label">目标</label>' +
+      '<input type="number" id="tb-target" min="1" value="20"></div>';
+    body += '<div class="field"><label>③ 奖励（选填，默认 🎟️ 1 / 🌰 15）</label>' +
+      '<div class="inline">' +
+        '<div><span style="font-size:11.5px;color:#8AA394">胶囊券</span><input type="number" id="tb-tk" min="0" value="1"></div>' +
+        '<div><span style="font-size:11.5px;color:#8AA394">可可豆</span><input type="number" id="tb-bn" min="0" value="15"></div>' +
+      '</div></div>';
+    body += '<div id="tb-err"></div>';
+
+    openModal({
+      title: '🧩 自建加餐任务', body: body, wide: true,
+      foot: '<button class="btn btn-ghost" id="tb-cancel">取消</button>' +
+            '<button class="btn btn-primary" id="tb-ok">加进加餐</button>',
+      onMount: function (m) {
+        $('#tb-cancel', m).onclick = closeModal;
+        function paintModel() {
+          const tw = $('#tb-target-wrap', m), tl = $('#tb-target-label', m);
+          if (model.targetLabel) {
+            tw.style.display = '';
+            tl.innerHTML = model.targetLabel + '<span class="fh-i">达到这个量就算完成</span>';
+            $('#tb-target', m).value = model.defaultTarget;
+          } else {
+            tw.style.display = 'none';
+          }
+        }
+        $$('.tm-card', m).forEach(function (b) {
+          b.onclick = function () {
+            $$('.tm-card', m).forEach(function (x) { x.classList.remove('on'); });
+            b.classList.add('on');
+            model = D.TASK_MODELS[parseInt(b.dataset.mi, 10)];
+            paintModel();
+          };
+        });
+        paintModel();
+        $('#tb-ok', m).onclick = function () {
+          const title = String($('#tb-title', m).value || '').trim();
+          if (!title) { $('#tb-err', m).innerHTML = '<div class="errbox">先给它起个名字吧。</div>'; return; }
+          window.Study.addUserTask({
+            type: model.type, title: title, desc: model.desc,
+            target: parseInt($('#tb-target', m).value || '0', 10) || model.defaultTarget,
+            tickets: parseInt($('#tb-tk', m).value || '1', 10),
+            beans: parseInt($('#tb-bn', m).value || '15', 10)
+          });
+          closeModal();
+          toast('🧩 加好了：「' + title + '」已经在加餐里等你。', 'ok', 5000);
+          render();
+        };
+      }
+    });
+  }
+
   function openVerifyModal(task) {
     if (!task) return;
     const v = task.verify, need = task.need || {};
@@ -2020,12 +2292,21 @@
         '<div id="vf-rec-list" class="seg-list" style="margin-top:8px"></div></div>';
     }
 
-    /* 刷题登记 */
+    /* 刷题登记：每次可以只交几道，累计到目标题数才算完成（模考除外，一次一整套） */
     if (v.type === 'quiz') {
+      if (!v.needScore) {
+        const qp = window.Study.quizProgress(task.uid);
+        const left = Math.max(0, v.minQuestions - qp.count);
+        body += '<div class="okbox" id="vf-accum">' +
+          (qp.count > 0
+            ? '📈 已累计 <b>' + qp.count + '</b> / ' + v.minQuestions + ' 道' + (left > 0 ? '，还差 ' + left + ' 道' : '，已达标 ✅')
+            : '📈 这是一件「累计型」刷题任务') +
+          '<div class="hint" style="margin-top:4px">每次刷多少就交多少，分几次都行——加起来满 ' + v.minQuestions + ' 道才算这件做完。</div></div>';
+      }
       body += '<div class="field"><label>✍️ 本次刷题登记</label>' +
         '<div class="inline">' +
-          '<div><span style="font-size:11.5px;color:#8AA394">题量（至少 ' + v.minQuestions + '）</span><input type="number" id="vf-q" min="0" placeholder="' + v.minQuestions + '"></div>' +
-          '<div><span style="font-size:11.5px;color:#8AA394">答对题数</span><input type="number" id="vf-c" min="0" placeholder="' + Math.round(v.minQuestions * 0.85) + '"></div>' +
+          '<div><span style="font-size:11.5px;color:#8AA394">本次题量</span><input type="number" id="vf-q" min="0" placeholder="10"></div>' +
+          '<div><span style="font-size:11.5px;color:#8AA394">本次答对</span><input type="number" id="vf-c" min="0" placeholder="8"></div>' +
         '</div>' +
         (v.needScore ? '<div style="margin-top:10px"><span style="font-size:11.5px;color:#8AA394">模考分数（满分 100）</span><input type="number" id="vf-score" min="0" max="100" placeholder="78"></div>' : '') +
         '<div class="fh"><span id="vf-rate">正确率会算给你看</span></div>' +
@@ -2043,7 +2324,9 @@
       title: (isReading ? '📖 今日精读登记' : '✅ 结算：' + esc(task.title)),
       body: body, wide: true,
       foot: '<button class="btn btn-ghost" id="vf-cancel">稍后再交</button>' +
-            '<button class="btn btn-primary" id="vf-submit">' + (isReading ? '📖 登记完成' : '提交结算') + '</button>',
+            '<button class="btn btn-primary" id="vf-submit">' +
+              (isReading ? '📖 登记完成' : (v.type === 'quiz' && !v.needScore ? '✍️ 记入累计' : '提交结算')) +
+            '</button>',
       onMount: function (m) {
         $('#vf-cancel', m).onclick = closeModal;
 
@@ -2163,16 +2446,25 @@
           ntCntFn();
         }
 
-        /* 正确率实时提示 */
+        /* 正确率实时提示（累计型任务顺带显示"交完这一笔累计多少"） */
         if (v.type === 'quiz') {
           const qEl = $('#vf-q', m), cEl = $('#vf-c', m);
+          const base = (!v.needScore) ? window.Study.quizProgress(task.uid).count : 0;
           function upd() {
             const q = parseInt(qEl.value || '0', 10), c = parseInt(cEl.value || '0', 10);
             const r = $('#vf-rate', m);
-            if (q > 0) r.innerHTML = '正确率 <b>' + Math.round(c / q * 100) + '%</b>（' + c + '/' + q + '）' + (c / q < 0.8 ? ' ⚠️ 不到 80%，这几科多看两眼' : ' 👍');
-            else r.textContent = '正确率会算给你看';
+            let s = q > 0
+              ? '正确率 <b>' + Math.round(c / q * 100) + '%</b>（' + c + '/' + q + '）' + (c / q < 0.8 ? ' ⚠️ 不到 80%，这几科多看两眼' : ' 👍')
+              : '正确率会算给你看';
+            if (!v.needScore) {
+              const tot = base + (q > 0 ? q : 0);
+              s += '<br><span style="color:' + (tot >= v.minQuestions ? '#2E7A4C' : '#8AA394') + '">累计 ' + tot + ' / ' + v.minQuestions + ' 道' +
+                (tot >= v.minQuestions ? '（够啦，这一笔就结算 ✅）' : '') + '</span>';
+            }
+            r.innerHTML = s;
           }
           qEl.oninput = upd; cEl.oninput = upd;
+          upd();
         }
 
         /* 费曼卡 */
@@ -2210,7 +2502,7 @@
   function verifyText(task) {
     const v = task.verify, parts = [];
     if (v.type === 'note') parts.push('写一段今日收获（至少 ' + (v.minChars || 10) + ' 字）');
-    if (v.type === 'quiz') parts.push('登记 ≥' + v.minQuestions + ' 题');
+    if (v.type === 'quiz') parts.push(v.needScore ? ('登记 ≥' + v.minQuestions + ' 题 + 分数') : ('刷题累计满 ' + v.minQuestions + ' 道（可分次交）'));
     if (v.type === 'record') parts.push('录音累计 ≥' + v.minMinutes + ' 分钟');
     if (v.type === 'reading') parts.push('选课本 + 填「今天读了什么」（笔记和照片选填）');
     else if (task.pick === 'book') parts.push('选定这套题属于哪一科');
@@ -2345,8 +2637,16 @@
         errBox.innerHTML = '<div class="errbox">结算失败：<ul>' + res.errs.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul></div>';
         return;
       }
+      /* 累计型刷题：只记进度、还没达标，不撒花不欢呼，给个鼓励提示 */
+      if (res.progress) {
+        toast('✍️ 「' + esc(res.title) + '」已累计 ' + res.count + ' / ' + res.target + ' 道，继续加油～', 'ok', 4500);
+        autoSave('任务 · ' + task.title);
+        render();
+        return;
+      }
       closeModal();
       confetti(42);
+      playCheer();
       let msg = '✅ 「' + esc(task.title) + '」结算完成：🎟️ +' + res.gain.tickets + '　🌰 +' + res.gain.beans;
       toast(msg, 'ok', 6500);
       autoSave('任务 · ' + task.title);   /* 每完成一项任务，自动存档一次 */
