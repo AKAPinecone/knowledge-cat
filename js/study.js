@@ -44,7 +44,7 @@ window.Study = (function () {
     /* 优先挑还没背下来的、并且最久没读的那篇 */
     let best = null, bestScore = -1;
     D.SCRIPTS.forEach(function (sc) {
-      const st = S.scripts[sc.id] || { read: 0, recite: 0, mastered: false, lastAt: 0 };
+      const st = S.scripts[sc.id] || { read: 0, recite: 0, mastered: false, lastAt: 0, notes: '' };
       let score = (st.mastered ? 0 : 100) + st.read * -6 + (st.lastAt ? (Date.now() - st.lastAt) / 86400000 * -1 : 0);
       if (score > bestScore) { bestScore = score; best = sc; }
     });
@@ -364,7 +364,7 @@ window.Study = (function () {
 
   function markScript(scriptId, type) {
     if (!scriptId) return null;
-    if (!S.scripts[scriptId]) S.scripts[scriptId] = { read: 0, recite: 0, mastered: false, lastAt: 0 };
+    if (!S.scripts[scriptId]) S.scripts[scriptId] = { read: 0, recite: 0, mastered: false, lastAt: 0, notes: '' };
     const st = S.scripts[scriptId];
     if (type === 'read') st.read++;
     if (type === 'recite') {
@@ -673,7 +673,7 @@ window.Study = (function () {
 
   return {
     init: init, hooks: hooks, TASK_VER: TASK_VER,
-    ensureTodayTasks: ensureTodayTasks, taskByUid: taskByUid,
+    ensureTodayTasks: ensureTodayTasks, taskByUid: taskByUid, coreTaskByLib: coreTaskByLib,
     compressImage: compressImage, attachPhoto: attachPhoto,
     startRecord: startRecord, stopRecord: stopRecord, getRecorder: getRecorder, attachAudio: attachAudio,
     addFeynman: addFeynman,

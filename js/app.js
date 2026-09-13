@@ -2416,6 +2416,9 @@
   function wireEvidence(prefix, m, target) {
     const drop = $('#' + prefix + '-drop', m), img = $('#' + prefix + '-img', m),
       file = $('#' + prefix + '-file', m), prev = $('#' + prefix + '-prev', m);
+    /* 当前弹窗没有凭证区（如练习台「导游词」tab 不渲染该区，只面试问答 tab 有）
+       时 drop 为 null，跳过接线避免抛错打断后续按钮绑定。 */
+    if (!drop) return;
     function setPrev(t) { prev.innerHTML = '<div class="evi-prev-item">✅ ' + t + '</div>'; }
     function pickImg(f) {
       if (!/^image\//.test(f.type)) return toast('请选一张图片', 'warn');
@@ -3075,6 +3078,11 @@
           '</div></div>';
       });
       body += '</div>';
+      /* 可选凭证区：面试练习鼓励传、不强制。归属当日面试核心任务。 */
+      body += '<div class="practice-evi">' +
+        '<div class="practice-evi-head">📎 留个学习痕迹（选填）</div>' +
+        evidenceZoneHTML('pEv', false) +
+        '</div>';
     } else {
       body += '<div class="practice-hint">' +
         '<div>' + (reciteMode ? '第 13 天起：每天默讲 1 篇导游词' : '前 12 天：每天通读 1 篇导游词') + '</div>' +
@@ -3091,18 +3099,13 @@
           '<div class="script-flow">' + sc.nodes.map(function (n) { return '<span>' + esc(n) + '</span>'; }).join('') + '</div>' +
           '<div class="sp-counts">通读 ' + (st.read || 0) + ' 次 ｜ 默讲 ' + (st.recite || 0) + ' 次' + (st.mastered ? ' ｜ ✅已背下' : '') + '</div>' +
           '<div class="sp-actions">' +
-          '<button class="btn btn-sm' + (readToday ? ' btn-ghost' : ' btn-primary') + '" data-act="sp-read" data-sid="' + sc.id + '"' + (readToday ? ' disabled' : '') + '>' + (readToday ? '✓ 今日已读' : '今天读了这篇') + '</button>' +
-          '<button class="btn btn-sm' + (reciteToday ? ' btn-ghost' : ' btn-primary') + '" data-act="sp-recite" data-sid="' + sc.id + '"' + (reciteToday ? ' disabled' : '') + '>' + (reciteToday ? '✓ 今日已背' : '今天背了这篇') + '</button>' +
+          '<button class="btn btn-sm btn-primary" data-act="sp-open" data-sid="' + sc.id + '">📖 阅读 / 背诵</button>' +
+          '<button class="btn btn-sm' + (readToday ? ' btn-ghost' : ' btn-primary') + '" data-act="sp-read" data-sid="' + sc.id + '"' + (readToday ? ' disabled' : '') + '>' + (readToday ? '✓ 今日已读' : '今天读了') + '</button>' +
+          '<button class="btn btn-sm' + (reciteToday ? ' btn-ghost' : ' btn-primary') + '" data-act="sp-recite" data-sid="' + sc.id + '"' + (reciteToday ? ' disabled' : '') + '>' + (reciteToday ? '✓ 今日已背' : '今天背了') + '</button>' +
           '</div></div>';
       });
       body += '</div>';
     }
-
-    /* 可选凭证区：练习台鼓励传、不强制。归属当日练习台核心任务。 */
-    body += '<div class="practice-evi">' +
-      '<div class="practice-evi-head">📎 留个学习痕迹（选填）</div>' +
-      evidenceZoneHTML('pEv', false) +
-      '</div>';
 
     openModal({
       title: '📚 练习台 · ' + (practiceTab === 'interview' ? '面试问答' : '导游词'),
@@ -3115,6 +3118,14 @@
         /* 切换 面试问答 / 导游词 两个 tab（弹窗内按钮需自行绑定，openModal 不会自动接线） */
         $$('[data-act="practice-tab"]', m).forEach(function (b) {
           b.onclick = function () { openPracticePanel(b.dataset.tab); };
+        });
+        /* 进入单篇导游词阅读/背诵器 */
+        $$('[data-act="sp-open"]', m).forEach(function (b) {
+          b.onclick = function () {
+            const sid = b.dataset.sid;
+            const sc = D.SCRIPTS.filter(function (x) { return x.id === sid; })[0];
+            if (sc) openScriptReader(sc);
+          };
         });
         /* 答案展开 */
         $$('[data-act="qa-reveal"]', m).forEach(function (b) {
@@ -3164,6 +3175,106 @@
             }
             render();
             openPracticePanel('script');
+          };
+        });
+      }
+    });
+  }
+
+  /* ---------------- 导游词阅读 / 背诵器 ----------------
+     进入单篇导游词：① 照着读/背（显示正文）② 隐藏内容自测 ③ 写背诵大纲笔记。 */
+  function openScriptReader(sc) {
+    const sid = sc.id;
+    if (!S.scripts[sid]) S.scripts[sid] = { read: 0, recite: 0, mastered: false, lastAt: 0, notes: '' };
+    const st = S.scripts[sid];
+    const info = window.Store.currentPhase();
+    const reciteMode = info.day >= D.PRACTICE.RECITE_START_DAY;
+    const pEv = { photo: null, file: null, audios: [] };
+    const hasContent = !!(sc.content && sc.content.trim());
+
+    let body = '<div class="reader-head">' + esc(sc.name) +
+      '<div class="reader-sub">' + esc(sc.place) + ' ｜ ' + esc(sc.group) + ' ｜ 约 ' + sc.minutes + ' 分钟</div></div>';
+
+    /* 模式切换：照着读/背 ↔ 隐藏内容自测 */
+    body += '<div class="reader-toolbar">' +
+      '<button class="btn btn-sm btn-primary" id="reader-toggle" data-act="reader-toggle">🔍 隐藏内容（自测背诵）</button>' +
+      '<span class="reader-mode-hint" id="reader-mode-hint">' + (reciteMode ? '当前阶段：默讲' : '当前阶段：通读') + '</span>' +
+      '</div>';
+
+    /* 正文区：有 content 显示全文；否则退化为大纲 */
+    body += '<div class="reader-content" id="reader-content">';
+    if (hasContent) {
+      body += '<div class="script-text" id="script-text">' + esc(sc.content).replace(/\n/g, '<br>') + '</div>';
+    } else {
+      body += '<div class="script-flow big">' + sc.nodes.map(function (n) { return '<span>📍 ' + esc(n) + '</span>'; }).join('') + '</div>' +
+        '<div class="hint">这篇还没录入完整正文，先按大纲点背。把正文发我或贴进来，我就能给你完整文本对照。</div>';
+    }
+    body += '</div>';
+
+    /* 背诵大纲笔记（自动保存） */
+    body += '<div class="reader-notes">' +
+      '<div class="reader-notes-head">📝 我的背诵大纲笔记</div>' +
+      '<textarea id="reader-notes" class="notes-area" placeholder="写你的背诵大纲 / 易忘点 / 顺口溜 / 串词……（自动保存，存在本机）">' + esc(st.notes || '') + '</textarea>' +
+      '</div>';
+
+    /* 可选凭证：阅读/背诵时顺手留痕，归属当日导游词任务 */
+    body += '<div class="practice-evi">' +
+      '<div class="practice-evi-head">📎 留个学习痕迹（选填）</div>' +
+      evidenceZoneHTML('pEv', false) +
+      '</div>';
+
+    /* 完成按钮 */
+    body += '<div class="reader-actions">' +
+      '<button class="btn btn-primary" data-act="sp-read" data-sid="' + sid + '">今天读了这篇</button>' +
+      '<button class="btn btn-primary" data-act="sp-recite" data-sid="' + sid + '">今天背了这篇</button>' +
+      '</div>';
+
+    openModal({
+      title: '🎤 ' + esc(sc.name),
+      body: body, wide: true, dismissable: true,
+      foot: '<button class="btn btn-ghost" id="reader-close">关闭</button>',
+      onMount: function (m) {
+        $('#reader-close', m).onclick = closeModal;
+        wireEvidence('pEv', m, pEv);
+
+        /* 隐藏 / 显示内容 */
+        var hidden = false;
+        const toggle = $('#reader-toggle', m);
+        if (toggle) toggle.onclick = function () {
+          hidden = !hidden;
+          const t = $('#script-text', m);
+          if (t) t.style.display = hidden ? 'none' : 'block';
+          toggle.textContent = hidden ? '👁 显示内容（对照检查）' : '🔍 隐藏内容（自测背诵）';
+          toggle.classList.toggle('btn-ghost', hidden);
+          toggle.classList.toggle('btn-primary', !hidden);
+        };
+
+        /* 笔记自动保存 */
+        const ta = $('#reader-notes', m);
+        if (ta) ta.oninput = function () {
+          if (!S.scripts[sid]) S.scripts[sid] = { read: 0, recite: 0, mastered: false, lastAt: 0, notes: '' };
+          S.scripts[sid].notes = ta.value;
+          window.Store.save();
+        };
+
+        /* 读 / 背（复用练习台逻辑 + 可选凭证） */
+        $$('[data-act="sp-read"], [data-act="sp-recite"]', m).forEach(function (b) {
+          b.onclick = function () {
+            const type = b.dataset.act === 'sp-read' ? 'read' : 'recite';
+            const snap = { photo: pEv.photo, file: pEv.file, audios: pEv.audios.slice() };
+            const tk = window.Study.coreTaskByLib('p_script');
+            const r = window.Study.finishScriptCore(sid, type);
+            if (snap.photo || snap.file || snap.audios.length) {
+              storePracticeEvidence(snap, tk ? tk.uid : null, '导游词练习凭证');
+            }
+            if (r.ok && r.taskDone && r.task) {
+              toast('🎤 今日导游词任务完成：+' + r.task.reward.tickets + ' 券 / +' + r.task.reward.beans + ' 豆', 'ok', 5000);
+              confetti(42); playCheer();
+            } else if (!r.ok) {
+              toast('❌ ' + (r.msg || '记录失败'), 'err');
+            }
+            render();
+            openScriptReader(sc);
           };
         });
       }
