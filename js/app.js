@@ -545,6 +545,8 @@
     else if (curTab === 'evidence') v.innerHTML = viewEvidence();
     else if (curTab === 'me') v.innerHTML = viewMe();
     else if (curTab === 'help') v.innerHTML = viewHelp();
+    else if (curTab === 'docs') v.innerHTML = viewDocs();
+    else if (curTab === 'notes') v.innerHTML = viewNotes();
     if (curTab === 'garden') startPark(); else stopPark();
     if (curTab === 'study') studySig = studySignature();
     wireView();
@@ -1769,6 +1771,125 @@
     });
   }
 
+  /* ---------------- 资料库 ---------------- */
+  function viewDocs() {
+    let h = '<div class="panel">';
+    h += '<div class="panel-head"><h2>📚 资料库</h2>' +
+      '<span class="hint">随手翻、随时查的复习资料（图片型 PDF，内嵌阅读器）</span></div>';
+    h += '<div class="doc-list">';
+    const docs = (D.DOCS || []);
+    if (!docs.length) {
+      h += '<div class="empty">还没有资料。</div>';
+    } else {
+      docs.forEach(function (d) {
+        h += '<div class="doc-card">' +
+          '<div class="doc-tag">' + esc(d.kind) + '</div>' +
+          '<div class="doc-main">' +
+            '<div class="doc-title">' + esc(d.title) + '</div>' +
+            '<div class="doc-desc">' + esc(d.desc) + '</div>' +
+            '<div class="doc-meta">' + d.pages + ' 页</div>' +
+          '</div>' +
+          '<button class="btn btn-sm btn-primary" data-act="doc-open" data-id="' + d.id + '">📖 打开</button>' +
+        '</div>';
+      });
+    }
+    h += '</div>';
+    h += '<div class="hint" style="margin-top:10px">打开资料后，在阅读器里按 <b>Ctrl / ⌘ + F</b> 就能在当前文档里搜关键词。</div>';
+    h += '</div>';
+    return h;
+  }
+
+  function openDocViewer(doc) {
+    openModal({
+      title: '📖 ' + doc.title,
+      wide: true,
+      body: '<div class="doc-viewer"><iframe class="doc-frame" src="' + doc.file + '" title="' + esc(doc.title) + '"></iframe></div>',
+      foot: '<button class="btn" id="doc-ext">🔗 新窗口打开</button>',
+      onMount: function (mask) {
+        const ext = $('#doc-ext', mask);
+        if (ext) ext.onclick = function () { window.open(doc.file, '_blank'); };
+      }
+    });
+  }
+
+  /* ---------------- 我的笔记 ---------------- */
+  function viewNotes() {
+    let h = '<div class="panel">';
+    h += '<div class="panel-head"><h2>📝 我的笔记</h2>' +
+      '<span class="hint">随手记、随手传，进度都存这台设备里</span></div>';
+
+    /* 新建文字笔记 */
+    h += '<div class="note-form">' +
+      '<div class="field"><label>标题</label>' +
+        '<input type="text" id="note-title" maxlength="60" placeholder="例如：石林地质小抄"></div>' +
+      '<div class="field"><label>内容</label>' +
+        '<textarea id="note-body" class="note-area" placeholder="把易混点、口诀、今天卡住的地方写下来…"></textarea></div>' +
+      '<button class="btn btn-primary" data-act="note-new">💾 保存笔记</button>' +
+    '</div>';
+
+    /* 上传笔记文件 */
+    h += '<div class="note-form" style="margin-top:14px">' +
+      '<div class="panel-head" style="margin-bottom:8px"><h3 style="font-size:15px">📎 上传笔记文件</h3></div>' +
+      '<div class="hint">支持 .txt / .md（直接存文字）与 .pdf / 图片（原文件留存，随时打开看）。</div>' +
+      '<div style="margin-top:8px"><input type="file" id="note-file" ' +
+        'accept=".txt,.md,.pdf,.png,.jpg,.jpeg,.webp,.gif,text/plain,application/pdf,image/*"></div>' +
+      '<button class="btn" data-act="note-upload" style="margin-top:8px">⬆️ 上传这份文件</button>' +
+    '</div>';
+    h += '</div>';
+
+    /* 列表 */
+    h += '<div class="panel">';
+    h += '<div class="panel-head"><h2>🗒️ 全部笔记</h2><span class="hint">共 ' + (S.notes || []).length + ' 条</span></div>';
+    if (!(S.notes || []).length) {
+      h += '<div class="empty">还没有笔记。上面写一条，或上传一份文件，复习时随时回来翻。</div>';
+    } else {
+      h += '<div class="note-list">';
+      S.notes.forEach(function (n) {
+        h += '<div class="note-row">' +
+          '<div class="note-info">' +
+            '<div class="note-title">' + esc(n.title) + '</div>' +
+            '<div class="note-meta">' + (n.kind === 'file' ? '📄 文件' : '✍️ 文字') + ' ｜ ' +
+              n.sizeKB + ' KB ｜ ' + fmtWhen(n.at) + '</div>' +
+          '</div>' +
+          '<div class="note-acts">' +
+            '<button class="btn btn-sm" data-act="note-open" data-id="' + n.id + '">👁 查看</button>' +
+            '<button class="btn btn-sm btn-warn" data-act="note-del" data-id="' + n.id + '">删除</button>' +
+          '</div>' +
+        '</div>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function openNoteViewer(n) {
+    if (n.kind === 'text') {
+      openModal({
+        title: '📝 ' + n.title,
+        body: '<div class="note-view"><div class="note-view-meta">' + fmtWhen(n.at) + '</div>' +
+          '<div class="note-text">' + esc(n.text || '（空笔记）') + '</div></div>'
+      });
+      return;
+    }
+    if (!window.Store.getNoteBlob) { toast('当前环境不支持读取文件笔记。', 'err'); return; }
+    window.Store.getNoteBlob(n.id).then(function (blob) {
+      if (!blob) { toast('⚠️ 这份笔记的原文件丢了（可能换过浏览器 / 清过缓存）。', 'err'); return; }
+      const url = URL.createObjectURL(blob);
+      openModal({
+        title: '📄 ' + n.title,
+        wide: true,
+        body: '<div class="doc-viewer"><iframe class="doc-frame" src="' + url + '"></iframe></div>',
+        foot: '<button class="btn" id="note-ext">🔗 新窗口打开</button>',
+        onClose: function () { try { URL.revokeObjectURL(url); } catch (e) {} },
+        onMount: function (mask) {
+          const ext = $('#note-ext', mask);
+          if (ext) ext.onclick = function () { window.open(url, '_blank'); };
+        }
+      });
+    });
+  }
+
   /* ---------------- 帮助页 ---------------- */
   function viewHelp() {
     let h = '<div class="panel help">';
@@ -1964,6 +2085,63 @@
     if (act === 'ev-del') {
       if (!confirm('确定删除这份凭证？删除后无法恢复。')) return;
       window.Store.removeEvidence(ds.id).then(function () { renderView(); toast('已删除。', 'ok'); });
+      return;
+    }
+    if (act === 'doc-open') {
+      const d = (D.DOCS || []).filter(function (x) { return x.id === ds.id; })[0];
+      if (d) openDocViewer(d); else toast('找不到这份资料。', 'err');
+      return;
+    }
+    if (act === 'note-new') {
+      const title = ($('#note-title') || {}).value || '';
+      const body = ($('#note-body') || {}).value || '';
+      if (!body.trim() && !title.trim()) { toast('写点什么再保存吧～', 'warn'); return; }
+      window.Store.addNote({ kind: 'text', title: title, text: body }).then(function () {
+        toast('💾 笔记已保存。', 'ok');
+        renderView();
+      });
+      return;
+    }
+    if (act === 'note-upload') {
+      const inp = $('#note-file');
+      const file = inp && inp.files && inp.files[0];
+      if (!file) { toast('先选一个文件再上传。', 'warn'); return; }
+      const name = file.name;
+      const isText = /\.(txt|md)$/i.test(name) || file.type === 'text/plain' ||
+        file.type === 'text/markdown' || file.type === 'text/x-markdown';
+      if (isText) {
+        if (typeof file.text === 'function') {
+          file.text().then(function (txt) {
+            window.Store.addNote({ kind: 'text', title: name, text: txt }).then(function () {
+              toast('📝 已存入文字笔记。', 'ok'); renderView();
+            });
+          }).catch(function () { toast('读取文件失败。', 'err'); });
+        } else {
+          /* 老环境：降级用 FileReader */
+          const fr = new FileReader();
+          fr.onload = function () {
+            window.Store.addNote({ kind: 'text', title: name, text: String(fr.result) }).then(function () {
+              toast('📝 已存入文字笔记。', 'ok'); renderView();
+            });
+          };
+          fr.onerror = function () { toast('读取文件失败。', 'err'); };
+          fr.readAsText(file);
+        }
+      } else {
+        window.Store.addNote({ kind: 'file', title: name, blob: file, mime: file.type }).then(function () {
+          toast('📄 文件已上传，随时可看。', 'ok'); renderView();
+        });
+      }
+      return;
+    }
+    if (act === 'note-open') {
+      const n = (S.notes || []).filter(function (x) { return x.id === ds.id; })[0];
+      if (n) openNoteViewer(n); else toast('找不到这条笔记。', 'err');
+      return;
+    }
+    if (act === 'note-del') {
+      if (!confirm('删除这条笔记？删除后无法恢复。')) return;
+      window.Store.removeNote(ds.id).then(function () { renderView(); toast('已删除。', 'ok'); });
       return;
     }
     if (act === 'export') return doExport();

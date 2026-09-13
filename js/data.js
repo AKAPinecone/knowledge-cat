@@ -585,8 +585,36 @@ window.GAME_DATA = (function () {
     { key: 'AE', name: '主动实验', sub: 'Active Experimentation', emoji: '🚀', color: '#C4708E', desc: '用出去。模考、默讲、讲给别人听，检验是否真的会了。' }
   ];
 
+  /* ---------- 资料库（松果随时翻阅/查询的复习资料，image-only PDF 直接内嵌阅读器） ---------- */
+  const DOCS = [
+    {
+      id: 'doc_wrong_0913',
+      kind: '错题',
+      title: '0913 全部错题',
+      file: 'assets/docs/0913_wrong_questions.pdf',
+      pages: 83,
+      desc: '9/13 做错的题汇总（全导 / 地导 / 业务 / 法规）——回看错题、查漏补缺。'
+    },
+    {
+      id: 'doc_interview_1121',
+      kind: '面试',
+      title: '导游综合知识问答 11-21',
+      file: 'assets/docs/interview_qa_11_21.pdf',
+      pages: 10,
+      desc: '面试综合知识问答第 11–21 题（科目五·中文类）——配合「今日投喂·面试」照着练。'
+    },
+    {
+      id: 'doc_textbook_ops_ch3',
+      kind: '课本',
+      title: '导游业务·第三章 导游工作相关知识',
+      file: 'assets/docs/textbook_ops_ch3.pdf',
+      pages: 69,
+      desc: '十一版《导游业务》第三章——系统复习导游工作相关知识的底稿。'
+    }
+  ];
+
   return {
-    VERSION: 'v1.13',
+    VERSION: 'v1.14',
     EXAM_DATE: EXAM_DATE,
     PHASES: PHASES,
     BOOK_DAYS: BOOK_DAYS,
@@ -613,6 +641,7 @@ window.GAME_DATA = (function () {
     TASK_LIBRARY: TASK_LIBRARY,
     TASK_MODELS: TASK_MODELS,
     ACHIEVEMENTS: ACHIEVEMENTS,
-    KOLB: KOLB
+    KOLB: KOLB,
+    DOCS: DOCS
   };
 })();

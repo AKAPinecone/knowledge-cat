@@ -80,6 +80,7 @@ window.Store = (function () {
       scripts: {},          /* scriptId -> {read, recite, mastered, lastAt} */
       feynman: [],          /* 费曼卡 */
       evidence: [],         /* 证据索引 */
+      notes: [],            /* 我的笔记（文字内联；文件存 IndexedDB，索引在此） */
       log: []
     };
   }
@@ -382,6 +383,38 @@ window.Store = (function () {
     });
   }
 
+  /* ---------------- 我的笔记（文字内联 + 文件存 IndexedDB） ---------------- */
+  function addNote(opts) {
+    /* opts: {title, kind:'text'|'file', text, blob, mime} */
+    const id = 'nt_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const entry = {
+      id: id,
+      title: (opts.title || '未命名笔记').trim().slice(0, 60) || '未命名笔记',
+      kind: opts.kind === 'file' ? 'file' : 'text',
+      mime: opts.mime || (opts.blob && opts.blob.type) || '',
+      sizeKB: opts.blob ? Math.round(opts.blob.size / 1024) : Math.round(((opts.text || '').length * 2) / 1024),
+      text: opts.text || '',
+      at: Date.now()
+    };
+    const p = opts.blob ? idbPut(id, opts.blob) : Promise.resolve(true);
+    return p.then(function (ok) {
+      entry.stored = ok ? 'idb' : (opts.blob ? 'none' : 'inline');
+      state.notes.unshift(entry);
+      state.stats.notes = (state.stats.notes || 0) + 1;
+      save(true);
+      return entry;
+    });
+  }
+
+  function getNoteBlob(id) { return idbGet(id); }
+
+  function removeNote(id) {
+    return idbDel(id).then(function () {
+      state.notes = state.notes.filter(function (n) { return n.id !== id; });
+      save(true);
+    });
+  }
+
   /* ---------------- 存档（本地快照 + 可带走的存档码） ----------------
      这个游戏没有服务器，所以「存档」就是一枚能带走的快照：
      每完成一项任务自动存一份，随时读档回到那一格；存档码抄到别的设备，
@@ -584,6 +617,7 @@ window.Store = (function () {
     daysLeft: daysLeft, planDay: planDay, currentPhase: currentPhase,
     pushLog: pushLog,
     addEvidence: addEvidence, getEvidenceBlob: getEvidenceBlob, removeEvidence: removeEvidence,
+    addNote: addNote, getNoteBlob: getNoteBlob, removeNote: removeNote,
     exportAll: exportAll, importAll: importAll,
     makeSave: makeSave, listSaves: listSaves, loadSave: loadSave,
     removeSave: removeSave, markSavedTaken: markSavedTaken, saveMeta: saveMeta,
