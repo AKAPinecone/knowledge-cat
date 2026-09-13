@@ -423,6 +423,9 @@
     bindTabs();
     setupKeyboardShift();
     render();
+    /* 页脚版本号：方便松果判断是否更新（随发版 bump D.VERSION） */
+    const fv = document.getElementById('foot-version');
+    if (fv) fv.textContent = '版本 ' + (D.VERSION || '?');
     afterOffline(report);
     if (dayReset) toast('☀️ 新的一天，投喂单已经刷新。', 'ok');
 
@@ -713,13 +716,12 @@
     const scriptModeText = phInfo.day < D.PRACTICE.RECITE_START_DAY
       ? '前 12 天：每天通读 1 篇'
       : '第 13 天起：每天默讲 1 篇';
-    const interviewCnt = window.Study.interviewCount();
     h += '<div class="panel practice-card-panel">';
     h += '<div class="panel-head"><h2>📚 练习台</h2><span class="hint">面试问答、导游词，点进去随时练</span></div>';
     h += '<div class="practice-card" data-act="practice-open">' +
       '<div class="practice-card-main">' +
       '<div class="practice-card-title">🗣️ 面试问答</div>' +
-      '<div class="practice-card-meta">今日已练 ' + interviewCnt + ' / ' + D.PRACTICE.INTERVIEW_TARGET + ' 道</div>' +
+      '<div class="practice-card-meta">交一个凭证即完成</div>' +
       '</div>' +
       '<div class="practice-card-main">' +
       '<div class="practice-card-title">🎤 导游词</div>' +
@@ -2859,6 +2861,7 @@
     if (v.type === 'opinion') parts.push('传一张导游词练习截图 + 写/录一句「看法」（看法可打字可录音）');
     if (v.type === 'reading') parts.push('选课本 + 填「今天读了什么」（笔记和照片选填）');
     if (v.type === 'practice') parts.push('在练习台完成对应练习');
+    else if (v.type === 'evidence') parts.push('交一个面试练习凭证即可（录音 / 截图 / 文件 任一）');
     else if (task.pick === 'book') parts.push('选定这套题属于哪一科');
     if (task.need && task.need.photo) parts.push('凭证截图');
     if (task.need && task.need.feynman) parts.push('费曼卡 ×' + task.need.feynman);
@@ -3052,8 +3055,6 @@
     const pEv = { photo: null, file: null, audios: [] };
     const info = window.Store.currentPhase();
     const reciteMode = info.day >= D.PRACTICE.RECITE_START_DAY;
-    const interviewDone = window.Study.interviewCount();
-    const interviewGoal = D.PRACTICE.INTERVIEW_TARGET;
 
     let body = '<div class="practice-tabs">' +
       '<button class="practice-tab' + (practiceTab === 'interview' ? ' on' : '') + '" data-act="practice-tab" data-tab="interview">🗣️ 面试问答</button>' +
@@ -3062,26 +3063,24 @@
 
     if (practiceTab === 'interview') {
       body += '<div class="practice-hint">' +
-        '<div>今日已练 <b>' + interviewDone + '</b> / ' + interviewGoal + ' 道</div>' +
-        '<div class="hint">点题看参考答案，练过就点「我练过这一道」。练够 ' + interviewGoal + ' 道，今日面试任务自动完成。</div>' +
+        '<div>🗣️ 面试题库（共 <b>' + D.INTERVIEW_QA.length + '</b> 道，会越来越多）</div>' +
+        '<div class="hint">点「看答案」对照着练。每天只要在「投喂单」给面试交一个凭证（录音 / 截图 / 文件 任一）就算今天练过了——不必一题一题点。</div>' +
         '</div>';
       body += '<div class="qa-list">';
       D.INTERVIEW_QA.forEach(function (q, i) {
-        const done = (window.Study.interviewToday().indexOf(q.id) >= 0);
-        body += '<div class="qa-item' + (done ? ' done' : '') + '" data-qid="' + q.id + '">' +
+        body += '<div class="qa-item" data-qid="' + q.id + '">' +
           '<div class="qa-head"><span class="qa-no">' + (i + 1) + '</span><span class="qa-q">' + esc(q.q) + '</span></div>' +
           '<div class="qa-answer" id="qa-ans-' + q.id + '">' + esc(q.a).replace(/\\n/g, '<br>') + '</div>' +
           '<div class="qa-actions">' +
           '<button class="btn btn-sm btn-ghost" data-act="qa-reveal" data-qid="' + q.id + '">👁 看答案</button>' +
-          '<button class="btn btn-sm btn-primary' + (done ? ' hidden' : '') + '" data-act="qa-mark" data-qid="' + q.id + '">✓ 我练过这一道</button>' +
-          '<span class="qa-done"' + (done ? '' : ' style="display:none"') + '>✅ 已练</span>' +
           '</div></div>';
       });
       body += '</div>';
-      /* 可选凭证区：面试练习鼓励传、不强制。归属当日面试核心任务。 */
+      /* 完成今日面试任务：交一个凭证即可（不再逐题累计） */
       body += '<div class="practice-evi">' +
-        '<div class="practice-evi-head">📎 留个学习痕迹（选填）</div>' +
-        evidenceZoneHTML('pEv', false) +
+        '<div class="practice-evi-head">✅ 完成今日面试任务</div>' +
+        '<div class="hint">回到「投喂单」点「面试 → 去提交」，交一个凭证即可完成。也可以直接点：</div>' +
+        '<button class="btn btn-primary" data-act="iv-submit">📎 交一个凭证完成今日面试</button>' +
         '</div>';
     } else {
       body += '<div class="practice-hint">' +
@@ -3135,24 +3134,12 @@
             if (ans) { ans.style.display = 'block'; b.style.display = 'none'; }
           };
         });
-        /* 标记练过 */
-        $$('[data-act="qa-mark"]', m).forEach(function (b) {
+        /* 完成今日面试：交一个凭证（走验证弹窗，不再逐题累计） */
+        $$('[data-act="iv-submit"]', m).forEach(function (b) {
           b.onclick = function () {
-            const qid = b.dataset.qid;
-            /* 先抓住当前面板里可选的凭证，避免重渲后丢失 */
-            const snap = { photo: pEv.photo, file: pEv.file, audios: pEv.audios.slice() };
             const tk = window.Study.coreTaskByLib('p_interview');
-            const r = window.Study.finishInterview(qid);
-            if (snap.photo || snap.file || snap.audios.length) {
-              storePracticeEvidence(snap, tk ? tk.uid : null, '面试问答练习凭证');
-            }
-            if (r.taskDone) {
-              toast('🗣️ 今日面试问答任务完成：+' + r.task.reward.tickets + ' 券 / +' + r.task.reward.beans + ' 豆', 'ok', 5000);
-              confetti(42); playCheer();
-            }
-            render();
-            openPracticePanel('interview');
-            if (!r.taskDone) toast('已记录，今日 ' + r.count + ' / ' + D.PRACTICE.INTERVIEW_TARGET + ' 道', 'ok', 2000);
+            if (!tk) { toast('今日面试任务还没生成', 'err'); return; }
+            openVerifyModal(tk);
           };
         });
         /* 导游词读/背 */

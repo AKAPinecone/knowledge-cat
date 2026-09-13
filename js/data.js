@@ -53,8 +53,10 @@ window.GAME_DATA = (function () {
     { id: 's12', name: '普洱景迈山古茶林文化景观', group: '商务团', place: '普洱·澜沧', nodes: ['景区概况', '民族团结誓词碑', '景迈山古茶林', '普洱茶文化', '翁基古寨', '糯干古寨'], minutes: 8 }
   ];
 
-  /* ---------- 面试综合知识问答（11 题） ----------
-     这些题只放进「练习台」，不进破壳测验题库。 */
+  /* ---------- 面试综合知识问答（题库会逐步增大） ----------
+     这些题只放进「练习台」当学习材料浏览，不进破壳测验题库。
+     松果会陆陆续续上传，最终 200+ 道；此处先放占位若干。
+     注意：每日「面试问答训练」核心任务不再逐题点选——交一个凭证（录音/截图/文件任一）即完成。 */
   const INTERVIEW_QA = [
     { id: 'iq01', q: '在第43届世界遗产大会上，中国有哪几个地方入选世界遗产？截止2020年7月，我国世界遗产有几项？在世界排名第几名？',
       a: '中国黄（渤）海候鸟栖息地（第一期）和良渚古城遗址列入《世界遗产名录》。截止2020年7月，中国拥有的世界遗产数量达到55项，位居世界第一位。' },
@@ -82,8 +84,9 @@ window.GAME_DATA = (function () {
 
   /* ---------- 练习台配置 ----------
      RECITE_START_DAY：第几天起从「读导游词」切换到「背导游词」
-     INTERVIEW_TARGET：面试问答每日核心任务需练够多少题 */
-  const PRACTICE = { RECITE_START_DAY: 13, INTERVIEW_TARGET: 10 };
+     面试问答不再逐题累计（题库会越来越大），改为「交一个凭证即完成」，
+     故不再有 INTERVIEW_TARGET。 */
+  const PRACTICE = { RECITE_START_DAY: 13 };
 
   /* ---------- 物种池 ----------
    * kind: plant 植物 / fungus 真菌 / algae 藻类 → 温室
@@ -410,11 +413,11 @@ window.GAME_DATA = (function () {
       verify: { type: 'practice' }
     },
     {
-      id: 'p_interview', phase: [1, 2, 3], title: '面试问答训练 10 道', core: true, coreLabel: '面试',
+      id: 'p_interview', phase: [1, 2, 3], title: '面试问答训练', core: true, coreLabel: '面试',
       kolb: 'AE', icon: '🗣️',
-      desc: '科目五面试：每天在练习台里练 10 道综合知识问答题。点题看参考答案，觉得练过就标记「我练过这一道」。练够 10 道即完成今日面试任务。',
+      desc: '科目五面试：每天练一练综合知识问答。题库会越来越多（你慢慢传，不用一次传齐）。完成方式很简单——回到「投喂单」点「面试 → 去提交」，交一个凭证（录音 / 截图 / 文件 任一）就算今天练过了，不必一题一题点。',
       reward: { tickets: 1, beans: 15 },
-      verify: { type: 'practice' }
+      verify: { type: 'evidence' }
     },
 
     /* ===== 加餐：不计入每日 7 件，做不做都行 ===== */
@@ -583,6 +586,7 @@ window.GAME_DATA = (function () {
   ];
 
   return {
+    VERSION: 'v1.13',
     EXAM_DATE: EXAM_DATE,
     PHASES: PHASES,
     BOOK_DAYS: BOOK_DAYS,

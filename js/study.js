@@ -182,39 +182,20 @@ window.Study = (function () {
   }
 
   /* ================= 练习台：今日进度 ================= */
-  function interviewToday(date) {
-    if (!S.study.interviewPractice) S.study.interviewPractice = {};
-    const k = date || window.Store.today();
-    if (!S.study.interviewPractice[k]) S.study.interviewPractice[k] = [];
-    return S.study.interviewPractice[k];
-  }
+  /* 导游词：记录今日已读 / 已背的篇目（用于「今天读了/背了」按钮防重复点击） */
   function scriptPracticeToday(date) {
     if (!S.study.scriptPractice) S.study.scriptPractice = {};
     const k = date || window.Store.today();
     if (!S.study.scriptPractice[k]) S.study.scriptPractice[k] = { read: [], recite: [] };
     return S.study.scriptPractice[k];
   }
-  function interviewCount(date) { return interviewToday(date).length; }
   function scriptDidToday(scriptId, type, date) {
     const p = scriptPracticeToday(date);
     const arr = type === 'read' ? p.read : p.recite;
     return arr.indexOf(scriptId) >= 0;
   }
-
-  /* 在练习台里标记练过某道面试题；练够目标题数时自动结算今日面试核心任务 */
-  function finishInterview(qid) {
-    const arr = interviewToday();
-    if (arr.indexOf(qid) < 0) arr.push(qid);
-    window.Store.save(true);
-
-    const task = coreTaskByLib('p_interview');
-    if (!task || task.state === 'done') return { ok: true, taskDone: false, count: arr.length, task: task };
-    if (arr.length >= D.PRACTICE.INTERVIEW_TARGET) {
-      const r = finish(task.uid, { practice: true, summary: '练习台面试问答已练 ' + arr.length + ' 道' });
-      return { ok: r.ok, taskDone: r.ok, count: arr.length, task: task, errs: r.errs };
-    }
-    return { ok: true, taskDone: false, count: arr.length, task: task };
-  }
+  /* 面试问答：不再逐题点选、不再累计——每日任务改为「交一个凭证即完成」
+     （凭证在投喂单的验证弹窗里提交，走 Study.finish）。此处不再维护逐题练习记录。 */
 
   /* 在练习台里标记今天读了/背了某篇导游词，并完成当日导游词核心任务 */
   function finishScriptCore(scriptId, type) {
@@ -681,8 +662,7 @@ window.Study = (function () {
     kolbProgress: kolbProgress, todayTaskStats: todayTaskStats,
     quizProgress: quizProgress, addUserTask: addUserTask, removeUserTask: removeUserTask,
     evidenceFor: evidenceFor,
-    interviewCount: interviewCount,
-    finishInterview: finishInterview, finishScriptCore: finishScriptCore,
-    interviewToday: interviewToday, scriptPracticeToday: scriptPracticeToday
+    finishScriptCore: finishScriptCore,
+    scriptPracticeToday: scriptPracticeToday
   };
 })();
