@@ -749,6 +749,9 @@
     let needTag = [];
     if (t.need && t.need.photo) needTag.push('📸 凭证截图');
     if (t.need && t.need.feynman) needTag.push('🗣️ 费曼卡 ×' + t.need.feynman);
+    /* 所有走提交弹窗的任务都需至少提交一样凭证（图片/文件/录音）；自带截图或录音的任务已在其专属标签里体现 */
+    const needsUniversalEvidence = v.type !== 'practice' && !((t.need && t.need.photo) || v.type === 'record');
+    if (needsUniversalEvidence) needTag.push('📎 凭证必交');
     if (v.type === 'reading') needTag.push('📎 笔记 / 照片选填');
     else if (t.pick === 'book' && t.ctx && t.ctx.bookName) needTag.push('📚 归属：《' + esc(t.ctx.bookName) + '》');
 
@@ -1600,8 +1603,21 @@
   function evIcon(t) {
     if (t === 'photo') return '📸';
     if (t === 'audio') return '🎙️';
+    if (t === 'file') return '📄';
     if (t === 'quiz') return '🧠';
     return '📝';
+  }
+
+  function openEvidenceFile(id) {
+    const e = S.evidence.filter(function (x) { return x.id === id; })[0];
+    if (!e) return toast('凭证不见了', 'warn');
+    window.Store.getEvidenceBlob(id).then(function (blob) {
+      if (!blob) return toast('文件没存下来（浏览器不支持本地数据库）', 'warn');
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      if (!w) toast('浏览器拦了新窗口，可到证据库长按打开', 'warn');
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    });
   }
 
   function viewEvidence() {
@@ -1615,11 +1631,12 @@
     h += '<div style="font-size:13px;color:#5B7263">共 <b>' + S.evidence.length + '</b> 份凭证：文字笔记 ' +
       S.evidence.filter(function (e) { return e.type === 'note'; }).length + ' 条、截图 ' +
       S.evidence.filter(function (e) { return e.type === 'photo'; }).length + ' 张、录音 ' +
-      S.evidence.filter(function (e) { return e.type === 'audio'; }).length + ' 段、破壳测验 ' +
+      S.evidence.filter(function (e) { return e.type === 'audio'; }).length + ' 段、文件 ' +
+      S.evidence.filter(function (e) { return e.type === 'file'; }).length + ' 个、破壳测验 ' +
       S.evidence.filter(function (e) { return e.type === 'quiz'; }).length + ' 份。' +
       '它们只存在这台电脑的浏览器里，导出后就是一份可以自己回看的学习档案。</div>';
     h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">' +
-      ['all:全部', 'note:📝 文字笔记', 'photo:📸 截图', 'audio:🎙️ 录音', 'quiz:🧠 破壳测验'].map(function (x) {
+      ['all:全部', 'note:📝 文字笔记', 'photo:📸 截图', 'audio:🎙️ 录音', 'file:📄 文件', 'quiz:🧠 破壳测验'].map(function (x) {
         const k = x.split(':')[0];
         return '<button class="btn btn-sm ' + (evFilter === k ? 'btn-primary' : '') + '" data-act="ev-filter" data-k="' + k + '">' + x.split(':')[1] + '</button>';
       }).join('') +
@@ -1700,14 +1717,19 @@
           h += '<img class="ev-thumb" src="' + e.thumb + '" alt="凭证">';
         } else if (e.type === 'audio') {
           h += '<div class="ev-thumb" style="font-size:26px">🎙️</div>';
+        } else if (e.type === 'file') {
+          h += '<div class="ev-thumb" style="font-size:26px">📄</div>';
         } else {
           h += '<div class="ev-thumb" style="font-size:26px">📝</div>';
         }
         h += '<div class="ev-body">';
-        h += '<div class="ev-title">' + (e.type === 'photo' ? '📸 ' : e.type === 'audio' ? '🎙️ ' : '📝 ') + esc(e.label || '凭证') + '</div>';
+        h += '<div class="ev-title">' + (e.type === 'photo' ? '📸 ' : e.type === 'audio' ? '🎙️ ' : e.type === 'file' ? '📄 ' : '📝 ') + esc(e.label || '凭证') + '</div>';
         h += '<div class="ev-meta">' + fmtWhen(e.at) + (e.duration ? ' ｜ 时长 ' + fmtClock(e.duration) : '') +
           (e.sizeKB ? ' ｜ ' + e.sizeKB + ' KB' : '') + (e.store === 'ls-only' ? ' ｜ ⚠️ 文件未持久化（浏览器不支持本地数据库）' : '') + '</div>';
         if (e.text) h += '<div class="ev-text">' + esc(e.text) + '</div>';
+        if (e.type === 'file') {
+          h += '<div style="margin-top:6px"><button class="btn btn-sm" data-act="ev-open" data-id="' + e.id + '">📂 打开文件</button></div>';
+        }
         if (e.type === 'audio') {
           h += '<div style="display:flex;gap:8px;align-items:center;margin-top:6px">' +
             '<button class="btn btn-sm" data-act="play" data-id="' + e.id + '">▶️ 播放录音</button>' +
@@ -1871,6 +1893,7 @@
     const ds = el.dataset;
     if (act === 'practice-open') return openPracticePanel(practiceTab || 'interview');
     if (act === 'practice-tab') return openPracticePanel(ds.tab);
+    if (act === 'ev-open') return openEvidenceFile(ds.id);
     if (act === 'task-verify') return openVerifyModal(window.Study.taskByUid(ds.uid));
     if (act === 'task-log') return showTaskLog(ds.uid);
     if (act === 'task-new') return openTaskBuilder();
@@ -2370,6 +2393,110 @@
     });
   }
 
+  /* 通用凭证上传区：图片 / 文件 / 录音，三选一即可。
+     required=true 用于「提交弹窗」任务（强制至少一样）；required=false 用于练习台（鼓励不强制）。
+     target 须含 {photo, file, audios:[]}，与提交弹窗的 vf 共用结构。 */
+  function evidenceZoneHTML(prefix, required) {
+    return '<div class="field"><label>📎 提交凭证' + (required ? '<span class="req">必交</span>' : '<span class="fh-i">选填</span>') + '</label>' +
+      '<div class="evi-zone">' +
+        '<div class="photo-drop" id="' + prefix + '-drop">传一张图，或把图片拖进来</div>' +
+        '<input type="file" accept="image/*" id="' + prefix + '-img" class="hidden">' +
+        '<input type="file" id="' + prefix + '-file" class="hidden">' +
+        '<div class="evi-btns">' +
+          '<button type="button" class="btn btn-sm" id="' + prefix + '-pickfile">📄 传一个文件</button>' +
+          '<button type="button" class="btn btn-sm rec-btn" id="' + prefix + '-rec">🎙️ 录一段音</button>' +
+        '</div>' +
+        '<div id="' + prefix + '-prev" class="evi-prev"></div>' +
+      '</div>' +
+      '<div class="hintbox">' + (required
+        ? '做了就是做了——传张图、传个文件（PDF / 文档截图都行）、或录段音，随便一样就能结算。'
+        : '顺手留个痕迹：传张图、传个文件、或录段音都行，不强制。') + '</div></div>';
+  }
+
+  function wireEvidence(prefix, m, target) {
+    const drop = $('#' + prefix + '-drop', m), img = $('#' + prefix + '-img', m),
+      file = $('#' + prefix + '-file', m), prev = $('#' + prefix + '-prev', m);
+    function setPrev(t) { prev.innerHTML = '<div class="evi-prev-item">✅ ' + t + '</div>'; }
+    function pickImg(f) {
+      if (!/^image\//.test(f.type)) return toast('请选一张图片', 'warn');
+      drop.textContent = '正在压缩…';
+      window.Study.compressImage(f, 1400, 0.72).then(function (res) {
+        target.photo = { blob: res.blob, thumb: res.thumb, name: f.name };
+        drop.textContent = '✅ 已选图片：' + f.name;
+        setPrev('📸 ' + f.name + '（' + Math.round(res.blob.size / 1024) + ' KB）');
+      }).catch(function (e) { toast('图片处理失败：' + e.message, 'err'); drop.textContent = '重选一张'; });
+    }
+    drop.onclick = function () { img.click(); };
+    drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.style.borderColor = '#8FD3A8'; });
+    drop.addEventListener('dragleave', function () { drop.style.borderColor = ''; });
+    drop.addEventListener('drop', function (e) {
+      e.preventDefault(); drop.style.borderColor = '';
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) pickImg(e.dataTransfer.files[0]);
+    });
+    img.onchange = function () { if (img.files[0]) pickImg(img.files[0]); };
+    $('#' + prefix + '-pickfile', m).onclick = function () { file.click(); };
+    file.onchange = function () {
+      if (!file.files[0]) return;
+      const f = file.files[0];
+      target.file = { blob: f, name: f.name, mime: f.type || 'application/octet-stream', sizeKB: Math.round(f.size / 1024) };
+      setPrev('📄 ' + f.name + '（' + target.file.sizeKB + ' KB）');
+    };
+    const recBtn = $('#' + prefix + '-rec', m);
+    if (recBtn) {
+      recBtn.onclick = function () {
+        const cur = window.Study.getRecorder();
+        if (!cur) {
+          window.Study.startRecord().then(function (r) {
+            if (!r.ok) { toast('❌ ' + r.msg, 'err', 8000); return; }
+            recBtn.className = 'btn btn-warn rec-btn';
+            recBtn.textContent = '⏹ 录音中…（点停止）';
+          });
+        } else {
+          window.Study.stopRecord().then(function (r) {
+            recBtn.className = 'btn btn-sm rec-btn';
+            recBtn.textContent = '🎙️ 再录一段';
+            if (!r.ok) { toast('❌ ' + r.msg, 'err'); return; }
+            if (r.duration < 3) { toast('这一段不到 3 秒，没存。', 'warn'); return; }
+            target.audios.push({ blob: r.blob, duration: r.duration, url: URL.createObjectURL(r.blob) });
+            const d = document.createElement('div');
+            d.className = 'evi-prev-item';
+            d.textContent = '🎙️ 已录 ' + fmtClock(r.duration);
+            prev.appendChild(d);
+          });
+        }
+      };
+    }
+  }
+
+  /* 练习台可选凭证：鼓励传、不强制。在用户标记「练过/读了」时，
+     若 pEv 里带了图片/文件/录音，就顺手存进证据库（归属当日练习台任务）。*/
+  function storePracticeEvidence(target, taskId, label) {
+    if (!taskId) return;
+    const jobs = [];
+    if (target.photo) {
+      jobs.push(window.Store.addEvidence({
+        type: 'photo', taskId: taskId, label: label,
+        blob: target.photo.blob, thumb: target.photo.thumb
+      }));
+    }
+    if (target.file) {
+      jobs.push(window.Store.addEvidence({
+        type: 'file', taskId: taskId, label: label,
+        blob: target.file.blob, mime: target.file.mime,
+        name: target.file.name, sizeKB: target.file.sizeKB
+      }));
+    }
+    (target.audios || []).forEach(function (a) {
+      jobs.push(window.Store.addEvidence({
+        type: 'audio', taskId: taskId, label: label,
+        blob: a.blob, duration: a.duration
+      }));
+    });
+    if (jobs.length) {
+      Promise.all(jobs).then(function () { render(); }).catch(function () {});
+    }
+  }
+
   function openVerifyModal(task) {
     if (!task) return;
     const v = task.verify, need = task.need || {};
@@ -2380,7 +2507,7 @@
     const isReading = v.type === 'reading';
     const isNote = v.type === 'note';
     vf = {
-      task: task, photo: null, feynmanCount: 0,
+      task: task, photo: null, file: null, feynmanCount: 0,
       audios: [],
       bookId: (task.pick === 'book' || isReading) ? (task.ctx.bookId || '') : '',
       reading: { read: '', note: '' }
@@ -2497,6 +2624,13 @@
     /* 费曼卡 */
     if (needFeyn > 0) {
       body += '<div class="field"><label>🗣️ 费曼卡 ×' + needFeyn + '（讲给小白听，粘贴会被记录）</label><div id="vf-fm"></div></div>';
+    }
+
+    /* 通用凭证门槛：所有走提交弹窗的任务，至少提交一样凭证（图片/文件/录音）。
+       已自带必交截图(need.photo)或录音(record)的任务不重复加区，但同样受提交时「至少一样」约束。 */
+    const needEvidenceDedicated = !!need.photo || v.type === 'record';
+    if (!needEvidenceDedicated) {
+      body += evidenceZoneHTML('vf-u', true);
     }
 
     body += '<div id="vf-err"></div>';
@@ -2617,6 +2751,11 @@
           el.oninput = upd; upd();
         }
 
+        /* 通用凭证区（图片/文件/录音，三选一，必交） */
+        if (!needEvidenceDedicated) {
+          wireEvidence('vf-u', m, vf);
+        }
+
         /* 选课本：精读 / 课后练习共用 */
         if (task.pick === 'book' || isReading) {
           $$('.bpick', m).forEach(function (b) {
@@ -2720,6 +2859,8 @@
     else if (task.pick === 'book') parts.push('选定这套题属于哪一科');
     if (task.need && task.need.photo) parts.push('凭证截图');
     if (task.need && task.need.feynman) parts.push('费曼卡 ×' + task.need.feynman);
+    /* 所有走提交弹窗的任务都需至少提交一样凭证（图片/文件/录音） */
+    if (v.type !== 'practice' && !((task.need && task.need.photo) || v.type === 'record')) parts.push('至少提交一样凭证（图片/文件/录音）');
     return parts.join('、');
   }
 
@@ -2796,9 +2937,13 @@
     /* 截图（精读的笔记照片是选填，不拦） */
     if ((task.need && task.need.photo) && !vf.photo) errs.push('缺少凭证截图');
 
+    /* 通用凭证门槛：所有提交弹窗的任务，至少提交一样凭证（图片 / 文件 / 录音） */
+    const hasEvidence = !!(vf.photo || vf.file || (vf.audios && vf.audios.length));
+    if (!hasEvidence) errs.push('请至少提交一样凭证：传一张图、传一个文件、或录一段音');
+
     /* 前置校验：交给 Study.validate 复核（文字登记 / 题量 / 录音 / 看法 / 费曼卡 / 精读登记 / 选书） */
     const proof = {
-      photo: vf.photo, quiz: quiz, feynmanCount: fmCards.length,
+      photo: vf.photo, file: vf.file, quiz: quiz, feynmanCount: fmCards.length,
       reading: reading,
       opinion: opinion,
       note: noteText,
@@ -2824,6 +2969,12 @@
         blob: vf.photo.blob, thumb: vf.photo.thumb
       }));
     }
+    if (vf.file) {
+      jobs.push(window.Store.addEvidence({
+        type: 'file', taskId: task.uid, label: task.title,
+        blob: vf.file.blob, mime: vf.file.mime
+      }));
+    }
     (vf.audios || []).forEach(function (seg, i) {
       jobs.push(window.Store.addEvidence({
         type: 'audio', taskId: task.uid,
@@ -2840,6 +2991,7 @@
     if (opinion && opinion.text) summary.push('写了看法 ' + opinion.text.length + ' 字');
     if (vf.audios && vf.audios.length) summary.push((v.type === 'opinion' ? '看法录音 ' : '录音 ') + vf.audios.length + ' 段 / ' + fmtClock(recTotal));
     if (vf.photo) summary.push(v.type === 'reading' ? '已存笔记照片' : (v.type === 'opinion' ? '已存导游词练习截图' : '已存截图'));
+    if (vf.file) summary.push('已存文件：' + vf.file.name);
     if (reading && reading.bookId) {
       const bk = D.SUBJECTS.filter(function (x) { return x.id === reading.bookId })[0];
       if (bk) {
@@ -2893,6 +3045,8 @@
   let practiceTab = 'interview';
   function openPracticePanel(tab) {
     practiceTab = tab || 'interview';
+    /* 练习台凭证：鼓励传、不强制（用户选了「不强制」） */
+    const pEv = { photo: null, file: null, audios: [] };
     const info = window.Store.currentPhase();
     const reciteMode = info.day >= D.PRACTICE.RECITE_START_DAY;
     const interviewDone = window.Study.interviewCount();
@@ -2944,12 +3098,20 @@
       body += '</div>';
     }
 
+    /* 可选凭证区：练习台鼓励传、不强制。归属当日练习台核心任务。 */
+    body += '<div class="practice-evi">' +
+      '<div class="practice-evi-head">📎 留个学习痕迹（选填）</div>' +
+      evidenceZoneHTML('pEv', false) +
+      '</div>';
+
     openModal({
       title: '📚 练习台 · ' + (practiceTab === 'interview' ? '面试问答' : '导游词'),
       body: body, wide: true, dismissable: true,
       foot: '<button class="btn btn-ghost" id="pr-close">关闭</button>',
       onMount: function (m) {
         $('#pr-close', m).onclick = closeModal;
+        /* 可选凭证区接线（鼓励传、不强制） */
+        wireEvidence('pEv', m, pEv);
         /* 切换 面试问答 / 导游词 两个 tab（弹窗内按钮需自行绑定，openModal 不会自动接线） */
         $$('[data-act="practice-tab"]', m).forEach(function (b) {
           b.onclick = function () { openPracticePanel(b.dataset.tab); };
@@ -2966,7 +3128,13 @@
         $$('[data-act="qa-mark"]', m).forEach(function (b) {
           b.onclick = function () {
             const qid = b.dataset.qid;
+            /* 先抓住当前面板里可选的凭证，避免重渲后丢失 */
+            const snap = { photo: pEv.photo, file: pEv.file, audios: pEv.audios.slice() };
+            const tk = window.Study.coreTaskByLib('p_interview');
             const r = window.Study.finishInterview(qid);
+            if (snap.photo || snap.file || snap.audios.length) {
+              storePracticeEvidence(snap, tk ? tk.uid : null, '面试问答练习凭证');
+            }
             if (r.taskDone) {
               toast('🗣️ 今日面试问答任务完成：+' + r.task.reward.tickets + ' 券 / +' + r.task.reward.beans + ' 豆', 'ok', 5000);
               confetti(42); playCheer();
@@ -2981,7 +3149,13 @@
           b.onclick = function () {
             const sid = b.dataset.sid;
             const type = b.dataset.act === 'sp-read' ? 'read' : 'recite';
+            /* 先抓住当前面板里可选的凭证，避免重渲后丢失 */
+            const snap = { photo: pEv.photo, file: pEv.file, audios: pEv.audios.slice() };
+            const tk = window.Study.coreTaskByLib('p_script');
             const r = window.Study.finishScriptCore(sid, type);
+            if (snap.photo || snap.file || snap.audios.length) {
+              storePracticeEvidence(snap, tk ? tk.uid : null, '导游词练习凭证');
+            }
             if (r.ok && r.taskDone && r.task) {
               toast('🎤 今日导游词任务完成：+' + r.task.reward.tickets + ' 券 / +' + r.task.reward.beans + ' 豆', 'ok', 5000);
               confetti(42); playCheer();
