@@ -72,11 +72,9 @@ h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:.2px;}
   content:"";position:absolute;right:-40px;top:-60px;width:200px;height:200px;
   background:radial-gradient(circle,#CFEBCF 0%,transparent 70%);pointer-events:none;
 }
-.brand{display:flex;align-items:center;gap:12px;min-width:230px;position:relative;z-index:1;}
-.brand-mark{font-size:30px;filter:drop-shadow(0 3px 6px rgba(60,140,90,.28));}
-.brand-text{display:flex;flex-direction:column;line-height:1.25;}
-.brand-text strong{font-size:20px;letter-spacing:1px;color:var(--green-deep);}
-.brand-text em{font-style:normal;font-size:11.5px;color:var(--ink-3);letter-spacing:.6px;}
+.brand{width:100%;flex-basis:100%;display:flex;align-items:center;justify-content:center;gap:12px;position:relative;z-index:1;padding:2px 0 4px;}
+.brand-mark{font-size:32px;filter:drop-shadow(0 3px 6px rgba(60,140,90,.28));}
+.brand-title{font-family:'ZCOOL KuaiLe','Ma Shan Zheng','PingFang SC','Microsoft YaHei',sans-serif;font-size:38px;letter-spacing:3px;color:var(--green-deep);line-height:1.05;text-shadow:0 2px 0 #EAF6EA;}
 
 .topmeta{display:flex;gap:8px;flex-wrap:wrap;position:relative;z-index:1;}
 .chip{
@@ -846,11 +844,9 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
   /* ---------- 顶栏：压成两行，货币只留图标 + 数字 ---------- */
   .topbar{padding:11px 12px;gap:8px;border-radius:16px;}
   .topbar::after{display:none;}
-  .brand{flex:1 1 0;min-width:0;gap:9px;}
-  .brand-mark{font-size:23px;}
-  .brand-text{min-width:0;}
-  .brand-text strong{font-size:16.5px;letter-spacing:.4px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .brand-text em{font-size:10px;letter-spacing:.2px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .brand{width:100%;flex-basis:100%;justify-content:center;gap:9px;padding:1px 0 3px;}
+  .brand-mark{font-size:24px;}
+  .brand-title{font-size:27px;letter-spacing:2px;}
   .wallet{margin-left:0;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
   .cur{padding:5px 10px;gap:4px;}
   .cur-ico{font-size:14px;}
@@ -1028,7 +1024,7 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
 @media (max-width:400px){
   #app{padding-left:10px;padding-right:10px;}
   .tabs{margin-left:-10px;margin-right:-10px;padding-left:10px;padding-right:10px;}
-  .brand-text em{font-size:9.5px;}
+  .brand-title{font-size:24px;letter-spacing:1.5px;}
   .cur{padding:5px 9px;}
   .feed-num{font-size:27px;}
   .feed-slots{grid-template-columns:repeat(3,1fr);gap:6px;}
@@ -1458,3 +1454,41 @@ img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
   .practice-card-title{font-size:14px;}
   .sp-grid{grid-template-columns:1fr;}
 }
+
+/* ---------------- 资料库学习中枢（hub 卡片） ---------------- */
+.hub-cards{display:flex;flex-direction:column;gap:10px;margin-top:4px;}
+.hub-card{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:14px 16px;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s;box-shadow:var(--shadow-sm);}
+.hub-card:hover{border-color:var(--mint);box-shadow:0 6px 16px rgba(76,169,107,.16);transform:translateY(-1px);}
+.hub-card:active{transform:translateY(1px);}
+.hub-ico{font-size:30px;flex:0 0 auto;width:46px;height:46px;display:flex;align-items:center;justify-content:center;
+  background:var(--panel-3);border-radius:12px;}
+.hub-body{flex:1;min-width:0;}
+.hub-title{font-size:16px;font-weight:800;color:var(--ink);}
+.hub-desc{font-size:12.5px;color:var(--ink-3);margin-top:3px;line-height:1.55;}
+.hub-go{font-size:24px;color:var(--ink-3);flex:0 0 auto;}
+
+/* ---------------- 我的资料入口 ---------------- */
+.me-links{display:flex;flex-direction:column;gap:10px;}
+.me-link{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--panel);
+  border:1px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;transition:transform .12s,border-color .12s;box-shadow:var(--shadow-sm);}
+.me-link:hover{border-color:var(--mint);transform:translateY(-1px);}
+.me-link:active{transform:translateY(1px);}
+.ml-ico{font-size:24px;flex:0 0 auto;width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+  background:var(--panel-3);border-radius:11px;}
+.ml-t{font-size:15px;font-weight:800;color:var(--ink);flex:0 0 auto;}
+.ml-d{font-size:12.5px;color:var(--ink-3);flex:1;min-width:0;}
+.ml-go{font-size:22px;color:var(--ink-3);flex:0 0 auto;}
+
+/* ---------------- 错题复习：选项揭晓状态 ---------------- */
+.qz-opt.correct{border-color:#3FB36B;background:#EAF7EE;box-shadow:0 0 0 3px rgba(63,179,107,.16);}
+.qz-opt.correct b{background:#3FB36B;color:#fff;}
+.qz-opt.wrong{border-color:#E0797A;background:#FDF2F1;}
+.qz-opt.wrong b{background:#E0797A;color:#fff;}
+.qz-fb{font-size:14px;font-weight:800;margin-top:12px;}
+.qz-fb.ok{color:var(--green-deep);}
+.qz-fb.no{color:var(--danger);}
+.qz-explain{font-size:13px;color:var(--ink-2);background:var(--gold-soft);border-radius:9px;padding:9px 11px;margin-top:7px;line-height:1.6;}
+.qz-review-item{margin-bottom:10px;}
+.qz-review-q{font-size:13px;font-weight:600;line-height:1.65;white-space:pre-wrap;}
+.qz-review-a{font-size:13px;color:var(--green-deep);font-weight:700;margin-top:4px;}

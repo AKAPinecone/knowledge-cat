@@ -9,8 +9,8 @@ window.GAME_DATA = (function () {
   const PHASES = [
     {
       id: 1, name: '全刷夯基', days: 35, tag: 'Step 1',
-      motto: '每天喂满 7 样：读书 1 + 四科各 30 道 + 导游词 1 + 面试问答 10 道。',
-      detail: '每天的投喂单固定 7 件：精读课本 1 次（哪本你定，一本 8 天）、四科各刷 30 道、导游词通读 1 篇、面试问答 10 道。这 7 件之外还有"加餐"——课后练习、章节框架、合书自测，有精力就做，没有也没人扣你分。',
+      motto: '每天喂满 7 样：读书 1 + 四科各 30 道 + 导游词 1 + 综合问答 10 道。',
+      detail: '每天的投喂单固定 7 件：精读课本 1 次（哪本你定，一本 8 天）、四科各刷 30 道、导游词通读 1 篇、综合问答 10 道。这 7 件之外还有"加餐"——课后练习、章节框架、合书自测，有精力就做，没有也没人扣你分。',
       focus: '不求全懂，只求全覆盖。先把四科的"地图"画进脑子里。'
     },
     {
@@ -439,9 +439,9 @@ window.GAME_DATA = (function () {
       verify: { type: 'practice' }
     },
     {
-      id: 'p_interview', phase: [1, 2, 3], title: '面试问答训练', core: true, coreLabel: '面试',
+      id: 'p_interview', phase: [1, 2, 3], title: '综合问答训练', core: true, coreLabel: '综合',
       kolb: 'AE', icon: '🗣️',
-      desc: '科目五面试：每天练一练综合知识问答。题库会越来越多（你慢慢传，不用一次传齐）。完成方式很简单——回到「投喂单」点「面试 → 去提交」，交一个凭证（录音 / 截图 / 文件 任一）就算今天练过了，不必一题一题点。',
+      desc: '科目五面试：每天练一练综合知识问答。题库会越来越多（你慢慢传，不用一次传齐）。完成方式很简单——回到「投喂单」点「综合 → 去提交」，交一个凭证（录音 / 截图 / 文件 任一）就算今天练过了，不必一题一题点。',
       reward: { tickets: 1, beans: 15 },
       verify: { type: 'evidence' }
     },
@@ -611,84 +611,11 @@ window.GAME_DATA = (function () {
     { key: 'AE', name: '主动实验', sub: 'Active Experimentation', emoji: '🚀', color: '#C4708E', desc: '用出去。模考、默讲、讲给别人听，检验是否真的会了。' }
   ];
 
-  /* ---------- 资料库（松果随时翻阅/查询的复习资料，image-only PDF 直接内嵌阅读器） ---------- */
-  const DOCS = [
-    {
-      id: 'doc_wrong_0913',
-      kind: '错题',
-      title: '0913 全部错题',
-      file: 'assets/docs/0913_wrong_questions.pdf',
-      pages: 83,
-      desc: '9/13 做错的题汇总（全导 / 地导 / 业务 / 法规）——回看错题、查漏补缺。'
-    },
-    {
-      id: 'doc_interview_1121',
-      kind: '面试',
-      title: '导游综合知识问答 11-21',
-      file: 'assets/docs/interview_qa_11_21.pdf',
-      pages: 10,
-      desc: '面试综合知识问答第 11–21 题（科目五·中文类）——配合「今日投喂·面试」照着练。'
-    },
-    {
-      id: 'doc_textbook_ops_ch3',
-      kind: '课本',
-      title: '导游业务·第三章 导游工作相关知识',
-      file: 'assets/docs/textbook_ops_ch3.pdf',
-      pages: 69,
-      desc: '十一版《导游业务》第三章——系统复习导游工作相关知识的底稿。'
-    },
-    {
-      id: 'doc_wrong_0912_quanguan',
-      kind: '错题',
-      title: '0912 全导错题',
-      file: 'assets/docs/0912_quanguan_wrong.pdf',
-      pages: 14,
-      desc: '9/12 全国导游基础知识做错的题——回看查漏补缺。'
-    },
-    {
-      id: 'doc_wrong_0912_didao',
-      kind: '错题',
-      title: '0912 地导错题',
-      file: 'assets/docs/0912_didao_wrong.pdf',
-      pages: 21,
-      desc: '9/12 云南导游基础知识（地导）做错的题——回看查漏补缺。'
-    },
-    {
-      id: 'doc_wrong_0912_biz_didao',
-      kind: '错题',
-      title: '0912 导游业务及0911地导错题',
-      file: 'assets/docs/0912_biz_and_didao_wrong.pdf',
-      pages: 30,
-      desc: '9/12 导游业务 + 0911 地导做错的题合集——回看查漏补缺。'
-    },
-    {
-      id: 'doc_wrong_0912_biz_ch1',
-      kind: '错题',
-      title: '0912 导游业务第一章错题',
-      file: 'assets/docs/0912_biz_ch1_wrong.pdf',
-      pages: 4,
-      desc: '9/12 导游业务第一章做错的题——回看查漏补缺。'
-    },
-    {
-      id: 'doc_wrong_0912_biz_ch2',
-      kind: '错题',
-      title: '0912 导游业务第二章错题',
-      file: 'assets/docs/0912_biz_ch2_wrong.pdf',
-      pages: 14,
-      desc: '9/12 导游业务第二章做错的题——回看查漏补缺。'
-    },
-    {
-      id: 'doc_wrong_0912_fagui',
-      kind: '错题',
-      title: '0912 法规错题',
-      file: 'assets/docs/0912_fagui_wrong.pdf',
-      pages: 21,
-      desc: '9/12 政策法规做错的题——回看查漏补缺。'
-    }
-  ];
+  /* ---------- 资料库：交互式学习中枢（错题复习 / 综合问答 / 导游词），不再以 PDF 形式呈现 ---------- */
+  const DOCS = [];
 
   return {
-    VERSION: 'v1.16',
+    VERSION: 'v1.17',
     EXAM_DATE: EXAM_DATE,
     PHASES: PHASES,
     BOOK_DAYS: BOOK_DAYS,

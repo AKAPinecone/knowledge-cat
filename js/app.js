@@ -710,35 +710,16 @@
     ts.extra.forEach(function (t) { h += taskCard(t); });
     h += '</div></div>';
 
-    /* 导游词进度 */
-    h += '<div class="panel">';
-    h += '<div class="panel-head"><h2>🎤 12 篇导游词进度</h2><span class="hint">2025 云南考区科目五·中文类官方景点</span></div>';
-    h += '<div class="grid-3">';
-    D.SCRIPTS.forEach(function (sc) {
-      const st = S.scripts[sc.id] || { read: 0, recite: 0, mastered: false };
-      h += '<div class="caps" style="flex-direction:column;align-items:stretch;gap:5px">' +
-        '<div style="display:flex;align-items:center;gap:8px">' +
-          '<span style="font-size:15px">' + (st.mastered ? '🏵️' : '📄') + '</span>' +
-          '<span class="caps-name">' + esc(sc.name) + '</span>' +
-        '</div>' +
-        '<div class="caps-meta">模拟团型：' + sc.group + ' ｜ 通读 ' + (st.read || 0) + ' 次 ｜ 背诵 ' + (st.recite || 0) + ' 次</div>' +
-        '<div class="script-flow" style="margin:4px 0 0">' +
-          sc.nodes.slice(0, 4).map(function (n) { return '<span>' + esc(n) + '</span>'; }).join('') +
-          (sc.nodes.length > 4 ? '<span>…+' + (sc.nodes.length - 4) + '</span>' : '') +
-        '</div></div>';
-    });
-    h += '</div></div>';
-
     /* 练习台：面试问答 + 导游词，点进去随时练 */
     const phInfo = window.Store.currentPhase();
     const scriptModeText = phInfo.day < D.PRACTICE.RECITE_START_DAY
       ? '前 12 天：每天通读 1 篇'
       : '第 13 天起：每天默讲 1 篇';
     h += '<div class="panel practice-card-panel">';
-    h += '<div class="panel-head"><h2>📚 练习台</h2><span class="hint">面试问答、导游词，点进去随时练</span></div>';
+    h += '<div class="panel-head"><h2>📚 练习台</h2><span class="hint">综合问答、导游词，点进去随时练</span></div>';
     h += '<div class="practice-card" data-act="practice-open">' +
       '<div class="practice-card-main">' +
-      '<div class="practice-card-title">🗣️ 面试问答</div>' +
+      '<div class="practice-card-title">🗣️ 综合问答</div>' +
       '<div class="practice-card-meta">交一个凭证即完成</div>' +
       '</div>' +
       '<div class="practice-card-main">' +
@@ -1631,6 +1612,20 @@
     h += '</div>';
     h += '</div>';
 
+    /* 我的资料：资料库 / 笔记 / 证据库 入口（都收进「我的」，不单列板块） */
+    h += '<div class="panel">';
+    h += '<div class="panel-head"><h2>🗂️ 我的资料</h2>' +
+      '<span class="hint">资料库、笔记、证据库都收在这里</span></div>';
+    h += '<div class="me-links">' +
+      '<button class="me-link" data-act="goto-docs"><span class="ml-ico">📚</span>' +
+        '<span class="ml-t">资料库</span><span class="ml-d">错题 / 综合问答 / 导游词，直接练</span><span class="ml-go">›</span></button>' +
+      '<button class="me-link" data-act="goto-notes"><span class="ml-ico">📝</span>' +
+        '<span class="ml-t">我的笔记</span><span class="ml-d">' + (S.notes || []).length + ' 条</span><span class="ml-go">›</span></button>' +
+      '<button class="me-link" data-act="goto-evidence"><span class="ml-ico">🗂️</span>' +
+        '<span class="ml-t">证据库</span><span class="ml-d">' + S.evidence.length + ' 份凭证</span><span class="ml-go">›</span></button>' +
+      '</div>';
+    h += '</div>';
+
     /* 破壳题库（从乐园页搬过来的） */
     h += qbankPanel();
 
@@ -1852,28 +1847,37 @@
 
   /* ---------------- 资料库 ---------------- */
   function viewDocs() {
+    const wrongN = window.QBank.all().length;
+    const zhN = (D.INTERVIEW_QA || []).length;
+    const spN = (D.SCRIPTS || []).length;
     let h = '<div class="panel">';
     h += '<div class="panel-head"><h2>📚 资料库</h2>' +
-      '<span class="hint">随手翻、随时查的复习资料（图片型 PDF，内嵌阅读器）</span></div>';
-    h += '<div class="doc-list">';
-    const docs = (D.DOCS || []);
-    if (!docs.length) {
-      h += '<div class="empty">还没有资料。</div>';
-    } else {
-      docs.forEach(function (d) {
-        h += '<div class="doc-card">' +
-          '<div class="doc-tag">' + esc(d.kind) + '</div>' +
-          '<div class="doc-main">' +
-            '<div class="doc-title">' + esc(d.title) + '</div>' +
-            '<div class="doc-desc">' + esc(d.desc) + '</div>' +
-            '<div class="doc-meta">' + d.pages + ' 页</div>' +
-          '</div>' +
-          '<button class="btn btn-sm btn-primary" data-act="doc-open" data-id="' + d.id + '">📖 打开</button>' +
-        '</div>';
-      });
-    }
+      '<span class="hint">不翻 PDF，直接上手练</span>' +
+      '<span class="spacer"></span>' +
+      '<button class="btn btn-sm btn-ghost" data-act="goto-me">← 返回「我的」</button></div>';
+
+    h += '<div class="hub-cards">';
+
+    h += '<div class="hub-card" data-act="wrong-open">' +
+      '<div class="hub-ico">📕</div>' +
+      '<div class="hub-body"><div class="hub-title">错题复习</div>' +
+      '<div class="hub-desc">题库里 ' + wrongN + ' 道错题，随时自测（不只破壳时）。点开就做，不强制逐题。</div></div>' +
+      '<div class="hub-go">›</div></div>';
+
+    h += '<div class="hub-card" data-act="zh-open">' +
+      '<div class="hub-ico">💬</div>' +
+      '<div class="hub-body"><div class="hub-title">综合问答</div>' +
+      '<div class="hub-desc">导游综合知识问答（其11 已录入 ' + zhN + ' 题；11-21 共 11 题是图片扫描件，发我文字版立刻补）。照答案练，每天交一个凭证即算练过。</div></div>' +
+      '<div class="hub-go">›</div></div>';
+
+    h += '<div class="hub-card" data-act="sp-open-hub">' +
+      '<div class="hub-ico">📜</div>' +
+      '<div class="hub-body"><div class="hub-title">导游词</div>' +
+      '<div class="hub-desc">' + spN + ' 篇，照着读 / 背，可录音留痕。点开任选一篇。</div></div>' +
+      '<div class="hub-go">›</div></div>';
+
     h += '</div>';
-    h += '<div class="hint" style="margin-top:10px">打开资料后，在阅读器里按 <b>Ctrl / ⌘ + F</b> 就能在当前文档里搜关键词。</div>';
+    h += '<div class="hint" style="margin-top:10px">破壳测验的错题、综合问答、导游词，都收在这。不用翻 PDF，打开就练。</div>';
     h += '</div>';
     return h;
   }
@@ -1998,7 +2002,7 @@
       '<tr><td>1</td><td>📖 读书</td><td>精读任务登记一次（哪一本你定，一本 8 天）</td></tr>' +
       '<tr><td>2–5</td><td>✍️ 四科刷题</td><td>法规 / 业务 / 全导 / 地导，每科 30 道，各算一笔</td></tr>' +
       '<tr><td>6</td><td>🎤 导游词</td><td>在「练习台」里任选一篇：前 12 天通读，第 13 天起默讲</td></tr>' +
-      '<tr><td>7</td><td>🗣️ 面试问答</td><td>在「练习台」里看参考答案，练够 10 道问答题</td></tr>' +
+      '<tr><td>7</td><td>🗣️ 综合问答</td><td>在「练习台」里看参考答案，练够 10 道问答题</td></tr>' +
       '</table>';
     h += '<p>7 件全喂满，当天额外 <b>+2 券 / +50 豆</b>，连着喂满 7 天和 30 天还有成就。</p>';
     h += '<p>7 件之外是<b>「加餐」</b>：课后练习、章节框架图、合书自测、昨日回照、费曼工作坊、合稿默讲……这些<b>做不做都行</b>，不计入 7 件，少做一件也不会让你"今天没做完"。有精力就加一口，没精力就明天再说。</p>';
@@ -2051,7 +2055,7 @@
       h += '<tr><td><b>' + p.tag + ' ' + p.name + '</b></td><td>' + p.days + ' 天</td><td>' + esc(p.detail) + '</td></tr>';
     });
     h += '</table>';
-    h += '<p>阶段一每天固定的 7 件是：精读 1 次 + 四科各 30 道 + 导游词 1 篇 + 面试问答 10 道。导游词不指定具体篇目，你在「练习台」里任选一篇：前 12 天通读，第 13 天起默讲。阶段二、三同样保持这 7 件主线，只是导游词的要求随天数自动切换。</p>';
+    h += '<p>阶段一每天固定的 7 件是：精读 1 次 + 四科各 30 道 + 导游词 1 篇 + 综合问答 10 道。导游词不指定具体篇目，你在「练习台」里任选一篇：前 12 天通读，第 13 天起默讲。阶段二、三同样保持这 7 件主线，只是导游词的要求随天数自动切换。</p>';
     h += '<div class="hintbox">📖 <b>读哪本由你定。</b>精读登记的第一步就是四选一，进度按本记录，每本 8 天。上来先读法规读不下去？那就先读导游业务或全导，顺序不影响结果。</div>';
 
     h += '<h3>十、12 篇导游词（2025 云南考区科目五 · 中文类）</h3>';
@@ -2096,6 +2100,13 @@
     const ds = el.dataset;
     if (act === 'practice-open') return openPracticePanel(practiceTab || 'interview');
     if (act === 'practice-tab') return openPracticePanel(ds.tab);
+    if (act === 'goto-docs') return switchTab('docs');
+    if (act === 'goto-notes') return switchTab('notes');
+    if (act === 'goto-evidence') return switchTab('evidence');
+    if (act === 'goto-me') return switchTab('me');
+    if (act === 'wrong-open') return openWrongQuiz();
+    if (act === 'zh-open') return openPracticePanel('interview');
+    if (act === 'sp-open-hub') return openPracticePanel('script');
     if (act === 'ev-open') return openEvidenceFile(ds.id);
     if (act === 'task-verify') return openVerifyModal(window.Study.taskByUid(ds.uid));
     if (act === 'task-log') return showTaskLog(ds.uid);
@@ -2289,6 +2300,143 @@
    * 这是全游戏唯一带倒计时的地方 —— 因为它就是要模拟考场那点限时感。
    * 学习任务仍然没有任何倒计时（那是另一回事）。
    * ========================================================= */
+  /* ---------------- 错题复习（自由练习，不限破壳时） ----------------
+     全游戏唯一带倒计时的是破壳测验；这里不计时，点开就做，做完看成绩。 */
+  let wz = null;
+  function openWrongQuiz() {
+    const all = window.QBank.all();
+    if (!all.length) return toast('题库还是空的，先去「我的 → 破壳题库」粘贴错题', 'warn');
+    const n = Math.min(10, all.length);
+    const paper = window.QBank.makePaper(n, { mastered: false });
+    if (!paper.length) return toast('错题都掌握了，没有可复习的～', 'ok');
+    wz = {
+      paper: paper,
+      answers: paper.map(function () { return []; }),
+      idx: 0,
+      checked: false,
+      done: false,
+      result: null
+    };
+    openModal({
+      title: '📕 错题复习 · 自由练习',
+      body: '<div id="wz-body"></div>',
+      foot: '<div id="wz-foot"></div>',
+      onClose: function () { wz = null; },
+      onMount: function (mask) { renderWrongQuiz(mask); }
+    });
+  }
+
+  function renderWrongQuiz(mask) {
+    if (!wz || !mask) return;
+    if (wz.done) return renderWrongResult(mask);
+    const body = $('#wz-body', mask), foot = $('#wz-foot', mask);
+    if (!body || !foot) return;
+    const p = wz.paper[wz.idx];
+    const total = wz.paper.length;
+    const checked = wz.checked;
+    const sel = wz.answers[wz.idx] || [];
+
+    let h = '<div class="qz-bar">' +
+      '<span class="qz-pill">第 ' + (wz.idx + 1) + ' / ' + total + ' 题</span>' +
+      (p.multi ? '<span class="qz-pill qz-multi">多选</span>' : '') +
+      '</div>';
+    h += '<div class="qz-progress"><i style="width:' + ((wz.idx + 1) / total * 100) + '%"></i></div>';
+    h += '<div class="qz-stem">' + esc(p.stem) + '</div>';
+    h += '<div class="qz-opts">';
+    p.options.forEach(function (o, i) {
+      let cls = 'qz-opt';
+      if (checked) {
+        const isAns = p.answer.indexOf(i) >= 0;
+        const isSel = sel.indexOf(i) >= 0;
+        if (isAns) cls += ' correct';
+        else if (isSel) cls += ' wrong';
+      } else if (sel.indexOf(i) >= 0) {
+        cls += ' on';
+      }
+      h += '<button class="' + cls + '" data-wz="pick" data-i="' + i + '">' +
+        '<b>' + 'ABCDEFGH'.charAt(i) + '</b><span>' + esc(o) + '</span></button>';
+    });
+    h += '</div>';
+
+    if (checked) {
+      const ok = window.QBank.grade([p], [sel]).detail[0].ok;
+      h += '<div class="qz-fb ' + (ok ? 'ok' : 'no') + '">' + (ok ? '✅ 答对了' : '❌ 答错了') + '</div>';
+      if (p.explain) h += '<div class="qz-explain"><b>解析：</b>' + esc(p.explain) + '</div>';
+    }
+
+    body.innerHTML = h;
+
+    if (!checked) {
+      foot.innerHTML = '<button class="btn btn-primary" data-wz="reveal">看答案</button>';
+    } else {
+      const last = wz.idx >= total - 1;
+      foot.innerHTML = (wz.idx > 0 ? '<button class="btn btn-ghost" data-wz="prev">上一题</button>' : '') +
+        (last ? '<button class="btn btn-primary" data-wz="finish">看成绩</button>'
+              : '<button class="btn btn-primary" data-wz="next">下一题</button>');
+    }
+
+    $$('[data-wz]', mask).forEach(function (el) {
+      el.onclick = function () { onWrongAct(el.dataset.wz, parseInt(el.dataset.i, 10)); };
+    });
+  }
+
+  function onWrongAct(act, i) {
+    if (!wz || wz.done) return;
+    const mask = activeMask();
+    if (act === 'pick') {
+      if (wz.checked) return;            /* 揭晓后不能再改 */
+      const p = wz.paper[wz.idx];
+      const arr = wz.answers[wz.idx] || [];
+      if (p.multi) {
+        const pos = arr.indexOf(i);
+        if (pos >= 0) arr.splice(pos, 1); else arr.push(i);
+        wz.answers[wz.idx] = arr;
+      } else {
+        wz.answers[wz.idx] = [i];
+      }
+      return renderWrongQuiz(mask);
+    }
+    if (act === 'reveal') { wz.checked = true; return renderWrongQuiz(mask); }
+    if (act === 'prev') { wz.idx = Math.max(0, wz.idx - 1); wz.checked = !!(wz.answers[wz.idx] && wz.answers[wz.idx].length > 0); return renderWrongQuiz(mask); }
+    if (act === 'next') { wz.idx = Math.min(wz.paper.length - 1, wz.idx + 1); wz.checked = !!(wz.answers[wz.idx] && wz.answers[wz.idx].length > 0); return renderWrongQuiz(mask); }
+    if (act === 'finish') {
+      wz.done = true;
+      wz.result = window.QBank.grade(wz.paper, wz.answers);
+      return renderWrongResult(mask);
+    }
+  }
+
+  function renderWrongResult(mask) {
+    if (!wz || !mask) return;
+    const body = $('#wz-body', mask), foot = $('#wz-foot', mask);
+    if (!body || !foot) return;
+    const r = wz.result;
+    const pct = Math.round(r.rate * 100);
+    let h = '<div class="qz-score ' + (r.correct === r.total ? 'ok' : 'no') + '">' +
+      '<div class="qz-score-num">' + r.correct + '<span>/' + r.total + '</span></div>' +
+      '<div class="qz-score-sub">正确率 ' + pct + '%</div>' +
+      '<div class="qz-score-line">' + (r.correct === r.total ? '🎉 全对！' : '复习一遍，下次破壳更稳') + '</div></div>';
+    const wrong = r.detail.filter(function (d) { return !d.ok; });
+    if (wrong.length) {
+      h += '<div class="qz-review"><div class="qz-review-h">📝 这 ' + wrong.length + ' 题再看一眼</div>';
+      wrong.forEach(function (d) {
+        const p = wz.paper[d.i];
+        h += '<div class="qz-review-item"><div class="qz-review-q">' + (d.i + 1) + '. ' + esc(p.stem) + '</div>' +
+          '<div class="qz-review-a">正确答案：' + d.answer.map(function (x) { return 'ABCDEFGH'.charAt(x); }).join('') + '</div></div>';
+      });
+      h += '</div>';
+    }
+    body.innerHTML = h;
+    foot.innerHTML = '<button class="btn btn-primary" data-wz="again">再来一组</button>' +
+      '<button class="btn btn-ghost" data-wz="close">关闭</button>';
+    $$('[data-wz]', mask).forEach(function (el) {
+      el.onclick = function () {
+        if (el.dataset.wz === 'again') { closeModal(); openWrongQuiz(); }
+        else closeModal();
+      };
+    });
+  }
+
   function openHatchQuizModal(capId) {
     const c = S.capsules.filter(function (x) { return x.id === capId; })[0];
     if (!c) return toast('❌ 找不到这颗胶囊', 'err');
@@ -3326,13 +3474,13 @@
     const reciteMode = info.day >= D.PRACTICE.RECITE_START_DAY;
 
     let body = '<div class="practice-tabs">' +
-      '<button class="practice-tab' + (practiceTab === 'interview' ? ' on' : '') + '" data-act="practice-tab" data-tab="interview">🗣️ 面试问答</button>' +
+      '<button class="practice-tab' + (practiceTab === 'interview' ? ' on' : '') + '" data-act="practice-tab" data-tab="interview">🗣️ 综合问答</button>' +
       '<button class="practice-tab' + (practiceTab === 'script' ? ' on' : '') + '" data-act="practice-tab" data-tab="script">🎤 导游词</button>' +
       '</div>';
 
     if (practiceTab === 'interview') {
       body += '<div class="practice-hint">' +
-        '<div>🗣️ 面试题库（共 <b>' + D.INTERVIEW_QA.length + '</b> 道，会越来越多）</div>' +
+        '<div>🗣️ 综合问答题库（共 <b>' + D.INTERVIEW_QA.length + '</b> 道，会越来越多）</div>' +
         '<div class="hint">点「看答案」对照着练。每天只要在「投喂单」给面试交一个凭证（录音 / 截图 / 文件 任一）就算今天练过了——不必一题一题点。</div>' +
         '</div>';
       body += '<div class="qa-list">';
@@ -3376,7 +3524,7 @@
     }
 
     openModal({
-      title: '📚 练习台 · ' + (practiceTab === 'interview' ? '面试问答' : '导游词'),
+      title: '📚 练习台 · ' + (practiceTab === 'interview' ? '综合问答' : '导游词'),
       body: body, wide: true, dismissable: true,
       foot: '<button class="btn btn-ghost" id="pr-close">关闭</button>',
       onMount: function (m) {
