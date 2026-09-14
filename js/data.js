@@ -162,15 +162,23 @@ window.GAME_DATA = (function () {
   const SPECIES_ACTIVE = SPECIES;
   const SPECIES_ALL = SPECIES.concat(SPECIES_LEGACY);
 
-  /* ---------- 商店 ---------- */
+  /* ---------- 商店 ----------
+     每个照顾道具都带 boost：{stat, amount, grow, exp}，护理时按"最优已拥有 tier"消耗。
+     高级道具带 reqLevel —— 等级不够在商店里是锁着的，升到对应等级才解锁。 */
   const ITEMS = [
-    /* 温室用品 */
-    { id: 'water',   name: '清水',       kind: 'greenhouse', price: 2,  emoji: '💧', desc: '浇一次水，缓解干渴。' },
-    { id: 'fert',    name: '营养液',     kind: 'greenhouse', price: 6,  emoji: '🧪', desc: '施肥一次，明显促进生长。' },
-    { id: 'pest',    name: '除虫剂',     kind: 'greenhouse', price: 7,  emoji: '🧴', desc: '喷洒一次，赶走叶片上的小家伙。' },
-    /* 孵化仓用品 */
-    { id: 'food',    name: '饲料',       kind: 'hatchery',   price: 4,  emoji: '🥣', desc: '喂一次食，填饱肚子。' },
-    { id: 'soap',    name: '洗澡泡沫',   kind: 'hatchery',   price: 5,  emoji: '🧼', desc: '洗一次澡，动物精神一整天。' },
+    /* 温室用品（植物 / 真菌 / 藻类） */
+    { id: 'water',   name: '清水',       kind: 'greenhouse', price: 2,  emoji: '💧', desc: '浇一次水，缓解干渴。', boost: { stat: 'water', amount: 35, grow: 6, exp: 5 } },
+    { id: 'fert',    name: '营养液',     kind: 'greenhouse', price: 6,  emoji: '🧪', desc: '施肥一次，明显促进生长。', boost: { stat: 'nutri', amount: 42, grow: 14, exp: 6 } },
+    { id: 'pest',    name: '除虫剂',     kind: 'greenhouse', price: 7,  emoji: '🧴', desc: '喷洒一次，赶走叶片上的小家伙。', boost: { stat: 'clean', amount: 32, grow: 8, exp: 5 } },
+    { id: 'music',   name: '音乐盒',     kind: 'greenhouse', price: 5,  emoji: '🎵', desc: '给植物放段音乐，它心情大好、娱乐值上涨。', boost: { stat: 'fun', amount: 30, grow: 5, exp: 4 } },
+    { id: 'music2',  name: '环绕音响',   kind: 'greenhouse', price: 14, emoji: '🔊', reqLevel: 2, desc: 'Lv.2 解锁：高级音响，娱乐值涨得更多、还带动成长。', boost: { stat: 'fun', amount: 48, grow: 12, exp:7 } },
+    { id: 'fert2',   name: '高蛋白营养液', kind: 'greenhouse', price: 16, emoji: '🧫', reqLevel: 3, desc: 'Lv.3 解锁：浓缩营养，营养值与成长一次顶俩。', boost: { stat: 'nutri', amount: 55, grow: 20, exp: 8 } },
+    /* 孵化仓用品（动物） */
+    { id: 'food',    name: '饲料',       kind: 'hatchery',   price: 4,  emoji: '🥣', desc: '喂一次食，填饱肚子。', boost: { stat: 'nutri', amount: 42, grow: 8, exp: 5 } },
+    { id: 'soap',    name: '洗澡泡沫',   kind: 'hatchery',   price: 5,  emoji: '🧼', desc: '洗一次澡，动物精神一整天。', boost: { stat: 'clean', amount: 38, grow: 6, exp: 5 } },
+    { id: 'teaser',  name: '逗猫棒',     kind: 'hatchery',   price: 5,  emoji: '🎀', desc: '用逗猫棒陪动物玩一会儿，娱乐值上涨。', boost: { stat: 'fun', amount: 30, grow: 5, exp: 4 } },
+    { id: 'teaser2', name: '豪华猫爬架', kind: 'hatchery',   price: 14, emoji: '🪜', reqLevel: 2, desc: 'Lv.2 解锁：猫爬架让动物玩到嗨，娱乐值涨更多、带动成长。', boost: { stat: 'fun', amount: 48, grow: 12, exp: 7 } },
+    { id: 'food2',   name: '营养大餐',   kind: 'hatchery',   price: 16, emoji: '🍖', reqLevel: 3, desc: 'Lv.3 解锁：丰盛大餐，营养值与成长一次顶俩。', boost: { stat: 'nutri', amount: 55, grow: 20, exp: 8 } },
     /* 药水 */
     { id: 'med_powder', name: '白粉病灵', kind: 'medicine', price: 14, emoji: '🩹', desc: '专治叶面白粉病。' },
     { id: 'med_fungus', name: '菌斑净',   kind: 'medicine', price: 14, emoji: '🩹', desc: '专治菌伞斑点。' },
@@ -189,22 +197,34 @@ window.GAME_DATA = (function () {
   ITEMS.forEach(function (i) { ITEM_MAP[i.id] = i; });
 
   /* ---------- 护理动作 ---------- */
+  /* 护理动作：每个动作对应一个"状态维度"；实际消耗哪个道具由 game.js 按
+     CARE_TIERS 里"玩家已拥有的最高 tier"自动决定（高级道具优先）。 */
   const CARE = {
-    /* 温室（植物 / 真菌 / 藻类）：水分、营养、清洁 */
-    water: { label: '浇水', item: 'water', stat: 'water', amount: 35, grow: 6,  beans: 1, emoji: '💧', verb: '给' },
-    fert:  { label: '施肥', item: 'fert',  stat: 'nutri', amount: 42, grow: 14, beans: 2, emoji: '🧪', verb: '给' },
-    pest:  { label: '除虫', item: 'pest',  stat: 'clean', amount: 32, grow: 8,  beans: 1, emoji: '🧴', verb: '给' },
-    /* 孵化仓（动物）：水分、食物、清洁 —— 三项各一个，不再有重复 */
-    drink: { label: '喂水', item: 'water', stat: 'water', amount: 35, grow: 6,  beans: 1, emoji: '💧', verb: '喂' },
-    food:  { label: '喂食', item: 'food',   stat: 'nutri', amount: 42, grow: 8,  beans: 1, emoji: '🥣', verb: '喂' },
-    bath:  { label: '洗澡', item: 'soap',   stat: 'clean', amount: 38, grow: 6,  beans: 1, emoji: '🧼', verb: '给' }
+    water:  { label: '浇水', stat: 'water', emoji: '💧', verb: '给' },
+    fert:   { label: '施肥', stat: 'nutri', emoji: '🧪', verb: '给' },
+    pest:   { label: '除虫', stat: 'clean', emoji: '🧴', verb: '给' },
+    music:  { label: '放音乐', stat: 'fun',  emoji: '🎵', verb: '给' },
+    drink:  { label: '喂水', stat: 'water', emoji: '💧', verb: '喂' },
+    food:   { label: '喂食', stat: 'nutri', emoji: '🥣', verb: '喂' },
+    bath:   { label: '洗澡', stat: 'clean', emoji: '🧼', verb: '给' },
+    teaser: { label: '逗玩', stat: 'fun',  emoji: '🎀', verb: '陪' }
+  };
+
+  /* 每个状态维度可选的道具 tier（从基础到高级，越往后越强）。
+     护理时优先消耗玩家已拥有的最高 tier 道具。 */
+  const CARE_TIERS = {
+    water: ['water'],
+    nutri: ['fert', 'food', 'fert2', 'food2'],
+    clean: ['pest', 'soap'],
+    fun:   ['music', 'teaser', 'music2', 'teaser2']
   };
 
   /* 状态条定义 */
   const STAT_INFO = {
     water: { label: '水分', emoji: '💧', color: '#4EA8DE' },
     nutri: { label: '营养', emoji: '🍯', color: '#E9A13B' },
-    clean: { label: '清洁', emoji: '🫧', color: '#7FB069' }
+    clean: { label: '清洁', emoji: '🫧', color: '#7FB069' },
+    fun:   { label: '娱乐', emoji: '🎈', color: '#C77DFF' }
   };
 
   /* ---------- 疾病 ---------- */
@@ -225,6 +245,12 @@ window.GAME_DATA = (function () {
     { key: 'adult', name: '成熟', min: 300, emoji: '🌳' },
     { key: 'elite', name: '圆满', min: 700, emoji: '🏵️' }
   ];
+
+  /* ---------- 照顾等级 ----------
+     照顾小生物不再给可可豆，改为涨经验；经验达到阈值就升级。
+     升级解锁更高级的照顾道具（见 ITEMS 的 reqLevel），并给里程碑奖励（豆 + 券）。
+     LEVELS[i] = 升到 Lv.(i+1) 需要的累计经验。 */
+  const LEVELS = [0, 60, 160, 320, 560, 920, 1400, 2050, 2900, 4000, 5400];
 
   /* ---------- 扭蛋 ---------- */
   const GACHA = {
@@ -662,7 +688,7 @@ window.GAME_DATA = (function () {
   ];
 
   return {
-    VERSION: 'v1.15',
+    VERSION: 'v1.16',
     EXAM_DATE: EXAM_DATE,
     PHASES: PHASES,
     BOOK_DAYS: BOOK_DAYS,
@@ -675,9 +701,11 @@ window.GAME_DATA = (function () {
     ITEMS: ITEMS,
     ITEM_MAP: ITEM_MAP,
     CARE: CARE,
+    CARE_TIERS: CARE_TIERS,
     STAT_INFO: STAT_INFO,
     ILLNESS: ILLNESS,
     STAGES: STAGES,
+    LEVELS: LEVELS,
     GACHA: GACHA,
     HATCH_QUIZ: HATCH_QUIZ,
     QUESTION_BANK: QUESTION_BANK,

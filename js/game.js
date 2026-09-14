@@ -216,8 +216,21 @@ window.Game = (function () {
 
   function careActionsFor(pet) {
     const sp = speciesById(pet.speciesId);
-    if (sp.kind === 'animal') return ['drink', 'food', 'bath'];
-    return ['water', 'fert', 'pest'];
+    if (sp.kind === 'animal') return ['drink', 'food', 'bath', 'teaser'];
+    return ['water', 'fert', 'pest', 'music'];
+  }
+
+  /* 照顾等级：累计经验 -> 等级 */
+  function levelOf(exp) {
+    let lv = 1;
+    for (let i = 0; i < D.LEVELS.length; i++) {
+      if (exp >= D.LEVELS[i]) lv = i + 1;
+    }
+    return lv;
+  }
+  /* 升级里程碑奖励：少量可可比 + 券，维持商店经济（照顾本身不再掉豆） */
+  function levelReward(lv) {
+    return { beans: 15 + lv * 5, tickets: 1 + Math.floor(lv / 3) };
   }
 
   function care(petId, actionId) {
@@ -228,32 +241,85 @@ window.Game = (function () {
     if (!act) return { ok: false, msg: '未知操作' };
     const allowed = careActionsFor(pet);
     if (allowed.indexOf(actionId) < 0) return { ok: false, msg: '它需要的不是这个' };
-    if ((S.bag[act.item] || 0) <= 0) {
-      return { ok: false, msg: D.ITEM_MAP[act.item].name + '用完了，去商店补货' };
+    /* 选"玩家已拥有的最高 tier"道具（高级道具优先） */
+    const tiers = D.CARE_TIERS[act.stat] || [act.item];
+    let item = null;
+    for (let i = tiers.length - 1; i >= 0; i--) {
+      if ((S.bag[tiers[i]] || 0) > 0) { item = tiers[i]; break; }
     }
+    if (!item) {
+      return { ok: false, msg: D.STAT_INFO[act.stat].label + '道具用完了，去商店补货' };
+    }
+    const boost = D.ITEM_MAP[item].boost;
     const before = stageOf(pet);
-    S.bag[act.item]--;
-    pet.stats[act.stat] = Math.min(100, pet.stats[act.stat] + act.amount);
-    pet.growth += act.grow;
+    S.bag[item]--;
+    pet.stats[act.stat] = Math.min(100, pet.stats[act.stat] + boost.amount);
+    pet.growth += boost.grow;
     pet.lastCare = Date.now();
     pet.careCount++;
     pet.careToday[actionId] = (pet.careToday[actionId] || 0) + 1;
-    S.cur.beans += act.beans;
+
+    /* 经验与升级（照顾不再给可可豆，改为涨经验） */
+    const lvlBefore = S.cur.level;
+    S.cur.exp += boost.exp;
     S.stats.careCount++;
     const after = stageOf(pet);
-    let msg = act.emoji + ' ' + act.verb + pet.name + '完成，生长 +' + act.grow + '，可可豆 +' + act.beans;
+    const si = D.STAT_INFO[act.stat];
+    let msg = act.emoji + ' ' + act.label + pet.name + '完成，' + si.label + ' +' + boost.amount + '，经验 +' + boost.exp;
     if (after.key !== before.key) {
       const bonus = { baby: 0, teen: 15, adult: 40, elite: 80 }[after.key] || 0;
-      S.cur.beans += bonus;
+      S.cur.exp += bonus;
       if (after.key === 'adult') S.stats.adultCount++;
       if (after.key === 'elite') { S.stats.eliteCount++; S.stats.adultCount++; }
-      msg += '　✨ ' + pet.name + ' 成长到「' + after.name + '」，额外获得 ' + bonus + ' 可可豆！';
+      msg += '　✨ ' + pet.name + ' 成长到「' + after.name + '」，额外经验 +' + bonus + '！';
       window.Store.pushLog('🌿 ' + pet.name + ' 成长为「' + after.name + '」。');
     }
-    if (pet.growth >= 700 && !pet.eliteLogged) { pet.eliteLogged = true; }
+    const lvlAfter = levelOf(S.cur.exp);
+    if (lvlAfter > lvlBefore) {
+      S.cur.level = lvlAfter;
+      const rw = levelReward(lvlAfter);
+      S.cur.beans += rw.beans;
+      S.cur.tickets += rw.tickets;
+      msg += '　🎖️ 升级到 Lv.' + lvlAfter + '！+' + rw.beans + ' 豆 +' + rw.tickets + ' 券';
+      window.Store.pushLog('🎖️ 照顾等级提升到 Lv.' + lvlAfter + '，解锁了更多高级道具！');
+    } else {
+      S.cur.level = lvlAfter;
+    }
     window.Store.save();
     checkAchievements();
-    return { ok: true, msg: msg, pet: pet };
+    return { ok: true, msg: msg, pet: pet, leveled: lvlAfter > lvlBefore };
+  }
+
+  /* ---------------- 保存舱 ----------------
+     成年体（成熟 / 圆满）才能进保存舱；舱内所有状态静止（不衰减、不生病）。 */
+  function canStore(pet) {
+    const st = stageOf(pet);
+    return st.key === 'adult' || st.key === 'elite';
+  }
+  function storePet(petId) {
+    const pet = S.pets.filter(function (p) { return p.id === petId })[0];
+    if (!pet) return { ok: false, msg: '找不到这只小生物' };
+    if (pet.stored) return { ok: false, msg: pet.name + '已经在保存舱里了' };
+    if (!canStore(pet)) {
+      return { ok: false, msg: '只有「成熟 / 圆满」的成年体才能进保存舱（' + pet.name + '现在还是' + stageOf(pet).name + '）' };
+    }
+    pet.stored = true;
+    window.Store.save(true);
+    window.Store.pushLog('📦 ' + pet.name + ' 住进了保存舱，状态已静止。');
+    return { ok: true, pet: pet };
+  }
+  function unstorePet(petId) {
+    const pet = S.pets.filter(function (p) { return p.id === petId })[0];
+    if (!pet) return { ok: false, msg: '找不到这只小生物' };
+    if (!pet.stored) return { ok: false, msg: pet.name + '不在保存舱里' };
+    pet.stored = false;
+    pet.lastCare = Date.now();
+    pet.illness = null;
+    pet.illnessSince = 0;
+    pet.dormant = false;
+    window.Store.save(true);
+    window.Store.pushLog('📭 ' + pet.name + ' 从保存舱回到了场地。');
+    return { ok: true, pet: pet };
   }
 
   /* ---------------- 生病与治疗 ---------------- */
@@ -296,6 +362,10 @@ window.Game = (function () {
     qty = qty || 1;
     const it = D.ITEM_MAP[itemId];
     if (!it) return { ok: false, msg: '没有这个商品' };
+    /* 等级解锁：不够等级买不了 */
+    if (it.reqLevel && S.cur.level < it.reqLevel) {
+      return { ok: false, msg: '「' + it.name + '」需要照顾等级 Lv.' + it.reqLevel + ' 才能购买（你现在是 Lv.' + S.cur.level + '）' };
+    }
     /* 设施类比较特殊 */
     if (it.kind === 'facility') {
       if (itemId === 'slot_green' || itemId === 'slot_hatch') {
@@ -351,7 +421,7 @@ window.Game = (function () {
   }
 
   function moodOf(pet) {
-    const avg = (pet.stats.water + pet.stats.nutri + pet.stats.clean) / 3;
+    const avg = (pet.stats.water + pet.stats.nutri + pet.stats.clean + pet.stats.fun) / 4;
     if (pet.illness) return { text: '难受', emoji: '😷', color: '#D9534F' };
     if (pet.dormant) return { text: '休眠', emoji: '😴', color: '#8A8A8A' };
     if (avg >= 75) return { text: '开心', emoji: '😊', color: '#3FA96B' };
@@ -377,6 +447,11 @@ window.Game = (function () {
     stageOf: stageOf,
     careActionsFor: careActionsFor,
     care: care,
+    levelOf: levelOf,
+    levelReward: levelReward,
+    canStore: canStore,
+    storePet: storePet,
+    unstorePet: unstorePet,
     rollIllness: rollIllness,
     heal: heal,
     buy: buy,

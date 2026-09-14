@@ -38,9 +38,9 @@ window.Store = (function () {
       createdAt: today,
       planStart: today,
       examDate: window.GAME_DATA.EXAM_DATE,
-      cur: { tickets: 5, beans: 60, freeQuestions: 0 },  /* 开局小礼包；freeQuestions=每日签到可能抽到的“1道题”免题券 */
+      cur: { tickets: 5, beans: 60, freeQuestions: 0, exp: 0, level: 1 },  /* 开局小礼包；照顾得经验、升级解锁道具 */
       profile: { nick: '', avatar: '' },   /* 「我的」页：昵称 + 头像（emoji） */
-      bag: { water: 5, fert: 3, pest: 2, food: 5, soap: 2 },
+      bag: { water: 5, fert: 3, pest: 2, food: 5, soap: 2, music: 3, teaser: 3 },
       capsules: [],
       pets: [],
       slots: { greenhouse: 4, hatchery: 4 },
@@ -167,6 +167,15 @@ window.Store = (function () {
     if (s.study.dailyRewardDate === undefined) s.study.dailyRewardDate = '';
     if (!s.cur || typeof s.cur !== 'object') s.cur = {};
     if (s.cur.freeQuestions === undefined) s.cur.freeQuestions = 0;
+    /* 老存档补照顾等级（经验 / 等级） */
+    if (typeof s.cur.exp !== 'number') s.cur.exp = 0;
+    if (typeof s.cur.level !== 'number') s.cur.level = 1;
+    /* 老存档补小生物：第四状态条「娱乐」与保存舱标记 */
+    if (Array.isArray(s.pets)) s.pets.forEach(function (p) {
+      if (!p.stats) p.stats = {};
+      if (typeof p.stats.fun !== 'number') p.stats.fun = 72;
+      if (typeof p.stored !== 'boolean') p.stored = false;
+    });
   }
 
   /* localStorage 只有 5MB 上下，而证据库里每条凭证都带一张 base64 缩略图。
@@ -531,10 +540,11 @@ window.Store = (function () {
 
     if (minutes < 1) { state.lastTick = now; return report; }
 
-    /* 2. 生物状态衰减 */
+    /* 2. 生物状态衰减（保存舱里的不衰减、不生病，状态静止） */
     state.pets.forEach(function (p) {
+      if (p.stored) return;
       let illnessHappened = false;
-      ['water', 'nutri', 'clean'].forEach(function (k) {
+      ['water', 'nutri', 'clean', 'fun'].forEach(function (k) {
         const before = p.stats[k];
         p.stats[k] = Math.max(0, before - D.DECAY_PER_MIN * minutes);
         if (p.stats[k] <= 0) {

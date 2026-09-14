@@ -102,6 +102,19 @@ h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:.2px;}
 .cur-ticket .cur-num{color:var(--teal);}
 .cur-bean{background:linear-gradient(135deg,#FFFFFF,#FBF4EC);}
 .cur-bean .cur-num{color:var(--cocoa);}
+.cur-level{background:linear-gradient(135deg,#FFFFFF,#F1ECFB);}
+.cur-level .cur-num{color:#7B54C9;}
+.cur-level .cur-name{color:#9A86C2;}
+/* 经验条（顶栏） */
+.exp-bar-wrap{
+  height:6px;width:100%;background:var(--line-2);border-radius:99px;overflow:hidden;
+  margin:-4px 0 12px;box-shadow:inset 0 1px 2px rgba(45,90,60,.08);
+}
+.exp-bar-wrap i{
+  display:block;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,#9B6BE0,#C77DFF);
+  transition:width .4s ease;
+}
 
 /* ---------------- 标签 ---------------- */
 .tabs{
@@ -132,6 +145,32 @@ h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:.2px;}
 .panel-head h2{font-size:16.5px;color:var(--green-deep);}
 .panel-head .hint{font-size:12.5px;color:var(--ink-3);font-weight:400;}
 .spacer{flex:1;}
+
+/* ---------------- 保存舱 ---------------- */
+.pod-panel{border-style:dashed;border-color:#D8CBEE;background:linear-gradient(160deg,#FBF7FF,#F4EEFB);}
+.pod-head{cursor:pointer;margin-bottom:0;user-select:none;}
+.pod-head:hover h2{color:#7B54C9;}
+.pod-head .hint{color:#A895C8;}
+.pod-count{
+  font-size:12px;font-weight:700;color:#7B54C9;background:#EFE6FB;
+  border-radius:99px;padding:2px 10px;
+}
+.pod-caret{font-size:14px;color:#9A86C2;width:18px;text-align:center;transition:transform .2s ease;}
+.pod-panel.open .pod-caret{transform:rotate(0);}
+.pod-panel .empty{margin-top:14px;color:#8A7AA8;background:#fff;border:1px solid var(--line-2);}
+
+/* 舱内小生物卡片 */
+.pod-card{display:flex;align-items:center;gap:12px;padding:11px 13px;}
+.pod-card .pc-face{
+  width:46px;height:46px;flex:0 0 46px;border-radius:14px;display:grid;place-items:center;
+  font-size:24px;background:radial-gradient(circle at 30% 25%,#FFFFFF,#F1E9FB);border:1px solid var(--line-2);
+}
+.pod-card .pc-face.pet-emoji{transform:translateY(7px);}
+.pod-card .pc-body{flex:1;min-width:0;cursor:pointer;}
+.pod-card .pc-body:hover .pc-name{color:#7B54C9;}
+.pod-card .pc-name{font-size:14px;font-weight:700;color:var(--green-deep);}
+.pod-card .pc-sub{font-size:11.5px;color:var(--ink-3);margin-top:2px;}
+.pod-card .pod-take{flex:0 0 auto;}
 
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
@@ -368,6 +407,15 @@ h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:.2px;}
 .price::before{content:"🌰 ";}
 .qty-btn{border:1px solid var(--line);background:var(--panel-3);border-radius:8px;width:26px;height:26px;cursor:pointer;font-size:14px;line-height:1;}
 .qty-val{font-size:13px;font-weight:600;min-width:18px;text-align:center;}
+/* 等级锁定商品 */
+.shop-item.locked{opacity:.62;background:#F6F4FA;border-color:#E6DEF2;}
+.shop-item.locked .si-ico{filter:grayscale(.5);opacity:.7;}
+.shop-item.locked .si-name{color:var(--ink-2);}
+.lock-mini{font-size:11px;}
+.lock-tag{
+  font-size:12px;font-weight:700;color:#8A77B0;background:#EFE6FB;
+  border-radius:99px;padding:4px 12px;
+}
 
 /* ---------------- 成就 ---------------- */
 .ach-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;}
@@ -803,7 +851,7 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
   .brand-text{min-width:0;}
   .brand-text strong{font-size:16.5px;letter-spacing:.4px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .brand-text em{font-size:10px;letter-spacing:.2px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .wallet{margin-left:0;gap:6px;}
+  .wallet{margin-left:0;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
   .cur{padding:5px 10px;gap:4px;}
   .cur-ico{font-size:14px;}
   .cur-num{font-size:15px;}

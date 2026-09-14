@@ -6,6 +6,7 @@
   let S = null;
   let curTab = 'garden';   /* 打开游戏先看到乐园（主体是游戏） */
   const shopQty = {};
+  let podOpen = false;     /* 保存舱面板是否展开 */
   let vf = null;          /* 验证弹窗的临时状态 */
   let qz = null;          /* 破壳测验弹窗的临时状态 */
   let modalCleanup = null;/* 关窗时要执行的清理（比如停掉测验倒计时） */
@@ -529,6 +530,21 @@
     $('#cur-beans').textContent = Math.floor(S.cur.beans);
     const fqEl = $('#cur-freeq');
     if (fqEl) fqEl.textContent = S.cur.freeQuestions || 0;
+    const lvEl = $('#cur-level');
+    if (lvEl) {
+      const lv = S.cur.level;
+      const curExp = S.cur.exp;
+      const nextExp = (D.LEVELS[lv] !== undefined) ? D.LEVELS[lv] : null;
+      const prevExp = (D.LEVELS[lv - 1] !== undefined) ? D.LEVELS[lv - 1] : 0;
+      lvEl.textContent = 'Lv.' + lv;
+      const expEl = $('#cur-exp');
+      if (expEl) expEl.textContent = (nextExp === null) ? 'MAX' : ((curExp - prevExp) + '/' + (nextExp - prevExp));
+      const bar = $('#cur-exp-bar');
+      if (bar) {
+        const pct = (nextExp === null) ? 100 : Math.min(100, Math.round((curExp - prevExp) / (nextExp - prevExp) * 100));
+        bar.style.width = pct + '%';
+      }
+    }
 
     const ts = window.Study.todayTaskStats();
     const dot = $('#dot-study');
@@ -826,13 +842,13 @@
     const sp = window.Game.speciesById(p.speciesId);
     const animal = sp.kind === 'animal';
     const names = animal
-      ? { water: '口渴', nutri: '肚子饿', clean: '身上脏' }
-      : { water: '缺水', nutri: '缺肥', clean: '生虫' };
+      ? { water: '口渴', nutri: '肚子饿', clean: '身上脏', fun: '无聊' }
+      : { water: '缺水', nutri: '缺肥', clean: '生虫', fun: '闷了' };
     const icons = animal
-      ? { water: '💧', nutri: '🍖', clean: '🧼' }
-      : { water: '💧', nutri: '🌰', clean: '🐛' };
+      ? { water: '💧', nutri: '🍖', clean: '🧼', fun: '🎈' }
+      : { water: '💧', nutri: '🌰', clean: '🐛', fun: '🎈' };
     let worst = null;
-    ['water', 'nutri', 'clean'].forEach(function (k) {
+    ['water', 'nutri', 'clean', 'fun'].forEach(function (k) {
       const v = p.stats[k];
       if (v < 45 && (!worst || v < worst.v)) worst = { k: k, v: v };
     });
@@ -929,6 +945,39 @@
     return h;
   }
 
+  /* ---------------- 保存舱面板（可折叠） ---------------- */
+  function podPanel() {
+    const stored = S.pets.filter(function (p) { return p.stored; });
+    let h = '<div class="panel pod-panel' + (podOpen ? ' open' : '') + '">';
+    h += '<div class="panel-head pod-head" data-act="pod-toggle">' +
+      '<h2>📦 保存舱</h2>' +
+      '<span class="hint">成年体仓库 · 状态静止</span>' +
+      '<span class="spacer"></span>' +
+      '<span class="pod-count">' + stored.length + ' 只</span>' +
+      '<span class="pod-caret">' + (podOpen ? '▾' : '▸') + '</span></div>';
+    if (podOpen) {
+      if (!stored.length) {
+        h += '<div class="empty">保存舱空着。成熟的成年体（「成熟 / 圆满」）可以从它的状态面板放进这里——状态会完全静止、不再消耗道具。需要它时再「取出」回到场地。</div>';
+      } else {
+        h += '<div class="pet-list">';
+        stored.forEach(function (p) {
+          const sp = window.Game.speciesById(p.speciesId);
+          const st = window.Game.stageOf(p);
+          h += '<div class="pet-card pod-card">' +
+            '<div class="pc-face' + (sp.img ? '' : ' pet-emoji') + '">' + (sp.img ? '<img class="pc-img" src="' + sp.img + '" alt="">' : sp.emoji) + '</div>' +
+            '<div class="pc-body" data-act="pet-open" data-id="' + p.id + '">' +
+              '<div class="pc-name">' + esc(p.name) + '</div>' +
+              '<div class="pc-sub">' + esc(sp.name) + ' · ' + st.emoji + ' ' + st.name + ' · 📦 静止中</div></div>' +
+            '<button class="btn btn-sm btn-primary pod-take" data-act="unstore-pet" data-id="' + p.id + '">取出</button>' +
+            '</div>';
+        });
+        h += '</div>';
+      }
+    }
+    h += '</div>';
+    return h;
+  }
+
   function viewGarden() {
     let h = '';
     const loose = S.capsules.filter(function (c) { return !c.place; });
@@ -940,11 +989,12 @@
     h += parkRow('greenhouse', '🏡', '温室', '植物 · 真菌 · 藻类在这儿孵化');
     h += parkRow('hatchery', '🐣', '孵化室', '小动物在这儿破壳');
 
-    /* ---- 空场 ---- */
+    /* ---- 空场（保存舱里的不出现在场地） ---- */
     const pond = [];
     const potted = [];
     const animals = [];
     S.pets.forEach(function (p) {
+      if (p.stored) return;
       const kind = window.Game.speciesById(p.speciesId).kind;
       if (kind === 'animal') animals.push(p);          /* 空场遛弯 */
       else if (kind === 'algae') pond.push(p);         /* 池塘 */
@@ -966,6 +1016,9 @@
     h += '<button class="sync-banner" data-act="sync">📲 换设备玩？点这里把进度搬过去（跨设备同步）</button>';
     h += saveNagHtml();
     h += '</div>';
+
+    /* ---- 保存舱（可折叠） ---- */
+    h += podPanel();
 
     /* ---- 待安置 ---- */
     h += '<div class="panel">';
@@ -1197,7 +1250,7 @@
     }
 
     body += '<div class="pet-stats" style="margin-top:12px">';
-    ['water', 'nutri', 'clean'].forEach(function (k) {
+    ['water', 'nutri', 'clean', 'fun'].forEach(function (k) {
       const si = D.STAT_INFO[k];
       const v = Math.round(p.stats[k]);
       const color = v < 20 ? '#D9534F' : (v < 45 ? '#E3A33C' : si.color);
@@ -1214,13 +1267,23 @@
     body += '<div class="pet-acts" style="margin-top:12px">';
     acts.forEach(function (a) {
       const act = D.CARE[a];
-      const own = S.bag[act.item] || 0;
-      body += '<button class="act" data-care="' + a + '"' + ((own <= 0 || p.illness) ? ' disabled' : '') +
-        ' title="' + D.ITEM_MAP[act.item].name + ' 还剩 ' + own + ' 个">' +
+      const si = D.STAT_INFO[act.stat];
+      const tiers = D.CARE_TIERS[act.stat] || [act.item];
+      let own = 0; tiers.forEach(function (t) { own += (S.bag[t] || 0); });
+      const disabled = (own <= 0 || p.illness || p.stored);
+      body += '<button class="act" data-care="' + a + '"' + (disabled ? ' disabled' : '') +
+        ' title="' + si.label + '道具还剩 ' + own + ' 个">' +
         '<span class="act-badge' + (own <= 0 ? ' empty' : '') + '">' + own + '</span>' +
         act.emoji + ' ' + act.label + (own <= 0 ? '（缺货）' : '') + '</button>';
     });
     body += '</div>';
+
+    if (p.stored) {
+      body += '<div class="warnbox" style="margin-top:10px">📦 在保存舱中：状态静止，不衰减、不生病，护理已暂停。</div>' +
+        '<div class="pet-acts" style="margin-top:10px"><button class="btn btn-primary" id="cm-unstore">📭 取出（放回场地）</button></div>';
+    } else if (window.Game.canStore(p)) {
+      body += '<div class="pet-acts" style="margin-top:10px"><button class="btn btn-ghost" id="cm-store">📦 放入保存舱</button></div>';
+    }
 
     body += '<div class="hint" style="margin-top:10px">出生 ' + fmtWhen(p.bornAt) + ' · 陪伴你 ' + fmtHM(mins) +
       ' · 被照顾 ' + p.careCount + ' 次 · 出身 ' + esc(sp.home) + '</div>';
@@ -1238,6 +1301,18 @@
         };
         const hb = $('#cm-heal', m);
         if (hb) hb.onclick = function () { openHealModal(p.id); };
+        const storeBtn = $('#cm-store', m);
+        if (storeBtn) storeBtn.onclick = function () {
+          const r = window.Game.storePet(p.id);
+          if (!r.ok) { toast('❌ ' + r.msg, 'err'); return; }
+          closeModal(); render(); toast('📦 ' + esc(p.name) + ' 已放进保存舱。', 'ok');
+        };
+        const unstoreBtn = $('#cm-unstore', m);
+        if (unstoreBtn) unstoreBtn.onclick = function () {
+          const r = window.Game.unstorePet(p.id);
+          if (!r.ok) { toast('❌ ' + r.msg, 'err'); return; }
+          closeModal(); render(); toast('📭 ' + esc(p.name) + ' 回到了场地。', 'ok');
+        };
         $$('.act[data-care]', m).forEach(function (el) {
           el.onclick = function () {
             const act = el.dataset.care;
@@ -1427,12 +1502,13 @@
     ];
     let h = '<div class="panel"><div class="panel-head"><h2>🛒 可可豆商店</h2>' +
       '<span class="hint">当前 🌰 ' + Math.floor(S.cur.beans) + ' 可可豆</span></div>' +
-      '<div style="font-size:12.5px;color:#5B7263">可可豆来自学习任务、护理小生物和成就。护理会消耗道具，所以记得每天把任务做完。</div></div>';
+      '<div style="font-size:12.5px;color:#5B7263">照顾小生物改得经验、升级解锁更高级道具；可可豆来自升级里程碑、成就与学习任务奖励。护理会消耗道具，所以记得每天把任务做完。</div></div>';
 
     groups.forEach(function (g) {
       h += '<div class="panel shop-group"><h3>' + g.name + '<span class="hint" style="font-weight:400;color:#8AA394;font-size:12px">' + g.sub + '</span></h3>';
       h += '<div class="shop-grid">';
       D.ITEMS.filter(function (i) { return i.kind === g.k; }).forEach(function (it) {
+        const locked = it.reqLevel && S.cur.level < it.reqLevel;
         const q = shopQty[it.id] || 1;
         const own = (it.kind === 'facility')
           ? (it.id === 'hourglass' ? (S.bag.hourglass || 0) : (it.id === 'slot_green' ? S.slots.greenhouse : S.slots.hatchery))
@@ -1440,16 +1516,19 @@
         const ownLabel = it.kind === 'facility'
           ? (it.id === 'hourglass' ? '持有 ' + own + ' 个' : '当前 ' + own + ' 个托位')
           : '持有 ' + own + ' 个';
-        h += '<div class="shop-item">' +
+        const ownShow = locked ? ('🔒 需 Lv.' + it.reqLevel + ' 解锁') : ownLabel;
+        h += '<div class="shop-item' + (locked ? ' locked' : '') + '">' +
           '<div class="si-top"><span class="si-ico">' + it.emoji + '</span>' +
-            '<div><div class="si-name">' + it.name + '</div><div class="si-own">' + ownLabel + '</div></div></div>' +
+            '<div><div class="si-name">' + it.name + (locked ? ' <span class="lock-mini">🔒</span>' : '') + '</div><div class="si-own">' + ownShow + '</div></div></div>' +
           '<div class="si-desc">' + esc(it.desc) + '</div>' +
           '<div class="si-bottom">' +
             '<span class="price">' + it.price + '</span>' +
-            '<button class="qty-btn" data-act="qty" data-id="' + it.id + '" data-d="-1">−</button>' +
-            '<span class="qty-val" id="qty-' + it.id + '">' + q + '</span>' +
-            '<button class="qty-btn" data-act="qty" data-id="' + it.id + '" data-d="1">＋</button>' +
-            '<button class="btn btn-sm btn-primary" style="margin-left:auto" data-act="buy" data-id="' + it.id + '" data-qty="' + q + '">购买</button>' +
+            (locked
+              ? '<span class="lock-tag">🔒 Lv.' + it.reqLevel + '</span>'
+              : '<button class="qty-btn" data-act="qty" data-id="' + it.id + '" data-d="-1">−</button>' +
+                '<span class="qty-val" id="qty-' + it.id + '">' + q + '</span>' +
+                '<button class="qty-btn" data-act="qty" data-id="' + it.id + '" data-d="1">＋</button>' +
+                '<button class="btn btn-sm btn-primary" style="margin-left:auto" data-act="buy" data-id="' + it.id + '" data-qty="' + q + '">购买</button>') +
           '</div></div>';
       });
       h += '</div></div>';
@@ -1896,13 +1975,14 @@
     h += '<div class="panel-head"><h2>❓ 怎么玩（也是怎么学）</h2></div>';
 
     h += '<h3>一、这个游戏到底在做什么</h3>';
-    h += '<p>它是一款放置类养成游戏：你<b>学习 → 挣胶囊券和可可豆 → 扭蛋 → 养小生物</b>。小生物不是奖励，是"人质"——它会渴、会饿、会脏、会生病，需要你每天回来照顾。所以你每偷懒一天，乐园都会变糟一点。</p>';
+    h += '<p>它是一款放置类养成游戏：你<b>学习 → 挣胶囊券和可可豆 → 扭蛋 → 养小生物</b>。小生物不是奖励，是"人质"——它会渴、会饿、会脏、会闷（缺娱乐），还会生病，需要你每天回来照顾。所以你每偷懒一天，乐园都会变糟一点。</p>';
     h += '<p><b>为什么叫「知识喂了猫」</b>：因为你背进去的东西，转头就忘，跟喂了猫没两样。既然靠硬记不行，那就换个法子——每天喂一点，让猫替你养着。</p>';
 
     h += '<h3>二、两套货币</h3>';
     h += '<table class="mini"><tr><th>货币</th><th>怎么来</th><th>怎么花</th></tr>' +
       '<tr><td>🎟️ 胶囊券</td><td>完成学习任务、达成成就</td><td>在扭蛋机抽胶囊（1 券 1 抽，9 券十连）</td></tr>' +
-      '<tr><td>🌰 可可豆</td><td>学习任务、护理小生物、成就</td><td>买清水/营养液/饲料/药水，扩展托位，买加速沙漏</td></tr></table>';
+      '<tr><td>🌰 可可豆</td><td>升级里程碑、成就、学习任务奖励</td><td>买清水/营养液/饲料/药水，扩展托位，买加速沙漏</td></tr>' +
+      '<tr><td>🎖️ 照顾等级</td><td>照顾小生物得经验</td><td>升级解锁更高级照顾道具（环绕音响 / 猫爬架 / 高蛋白营养液 / 营养大餐）</td></tr></table>';
     h += '<p>注意：胶囊券<b>不能买</b>，只能靠学习挣。所以每一次扭蛋，都是你真的学过。</p>';
 
     h += '<h3>三、养一只小生物的全流程</h3>';
@@ -2064,6 +2144,17 @@
     }
     if (act === 'heal') return openHealModal(ds.id);
     if (act === 'pet-open' || act === 'pet-info') return openCreatureModal(ds.id);
+    if (act === 'pod-toggle') { podOpen = !podOpen; return renderView(); }
+    if (act === 'store-pet') {
+      const r = window.Game.storePet(ds.id);
+      toast((r.ok ? '📦 ' + r.msg : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
+      return render();
+    }
+    if (act === 'unstore-pet') {
+      const r = window.Game.unstorePet(ds.id);
+      toast((r.ok ? '📭 ' + r.msg : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
+      return render();
+    }
     if (act === 'cap-open') return openCapsuleModal(ds.id);
     if (act === 'pull') return doPull(parseInt(ds.n, 10));
     if (act === 'qty') {
