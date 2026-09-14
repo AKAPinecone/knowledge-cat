@@ -637,7 +637,10 @@ audio{width:100%;margin-top:6px;height:34px;}
 .seg-item audio{height:32px;flex:1;min-width:180px;}
 
 /* ---------------- Toast / FX ---------------- */
-.toast-root{position:fixed;right:18px;bottom:18px;z-index:1000;display:flex;flex-direction:column;gap:9px;max-width:340px;}
+/* Toast 只是通知（没有按钮、到点自动消失），层级高是为了看得见；
+   但必须 pointer-events:none —— 否则它压在弹窗底部抽屉的按钮上，点「继续/关闭」会被吃掉。 */
+.toast-root{position:fixed;right:18px;bottom:18px;z-index:1000;display:flex;flex-direction:column;gap:9px;max-width:340px;
+  pointer-events:none;}
 .toast{
   background:#fff;border:1px solid var(--line);border-left:4px solid var(--green);
   border-radius:13px;padding:11px 14px;box-shadow:var(--shadow);font-size:13px;
