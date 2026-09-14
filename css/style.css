@@ -1492,3 +1492,174 @@ img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
 .qz-review-item{margin-bottom:10px;}
 .qz-review-q{font-size:13px;font-weight:600;line-height:1.65;white-space:pre-wrap;}
 .qz-review-a{font-size:13px;color:var(--green-deep);font-weight:700;margin-top:4px;}
+
+/* =========================================================
+ * v1.18 大世界地图 + 建筑系统
+ * ========================================================= */
+.world-wrap{margin-bottom:12px;}
+.world-viewport{position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;
+  border:2.5px solid #7CC176;border-radius:18px;background:#CFE7C6;
+  touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:grab;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.5);}
+.world-viewport.dragging{cursor:grabbing;}
+.world-map{position:absolute;top:0;left:0;will-change:transform;
+  transition:transform .2s ease-out;}
+.world-viewport.dragging .world-map{transition:none;}
+.world-img{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none;-webkit-user-drag:none;}
+
+/* 区域：一个覆盖整张底图的定位层 */
+.wzone{position:absolute;inset:0;pointer-events:none;}
+.wzone-tag{position:absolute;font-size:11px;font-weight:700;color:#2E7A4C;
+  background:rgba(255,255,255,.84);border:1px solid rgba(124,193,118,.6);
+  border-radius:999px;padding:2px 8px;white-space:nowrap;pointer-events:none;
+  backdrop-filter:blur(3px);box-shadow:0 2px 6px rgba(20,50,30,.12);}
+.wzone-tag i{font-style:normal;color:#5B7263;font-weight:600;}
+.wzone-tag-nursery{left:15.5%;top:50.5%;transform:translateX(-50%);}
+.wzone-tag-greenhouse{left:30%;top:18.5%;transform:translateX(-50%);}
+.wzone-tag-pond{left:46%;top:58.5%;transform:translateX(-50%);}
+
+/* 固定槽位 */
+.wslot{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;
+  pointer-events:auto;display:flex;align-items:center;justify-content:center;}
+.wslot-dot{width:24px;height:11px;border-radius:50%;
+  background:rgba(90,130,80,.18);border:1.5px dashed rgba(80,120,70,.45);}
+.wslot .park-pet{left:50%;top:50%;transform:scale(.72);}
+
+/* 草地：动物自由遛弯的范围 */
+.wzone-meadow{position:absolute;border-radius:20px;
+  border:1.5px dashed rgba(255,255,255,.55);}
+.wzone-meadow .park-pet{transform:scale(.78);transition:left 4.2s linear,top 4.2s linear;}
+.wzone-tag-meadow{left:4%;bottom:4%;}
+
+/* 机器：点击开窗 */
+.wmachine{position:absolute;transform:translate(-50%,-50%);padding:0;border:0;background:none;
+  cursor:pointer;pointer-events:auto;filter:drop-shadow(0 7px 7px rgba(20,50,30,.26));
+  transition:transform .12s;}
+.wmachine:hover{transform:translate(-50%,-50%) scale(1.06);}
+.wmachine:active{transform:translate(-50%,-50%) scale(.95);}
+.wmachine img{display:block;width:100%;height:auto;pointer-events:none;-webkit-user-drag:none;}
+.wmachine::after{content:'';position:absolute;left:50%;top:-9px;width:11px;height:11px;margin-left:-5.5px;
+  border-radius:50%;background:#FFD86B;box-shadow:0 0 0 5px rgba(255,216,107,.32);
+  animation:mpulse 1.9s ease-in-out infinite;}
+@keyframes mpulse{0%,100%{opacity:.5;transform:translateY(0);}50%{opacity:1;transform:translateY(-4px);}}
+
+/* 建筑 */
+.wbuilding{position:absolute;transform:translate(-50%,-50%);padding:0;border:0;background:none;
+  cursor:pointer;pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:3px;}
+.wbuilding img{display:block;width:100%;height:auto;pointer-events:none;-webkit-user-drag:none;
+  filter:drop-shadow(0 7px 8px rgba(20,50,30,.3));}
+.wb-name{font-size:10.5px;font-weight:800;color:#2E7A4C;background:rgba(255,255,255,.9);
+  border:1px solid rgba(124,193,118,.6);border-radius:999px;padding:1px 7px;white-space:nowrap;
+  box-shadow:0 2px 6px rgba(20,50,30,.12);}
+.wbuilding.built:hover{transform:translate(-50%,-50%) scale(1.04);}
+.wbuilding.plot{aspect-ratio:1/1;border:2px dashed rgba(255,255,255,.8);border-radius:16px;
+  justify-content:center;background:repeating-linear-gradient(45deg,rgba(255,255,255,.14) 0 9px,rgba(255,255,255,.05) 9px 18px);}
+.wbuilding.plot:hover{background:repeating-linear-gradient(45deg,rgba(255,255,255,.24) 0 9px,rgba(255,255,255,.1) 9px 18px);}
+.wb-plus{font-size:26px;font-weight:800;color:#fff;text-shadow:0 2px 5px rgba(20,50,30,.45);line-height:1;}
+.wbuilding.plot.locked{opacity:.55;cursor:default;border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.1);}
+.wb-lock{font-size:18px;line-height:1;}
+
+/* 有话想说 */
+.wstory-flag{position:absolute;left:50%;top:5%;transform:translateX(-50%);
+  border:0;border-radius:999px;padding:8px 17px;font-size:13.5px;font-weight:800;color:#fff;
+  background:linear-gradient(135deg,#F0A93C,#E3813C);cursor:pointer;pointer-events:auto;
+  box-shadow:0 6px 18px rgba(227,129,60,.42);animation:flagbob 1.7s ease-in-out infinite;z-index:20;}
+@keyframes flagbob{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-5px);}}
+
+.world-pan-hint{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);
+  font-size:11px;color:#2E7A4C;background:rgba(255,255,255,.88);border-radius:999px;
+  padding:3px 11px;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(20,50,30,.14);}
+
+/* ---------------- 乐园工地 ---------------- */
+.site-dots{display:flex;gap:8px;justify-content:center;margin-bottom:12px;flex-wrap:wrap;}
+.site-dot{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:16px;background:var(--panel-3);border:1.5px solid var(--line);color:var(--ink-3);}
+.site-dot.ok{background:var(--green-soft);border-color:var(--mint);}
+.site-dot.next{background:var(--gold-soft);border-color:#EFCF92;animation:pulse 1.9s infinite;
+  font-weight:800;color:#B5821F;}
+.site-next{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:14px;padding:12px 14px;}
+.sn-info{flex:1;min-width:140px;display:flex;flex-direction:column;gap:3px;}
+.sn-info b{font-size:14.5px;color:var(--ink);}
+.sn-info span{font-size:12px;color:var(--ink-3);line-height:1.5;}
+.site-why{width:100%;font-size:12px;color:#8A6D1F;background:var(--gold-soft);border-radius:9px;
+  padding:7px 10px;line-height:1.55;}
+.site-built{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;margin-top:12px;}
+.sbt{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:9px 11px;cursor:pointer;font-size:13px;
+  transition:border-color .12s,transform .12s;box-shadow:var(--shadow-sm);}
+.sbt:hover{border-color:var(--mint);transform:translateY(-1px);}
+.sbt-ico{font-size:17px;line-height:1;}
+.sbt-name{font-weight:700;color:var(--ink);flex:1;min-width:0;}
+.sbt-lv{font-size:11px;color:var(--ink-3);}
+.sbt-staff{font-size:11px;color:var(--teal);font-weight:700;}
+
+/* ---------------- 建筑弹窗通用块 ---------------- */
+.bx-desc{font-size:13.5px;color:var(--ink-2);line-height:1.65;margin-bottom:10px;}
+.bx-lv{display:inline-block;font-size:12.5px;font-weight:700;color:var(--teal);
+  background:rgba(53,183,168,.1);border-radius:999px;padding:4px 12px;margin-bottom:10px;}
+.bx-cost{font-size:12.5px;color:var(--ink-2);background:var(--panel-2);border:1px solid var(--line);
+  border-radius:12px;padding:10px 12px;line-height:1.75;margin-bottom:13px;}
+.bx-tip{font-size:11.5px;color:var(--ink-3);text-align:center;margin:6px 0 12px;line-height:1.5;}
+.staff-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:13px;}
+.staff-chip{display:flex;align-items:center;gap:7px;background:var(--green-soft);border:1px solid var(--mint);
+  border-radius:999px;padding:4px 6px 4px 5px;}
+.sc-face{width:28px;height:28px;border-radius:50%;background:#fff;display:flex;align-items:center;
+  justify-content:center;font-size:17px;overflow:hidden;flex:0 0 auto;}
+.sc-face img{width:100%;height:100%;object-fit:contain;display:block;}
+.sc-name{font-size:12.5px;font-weight:700;color:var(--green-deep);}
+.sc-x{border:0;background:rgba(255,255,255,.75);width:22px;height:22px;border-radius:50%;cursor:pointer;
+  font-size:11px;color:var(--ink-2);line-height:1;padding:0;}
+.stock-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:13px;
+  background:var(--cocoa-soft);border-radius:12px;padding:9px 11px;}
+.stock-ico{font-size:12.5px;font-weight:700;color:var(--cocoa);}
+.stock-row .btn{margin-left:auto;}
+.stock-row .btn + .btn{margin-left:0;}
+
+/* ---------------- 剧情（文字冒险） ---------------- */
+.story-box{max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;
+  padding:4px 2px;scroll-behavior:smooth;}
+.story-line{border-radius:14px;padding:10px 13px;line-height:1.72;font-size:13.5px;
+  animation:storyin .28s ease-out both;max-width:92%;}
+.story-line p{margin:0;white-space:pre-wrap;}
+.sl-who{display:block;font-size:11.5px;font-weight:800;margin-bottom:4px;opacity:.9;}
+.story-line.narr{background:transparent;padding:2px 4px;color:var(--ink-3);
+  font-style:italic;max-width:100%;font-size:13px;text-align:center;}
+.story-line.pet{background:var(--green-soft);color:var(--ink);border:1px solid var(--mint);align-self:flex-start;}
+.story-line.pet .sl-who{color:var(--green-deep);}
+.story-line.me{background:var(--gold-soft);color:var(--ink-2);border:1px solid #EFDDB4;align-self:flex-end;}
+.story-line.me .sl-who{color:#8A6D1F;}
+.story-line.now{box-shadow:0 4px 14px rgba(76,169,107,.2);}
+@keyframes storyin{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+/* ---------------- 收藏品 / 博物馆 ---------------- */
+.col-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;}
+.col-card{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;padding:10px 6px;text-align:center;}
+.col-card.miss{opacity:.5;border-style:dashed;background:var(--panel-2);}
+.col-card.r2{border-color:#BFDCF2;background:#F4FAFE;}
+.col-card.r3{border-color:#EFD8A2;background:var(--gold-soft);}
+.col-ico{font-size:26px;line-height:1;}
+.col-name{font-size:12px;font-weight:700;color:var(--ink);}
+.col-meta{font-size:10.5px;color:var(--ink-3);}
+.ach-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:8px;}
+.ach-card{display:flex;flex-direction:column;gap:2px;background:var(--gold-soft);border:1px solid #EFD8A2;
+  border-radius:12px;padding:10px 11px;}
+.ach-card .ac-ico{font-size:20px;line-height:1;}
+.ach-card .ac-name{font-size:12.5px;font-weight:800;color:#7A5A16;}
+.ach-card .ac-desc{font-size:11px;color:#8A6D1F;line-height:1.45;}
+
+@media (max-width:720px){
+  .wslot{width:56px;height:56px;margin:-28px 0 0 -28px;}
+  .wslot .park-pet{transform:scale(.66);}
+  .wzone-meadow .park-pet{transform:scale(.72);}
+  .wzone-tag{font-size:10.5px;}
+  .world-pan-hint{font-size:10.5px;}
+}
+@media (max-width:400px){
+  .wslot{width:48px;height:48px;margin:-24px 0 0 -24px;}
+  .wb-name{font-size:9.5px;padding:1px 5px;}
+  .wstory-flag{font-size:12px;padding:6px 13px;}
+  .col-grid{grid-template-columns:repeat(auto-fill,minmax(84px,1fr));}
+  .site-built{grid-template-columns:1fr 1fr;}
+}

@@ -430,8 +430,370 @@ window.Game = (function () {
     return { text: '很虚弱', emoji: '😣', color: '#D9534F' };
   }
 
+  /* =========================================================
+   * v1.18 大世界：区域归位 / 修建 / 打工
+   * ========================================================= */
+  function ensureBuild() {
+    if (!S.build || typeof S.build !== 'object') S.build = {};
+    const b = S.build;
+    if (!Array.isArray(b.built)) b.built = [];
+    if (!Array.isArray(b.trips)) b.trips = [];
+    if (!Array.isArray(b.collection)) b.collection = [];
+    ['story', 'assign', 'staff', 'stock', 'day', 'lv'].forEach(function (k) {
+      if (!b[k] || typeof b[k] !== 'object') b[k] = {};
+    });
+  }
+
+  /* 小生物该待在哪片区域：
+     species.water === true 的一律下水（海菜花 / 红瘰疣螈 / 云南闭壳龟 / 藻类），
+     其余按 kind：动物→草地，真菌→温室，植物→苗圃。 */
+  function zoneIdOf(pet) {
+    const sp = speciesById(pet.speciesId);
+    if (sp.water === true || sp.kind === 'algae') return 'pond';
+    if (sp.kind === 'animal') return 'meadow';
+    if (sp.kind === 'fungus') return 'greenhouse';
+    return 'nursery';
+  }
+  function zoneById(id) {
+    const zs = D.ZONES || [];
+    for (let i = 0; i < zs.length; i++) if (zs[i].id === id) return zs[i];
+    return zs[0];
+  }
+  function petsInZone(id) {
+    return S.pets.filter(function (p) { return !p.stored && zoneIdOf(p) === id; });
+  }
+
+  /* ---------------- 修建 ---------------- */
+  function buildingById(id) {
+    const list = D.BUILDINGS || [];
+    for (let i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+  function isBuilt(id) { return (S.build.built || []).indexOf(id) >= 0; }
+  function buildLv(id) { return (S.build.lv && S.build.lv[id]) || 0; }
+  /* 容量：Lv.1 招 2 只，每扩一级 +1 */
+  function staffCap(id) { return 1 + Math.max(1, buildLv(id)); }
+  /* 还没修的第一栋（按顺序解锁） */
+  function nextBuilding() {
+    const list = D.BUILDINGS || [];
+    for (let i = 0; i < list.length; i++) if (!isBuilt(list[i].id)) return list[i];
+    return null;
+  }
+  /* 开工门槛：Lv.3 + 至少 3 只成年体 */
+  function buildGate() {
+    if (S.cur.level < 3) return { ok: false, why: 'level', msg: '照顾等级到 Lv.3 才能开工（现在是 Lv.' + S.cur.level + '）' };
+    if (adultCount() < 3) return { ok: false, why: 'adult', msg: '至少要 3 只成年小生物才凑得齐人手（现在 ' + adultCount() + ' 只）' };
+    return { ok: true };
+  }
+  function adultPets() {
+    return S.pets.filter(function (p) { return canStore(p); });
+  }
+  function adultCount() { return adultPets().length; }
+  /* 某类 kind 里能干活的小生物 */
+  function workersOf(kind) {
+    return S.pets.filter(function (p) {
+      if (p.stored) return false;
+      return speciesById(p.speciesId).kind === kind;
+    });
+  }
+  /* 建设/扩建的花费：材料（需求值）与人手，扩建更贵 */
+  function buildCost(id) {
+    const up = isBuilt(id);
+    const lv = buildLv(id) || 1;
+    return {
+      upgrade: up,
+      need: up ? Math.round(D.BUILD_RULE.buildNeed * 1.4) : D.BUILD_RULE.buildNeed,
+      beans: up ? 60 * lv : 0
+    };
+  }
+
+  function buildStart(id, assign) {
+    ensureBuild();
+    const b = buildingById(id);
+    if (!b) return { ok: false, msg: '没有这栋建筑' };
+    const gate = buildGate();
+    if (!gate.ok) return { ok: false, msg: gate.msg };
+    /* 顺序解锁：前面没建好，后面盖不了 */
+    const list = D.BUILDINGS;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === id) break;
+      if (!isBuilt(list[i].id)) return { ok: false, msg: '按顺序来：先修好「' + list[i].name + '」' };
+    }
+    assign = assign || {};
+    const roles = [['animal', '劳力'], ['plant', '材料'], ['fungus', '胶合料']];
+    const crew = {};
+    for (let i = 0; i < roles.length; i++) {
+      const kind = roles[i][0], label = roles[i][1];
+      const pid = assign[kind];
+      const pet = pid ? S.pets.filter(function (p) { return p.id === pid; })[0] : null;
+      if (!pet) return { ok: false, msg: '还没选好出' + label + '的小生物' };
+      if (speciesById(pet.speciesId).kind !== kind) return { ok: false, msg: '出' + label + '的那只不合适' };
+      if (pet.stored || pet.illness) return { ok: false, msg: pet.name + '现在没法出力' };
+      crew[kind] = pet;
+    }
+    const cost = buildCost(id);
+    if (cost.beans && S.cur.beans < cost.beans) return { ok: false, msg: '可可豆不够（需要 ' + cost.beans + '）' };
+    if (cost.beans) S.cur.beans -= cost.beans;
+    /* 三位参与者出工：需求值下降 */
+    Object.keys(crew).forEach(function (k) {
+      const p = crew[k];
+      ['water', 'nutri', 'clean', 'fun'].forEach(function (s) {
+        p.stats[s] = Math.max(0, p.stats[s] - cost.need);
+      });
+    });
+    const wasBuilt = isBuilt(id);
+    if (!wasBuilt) S.build.built.push(id);
+    S.build.lv[id] = buildLv(id) + 1;
+    S.build.assign[id] = { animal: crew.animal.id, plant: crew.plant.id, fungus: crew.fungus.id };
+    if (!Array.isArray(S.build.staff[id])) S.build.staff[id] = [];
+    if (!S.build.stock[id] || typeof S.build.stock[id] !== 'object') S.build.stock[id] = {};
+    if (!S.build.day) S.build.day = {};
+
+    const lvlBefore = S.cur.level;
+    S.cur.exp += D.BUILD_RULE.buildExp;
+    const lvlAfter = levelOf(S.cur.exp);
+    S.cur.level = lvlAfter;
+    let msg = wasBuilt
+      ? '🔨 ' + b.name + ' 扩建到 Lv.' + S.build.lv[id] + '，能容下 ' + staffCap(id) + ' 只小生物。'
+      : '🎉 ' + b.name + ' 建好了！' + b.emoji;
+    if (lvlAfter > lvlBefore) {
+      const rw = levelReward(lvlAfter);
+      S.cur.beans += rw.beans;
+      S.cur.tickets += rw.tickets;
+      msg += '　🎖️ 升级到 Lv.' + lvlAfter + '！+' + rw.beans + ' 豆 +' + rw.tickets + ' 券';
+    }
+    window.Store.pushLog('🏗️ ' + msg);
+    window.Store.save(true);
+    checkAchievements();
+    return { ok: true, msg: msg, leveled: lvlAfter > lvlBefore, built: !wasBuilt };
+  }
+
+  /* ---------------- 剧情 ---------------- */
+  function storySeen(k) { return !!(S.build.story && S.build.story[k]); }
+  function markStory(k) {
+    ensureBuild();
+    S.build.story[k] = true;
+    window.Store.save(true);
+    return true;
+  }
+  /* Lv.3 + ≥3 成年体 → 最年长者开口 */
+  function laborReady() {
+    return !storySeen('labor') && S.cur.level >= 3 && adultCount() >= 3;
+  }
+  /* 该看哪段剧情：labor 优先，然后是「已解锁但还没看」的下一栋 */
+  function pendingStory() {
+    if (laborReady()) return 'labor';
+    const nb = nextBuilding();
+    if (!nb) return null;
+    if (storySeen(nb.story)) return null;
+    return nb.story;
+  }
+
+  /* ---------------- 安排小生物上班 ---------------- */
+  function staffOf(id) {
+    const arr = (S.build.staff && S.build.staff[id]) || [];
+    return arr.filter(function (pid) {
+      return S.pets.some(function (p) { return p.id === pid; });
+    });
+  }
+  function addStaff(id, petId) {
+    ensureBuild();
+    if (!isBuilt(id)) return { ok: false, msg: '这栋还没建好' };
+    const arr = S.build.staff[id] || (S.build.staff[id] = []);
+    if (arr.indexOf(petId) >= 0) return { ok: false, msg: '它已经在这儿上班了' };
+    if (arr.length >= staffCap(id)) return { ok: false, msg: '位置满了（' + arr.length + '/' + staffCap(id) + '），扩建能多招几员' };
+    const pet = S.pets.filter(function (p) { return p.id === petId; })[0];
+    if (!pet) return { ok: false, msg: '找不到这只小生物' };
+    if (pet.stored) return { ok: false, msg: pet.name + '还在保存舱里，先取出来' };
+    if (pet.illness) return { ok: false, msg: pet.name + '正在生病，先治好' };
+    arr.push(petId);
+    window.Store.save(true);
+    return { ok: true, msg: '👜 ' + pet.name + ' 来' + buildingById(id).name + '上班了。' };
+  }
+  function removeStaff(id, petId) {
+    ensureBuild();
+    const arr = S.build.staff[id] || [];
+    const i = arr.indexOf(petId);
+    if (i < 0) return { ok: false, msg: '它不在这儿' };
+    arr.splice(i, 1);
+    window.Store.save(true);
+    return { ok: true, msg: '已放它回去休息。' };
+  }
+
+  function todayKey() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function doneToday(key) { return (S.build.day || {})[key] === todayKey(); }
+  function markDone(key) { S.build.day[key] = todayKey(); }
+  function petById(id) { return S.pets.filter(function (p) { return p.id === id; })[0] || null; }
+
+  /* ---- 食堂：投清水 + 饲料 → 开饭，产可可豆 ---- */
+  function canteenStock(id, item) {
+    ensureBuild();
+    const label = item === 'water' ? '清水' : '饲料';
+    if ((S.bag[item] || 0) <= 0) return { ok: false, msg: label + '用完了，去商店补' };
+    S.bag[item]--;
+    const st = S.build.stock[id] || (S.build.stock[id] = {});
+    st[item] = (st[item] || 0) + 1;
+    window.Store.save(true);
+    return { ok: true, msg: '往食堂投了 1 份' + label + '（现有 ' + st[item] + ' 份）。' };
+  }
+  function canteenRun(id) {
+    ensureBuild();
+    const staff = staffOf(id);
+    if (!staff.length) return { ok: false, msg: '食堂还没安排小生物' };
+    if (doneToday('canteen:' + id)) return { ok: false, msg: '今天已经开过饭了，明天再来' };
+    const st = S.build.stock[id] || {};
+    const meals = Math.min(staff.length, st.water || 0, st.food || 0);
+    if (meals <= 0) return { ok: false, msg: '清水和饲料得各投几份才开得了饭' };
+    st.water -= meals;
+    st.food -= meals;
+    let beans = 0;
+    staff.slice(0, meals).forEach(function (pid) {
+      const p = petById(pid);
+      if (!p) return;
+      p.stats.nutri = Math.min(100, p.stats.nutri + 26);
+      p.stats.water = Math.min(100, p.stats.water + 22);
+      p.stats.fun = Math.min(100, p.stats.fun + 8);
+      beans += 5 + buildLv(id) * 3;
+    });
+    S.cur.beans += beans;
+    markDone('canteen:' + id);
+    window.Store.pushLog('🍲 食堂开饭：' + meals + ' 只吃饱了，上交 ' + beans + ' 可可豆。');
+    window.Store.save(true);
+    return { ok: true, msg: '🍲 ' + meals + ' 只小生物吃饱了，食堂上交 ' + beans + ' 可可豆。' };
+  }
+
+  /* ---- 澡堂：洗掉脏污 → 产营养液 ---- */
+  function bathRun(id) {
+    ensureBuild();
+    const staff = staffOf(id);
+    if (!staff.length) return { ok: false, msg: '澡堂还没安排小生物' };
+    if (doneToday('bath:' + id)) return { ok: false, msg: '今天的热水已经烧过了' };
+    let fert = 0, n = 0;
+    staff.forEach(function (pid) {
+      const p = petById(pid);
+      if (!p) return;
+      p.stats.clean = Math.min(100, p.stats.clean + 28);
+      p.stats.fun = Math.min(100, p.stats.fun + 6);
+      fert += 1 + buildLv(id);
+      n++;
+    });
+    S.bag.fert = (S.bag.fert || 0) + fert;
+    markDone('bath:' + id);
+    window.Store.pushLog('🛁 澡堂营业：' + n + ' 只洗得干干净净，收集到 ' + fert + ' 份营养液。');
+    window.Store.save(true);
+    return { ok: true, msg: '🛁 ' + n + ' 只洗得干干净净，收到 ' + fert + ' 份营养液。' };
+  }
+
+  /* ---- 图书馆：静一静 → 涨娱乐 ---- */
+  function libraryRun(id) {
+    ensureBuild();
+    const staff = staffOf(id);
+    if (!staff.length) return { ok: false, msg: '图书馆还没安排小生物' };
+    if (doneToday('library:' + id)) return { ok: false, msg: '今天已经安静看过了' };
+    let n = 0;
+    staff.forEach(function (pid) {
+      const p = petById(pid);
+      if (!p) return;
+      p.stats.fun = Math.min(100, p.stats.fun + 30 + buildLv(id) * 6);
+      n++;
+    });
+    markDone('library:' + id);
+    window.Store.pushLog('📚 图书馆时光：' + n + ' 只安静地待了一下午，娱乐值回升。');
+    window.Store.save(true);
+    return { ok: true, msg: '📚 ' + n + ' 只在图书馆泡了一下午，娱乐值涨了不少。' };
+  }
+
+  /* ---- 旅行社：导游带团出游 → 随机带回物品与收藏品 ---- */
+  function travelRun(id) {
+    ensureBuild();
+    const staff = staffOf(id);
+    if (staff.length < 2) return { ok: false, msg: '出游至少要有 1 只导游 + 1 只同伴' };
+    if (doneToday('travel:' + id)) return { ok: false, msg: '今天已经出过团了' };
+    const guide = petById(staff[0]);
+    const party = staff.slice(1).map(petById).filter(Boolean);
+    if (!guide) return { ok: false, msg: '导游不见了' };
+    const lv = buildLv(id);
+    /* 出团消耗：走一天，需求值下降 */
+    [guide].concat(party).forEach(function (p) {
+      ['water', 'nutri', 'clean', 'fun'].forEach(function (s) {
+        p.stats[s] = Math.max(0, p.stats[s] - 14);
+      });
+    });
+    const got = [];
+    const beans = 12 + lv * 8 + Math.floor(Math.random() * 10);
+    S.cur.beans += beans;
+    got.push('🌰 可可豆 ×' + beans);
+    /* 物件掉落 */
+    if (Math.random() < 0.75) {
+      const pool = D.ITEMS.filter(function (it) { return it.kind !== 'facility'; });
+      const it = pick(pool);
+      S.bag[it.id] = (S.bag[it.id] || 0) + 1;
+      got.push(it.emoji + ' ' + it.name + ' ×1');
+    }
+    /* 收藏品：概率随人数与等级上升 */
+    const chance = Math.min(0.7, 0.2 + party.length * 0.08 + (lv - 1) * 0.06);
+    let col = null;
+    if (Math.random() < chance) {
+      const r = Math.random();
+      const rarity = r < 0.08 ? 3 : (r < 0.35 ? 2 : 1);
+      const pool = D.COLLECTIONS.filter(function (c) { return c.rarity === rarity; });
+      col = pick(pool);
+      const already = (S.build.collection || []).some(function (c) { return c.id === col.id; });
+      S.build.collection.push({ id: col.id, at: Date.now(), by: guide.name, dup: already });
+      got.push(col.emoji + ' ' + col.name + (already ? '（重复收集）' : '·新收藏！'));
+      window.Store.pushLog('🧭 ' + guide.name + ' 的团带回了「' + col.name + '」。');
+    }
+    S.build.trips.push({ at: Date.now(), guide: guide.id, guideName: guide.name, party: party.map(function (p) { return p.id; }), got: got });
+    if (S.build.trips.length > 40) S.build.trips = S.build.trips.slice(-40);
+    markDone('travel:' + id);
+    window.Store.save(true);
+    return { ok: true, msg: '🧭 ' + guide.name + ' 带 ' + party.length + ' 只出游回来了：' + got.join('、'), collection: col };
+  }
+  /* 已收集的收藏品（去重，标记件数） */
+  function collectionsOwned() {
+    const map = {};
+    (S.build.collection || []).forEach(function (c) {
+      if (!map[c.id]) map[c.id] = { id: c.id, n: 0, first: c.at };
+      map[c.id].n++;
+    });
+    return Object.keys(map).map(function (k) { return map[k]; });
+  }
+
   return {
     init: init,
+    ensureBuild: ensureBuild,
+    zoneIdOf: zoneIdOf,
+    zoneById: zoneById,
+    petsInZone: petsInZone,
+    buildingById: buildingById,
+    isBuilt: isBuilt,
+    buildLv: buildLv,
+    staffCap: staffCap,
+    nextBuilding: nextBuilding,
+    buildGate: buildGate,
+    adultPets: adultPets,
+    adultCount: adultCount,
+    workersOf: workersOf,
+    buildCost: buildCost,
+    buildStart: buildStart,
+    storySeen: storySeen,
+    markStory: markStory,
+    laborReady: laborReady,
+    pendingStory: pendingStory,
+    staffOf: staffOf,
+    addStaff: addStaff,
+    removeStaff: removeStaff,
+    doneToday: doneToday,
+    petById: petById,
+    canteenStock: canteenStock,
+    canteenRun: canteenRun,
+    bathRun: bathRun,
+    libraryRun: libraryRun,
+    travelRun: travelRun,
+    collectionsOwned: collectionsOwned,
     speciesById: speciesById,
     homeOf: homeOf,
     homeName: homeName,

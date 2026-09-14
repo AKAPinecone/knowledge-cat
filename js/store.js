@@ -44,6 +44,18 @@ window.Store = (function () {
       capsules: [],
       pets: [],
       slots: { greenhouse: 4, hatchery: 4 },
+      /* 大世界建筑系统（v1.18） */
+      build: {
+        built: [],         /* 已建成的建筑 id，按修建顺序 */
+        story: {},         /* 已看过的剧情：{ labor:true, canteen:true, ... } */
+        assign: {},        /* 修建时指派的三人：{ canteen:{a,p,f} }（宠物 id） */
+        staff: {},         /* 建筑里安排的小生物：{ canteen:[petId,...] } */
+        stock: {},         /* 物资：{ canteen:{water,food} } */
+        day: {},           /* 当天已做过的事：{ 'canteen:work':'2026-09-14' } */
+        lv: {},            /* 建筑等级：{ canteen:1 } */
+        trips: [],         /* 出游记录 */
+        collection: []     /* 旅行带回来的收藏品 */
+      },
       pity: 0,
       saves: [],                   /* 存档槽：每项是一枚可带走的快照（含存档码） */
       save: { lastAt: 0, sinceTake: 0, lastTakeAt: 0, autoCount: 0 },  /* 存档统计 + 唠叨计数 */
@@ -175,6 +187,17 @@ window.Store = (function () {
       if (!p.stats) p.stats = {};
       if (typeof p.stats.fun !== 'number') p.stats.fun = 72;
       if (typeof p.stored !== 'boolean') p.stored = false;
+    });
+    /* 老存档补大世界建筑系统（v1.18）。
+       built/story/assign/staff/stock/day/lv 是对象，trips/collection 是数组。 */
+    if (!s.build || typeof s.build !== 'object') s.build = {};
+    [['built', 'o'], ['story', 'o'], ['assign', 'o'], ['staff', 'o'],
+     ['stock', 'o'], ['day', 'o'], ['lv', 'o'],
+     ['trips', 'a'], ['collection', 'a']].forEach(function (pair) {
+      const k = pair[0], t = pair[1];
+      if (s.build[k] === undefined || s.build[k] === null) s.build[k] = (t === 'a') ? [] : {};
+      if (t === 'a' && !Array.isArray(s.build[k])) s.build[k] = [];
+      if (t === 'o' && typeof s.build[k] !== 'object') s.build[k] = {};
     });
   }
 

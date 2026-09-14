@@ -102,8 +102,8 @@ window.GAME_DATA = (function () {
     { id: 'n_peacock',  name: '绿孔雀',     kind: 'animal', rarity: 3, emoji: '🦚', img: 'assets/creatures/lvkongque.webp',     home: '滇中河谷',  tip: '中国唯一的本土孔雀，比蓝孔雀更难得。' },
     { id: 'n_hornbill', name: '双角犀鸟',   kind: 'animal', rarity: 2, emoji: '🦜', img: 'assets/creatures/shuangjiaoxiniao.webp', home: '盈江·瑞丽', tip: '繁殖时把妻子封在树洞里养胎，堪称雨林模范丈夫。' },
     { id: 'n_snub',     name: '滇金丝猴',   kind: 'animal', rarity: 3, emoji: '🐒', img: 'assets/creatures/dianjinsihou.webp',  home: '白马雪山',  tip: '"雪山精灵"，全球仅三千余只，云南独有。' },
-    { id: 'n_salamander', name: '红瘰疣螈', kind: 'animal', rarity: 2, emoji: '🦎', img: 'assets/creatures/hongluoyouyuan.webp', home: '滇西山地', tip: '云南特有的两栖"小辣条"，橙红疣粒是警戒色。国家二级保护动物。' },
-    { id: 'n_turtle',   name: '云南闭壳龟', kind: 'animal', rarity: 2, emoji: '🐢', img: 'assets/creatures/yunnanbikegui.webp', home: '滇中高原',  tip: '云南特有的闭壳龟，腹甲能完全闭合，把自己锁成一个小堡垒。' },
+    { id: 'n_salamander', name: '红瘰疣螈', kind: 'animal', water: true, rarity: 2, emoji: '🦎', img: 'assets/creatures/hongluoyouyuan.webp', home: '滇西山地', tip: '云南特有的两栖"小辣条"，橙红疣粒是警戒色。国家二级保护动物。' },
+    { id: 'n_turtle',   name: '云南闭壳龟', kind: 'animal', water: true, rarity: 2, emoji: '🐢', img: 'assets/creatures/yunnanbikegui.webp', home: '滇中高原',  tip: '云南特有的闭壳龟，腹甲能完全闭合，把自己锁成一个小堡垒。' },
     { id: 'n_ladyam',   name: '白腹锦鸡',   kind: 'animal', rarity: 1, emoji: '🐦', img: 'assets/creatures/baifujinji.webp',    home: '滇西·川西', tip: '羽色像打翻的调色盘，白冠红腹配蓝绿披肩，山里最靓的鸡。' },
     { id: 'n_ratsnake', name: '黑眉锦蛇',   kind: 'animal', rarity: 1, emoji: '🐍', img: 'assets/creatures/heimeijinshe.webp',  home: '全省',      tip: '无毒的捕鼠能手，眼后两条黑纹像画了眉，农家粮仓的老朋友。' },
 
@@ -113,7 +113,7 @@ window.GAME_DATA = (function () {
     { id: 'p_phalaen',  name: '蝴蝶兰',     kind: 'plant', rarity: 1, emoji: '🦋', img: 'assets/creatures/hudielan.webp',      home: '澜沧江流域', tip: '附生在林间树干上，开花像群蝶落枝，年宵花里的常青树。' },
     { id: 'p_primula',  name: '报春花',     kind: 'plant', rarity: 1, emoji: '💐', img: 'assets/creatures/baochunhua.webp',    home: '滇西北',    tip: '报春花属以云南为分布中心，早春开花，名副其实的"报春使者"。' },
     { id: 'p_rhodo',    name: '高山杜鹃',   kind: 'plant', rarity: 2, emoji: '💮', img: 'assets/creatures/gaoshandujuan.webp', home: '迪庆·怒江', tip: '海拔三千米以上开成花海，当地人叫"山踯躅"。' },
-    { id: 'p_haicai',   name: '海菜花',     kind: 'plant', rarity: 2, emoji: '🌊', img: 'assets/creatures/haicaihua.webp',     home: '大理洱海',  tip: '只长在清水里，水一脏就绝迹——它是水质的判官。' },
+    { id: 'p_haicai',   name: '海菜花',     kind: 'plant', water: true, rarity: 2, emoji: '🌊', img: 'assets/creatures/haicaihua.webp',     home: '大理洱海',  tip: '只长在清水里，水一脏就绝迹——它是水质的判官。' },
     { id: 'p_dendrobium', name: '球花石斛', kind: 'plant', rarity: 2, emoji: '🌿', img: 'assets/creatures/qiuhuashihu.webp',   home: '普洱·版纳', tip: '一串串白花开成球，附生老树干上，是有名的药用石斛。' },
     { id: 'p_michelia', name: '云南含笑',   kind: 'plant', rarity: 1, emoji: '🌼', img: 'assets/creatures/yunnanhanxiao.webp', home: '全省',      tip: '白花带清香，云南人叫"袋袋花"，春天山道边一路香。' },
     { id: 'p_flame',    name: '火焰花',     kind: 'plant', rarity: 2, emoji: '🔥', img: 'assets/creatures/huoyanhua.webp',     home: '滇南',      tip: '橙红色花朵密密缀满枝条，远看像一束束小火把在燃烧。' },
@@ -129,7 +129,13 @@ window.GAME_DATA = (function () {
     { id: 'f_naijiang', name: '奶浆菌',     kind: 'fungus', rarity: 1, emoji: '🥛', img: 'assets/creatures/naijiangjun.webp',   home: '全省',      tip: '掰断菌柄会流出白色乳汁而得名，脆嫩微甜，云南人从小吃到大。' },
     { id: 'f_ganba',    name: '干巴菌',     kind: 'fungus', rarity: 2, emoji: '🥩', img: 'assets/creatures/ganbajun.webp',      home: '昆明·楚雄', tip: '长得最丑，炒出来最香，价格也最不讲道理。' },
     { id: 'f_qingtou',  name: '青头菌',     kind: 'fungus', rarity: 1, emoji: '🍄‍🟫', img: 'assets/creatures/qingtoujun.webp', home: '滇中',      tip: '伞面泛青，最让人放心的那一口鲜甜。' },
-    { id: 'f_coral',    name: '珊瑚菌',     kind: 'fungus', rarity: 1, emoji: '🪸', img: 'assets/creatures/shanhujun.webp',     home: '滇中·滇西北', tip: '长得像海底珊瑚，脆脆嫩嫩，云南人叫它"刷把菌"。' }
+    { id: 'f_coral',    name: '珊瑚菌',     kind: 'fungus', rarity: 1, emoji: '🪸', img: 'assets/creatures/shanhujun.webp',     home: '滇中·滇西北', tip: '长得像海底珊瑚，脆脆嫩嫩，云南人叫它"刷把菌"。' },
+    /* ===== 水生（池塘）=====
+       v1.18：池塘要放水生的，所以这两种从「老物种」挪进可扭蛋的池子。
+       它们没有立绘，走 emoji 兜底（渲染层已经处理了 emoji 字形框的留白）。
+       海菜花 / 红瘰疣螈 / 云南闭壳龟本来就在池子里，靠 water: true 标记路由（见 zoneIdOf）。 */
+    { id: 'a_spirulina', name: '程海螺旋藻', kind: 'algae', rarity: 2, emoji: '🦠', home: '丽江·程海',  tip: '高原碱性湖泊里的蓝色奇迹，肉眼看不见，聚起来能把整片湖染绿。' },
+    { id: 'a_water',     name: '水绵',      kind: 'algae', rarity: 1, emoji: '🟢', home: '随处可见',   tip: '水塘里那团绿丝，滑溜溜地缠在石头上，贱得很，也顽强得很。' }
   ];
 
   /* 老物种（v1.2 之前的卡池）：只为兼容旧存档（已养着的别消失），
@@ -148,9 +154,6 @@ window.GAME_DATA = (function () {
     { id: 'f_ganba_old',  name: '干巴菌', kind: 'fungus', rarity: 2, emoji: '🥩', home: '昆明·楚雄',  legacy: true, tip: '长得最丑，炒出来最香。' },
     { id: 'f_ganoderma', name: '灵芝',   kind: 'fungus', rarity: 3, emoji: '🧿', home: '滇西',        legacy: true, tip: '仙草级存在。' },
     { id: 'f_matsutake_old', name: '松茸', kind: 'fungus', rarity: 3, emoji: '✨', home: '香格里拉',  legacy: true, tip: '无法人工栽培的傲娇贵族。' },
-    { id: 'a_spirulina', name: '程海螺旋藻', kind: 'algae', rarity: 2, emoji: '🦠', home: '丽江·程海', legacy: true, tip: '高原碱性湖泊里的蓝色奇迹。' },
-    { id: 'a_haicai',    name: '海菜花·老邻居', kind: 'algae', rarity: 2, emoji: '🌊', home: '大理洱海', legacy: true, tip: '水质的判官。' },
-    { id: 'a_water',     name: '水绵',       kind: 'algae', rarity: 1, emoji: '🟢', home: '随处可见',   legacy: true, tip: '水塘里那团绿丝。' },
     { id: 'n_dog',   name: '土狗·阿黄',  kind: 'animal', rarity: 1, emoji: '🐕', home: '各村落',     legacy: true, tip: '云南乡村的守门神。' },
     { id: 'n_pika',  name: '高原鼠兔',   kind: 'animal', rarity: 1, emoji: '🐹', home: '迪庆草原',   legacy: true, tip: '草原食物链的基石。' },
     { id: 'n_snail', name: '洱海螺',     kind: 'animal', rarity: 1, emoji: '🐌', home: '大理',        legacy: true, tip: '慢，但活得久。' },
@@ -614,8 +617,210 @@ window.GAME_DATA = (function () {
   /* ---------- 资料库：交互式学习中枢（错题复习 / 综合问答 / 导游词），不再以 PDF 形式呈现 ---------- */
   const DOCS = [];
 
+  /* =========================================================
+   * v1.18 大世界地图（可拖动）+ 建筑系统
+   * 底图只有地形；建筑/机器都是浮在上面的立绘（百分比定位）
+   * ========================================================= */
+  const WORLD = { img: 'assets/map/world.webp', w: 1536, h: 933, ratio: 1536 / 933 };
+
+  /* 区域：小生物按 kind 归位。slots 是 [x%, y%]，相对底图
+     （坐标是照着 assets/map/world.webp 实拍对的：左花圃 / 左中玻璃房 / 中下池塘 / 中右草地 / 右侧围栏空地） */
+  const ZONES = [
+    {
+      id: 'nursery', name: '苗圃', emoji: '🌱', kinds: ['plant'], cap: 12,
+      tip: '植物安家在这儿',
+      slots: [
+        [6.5, 57], [15.5, 57], [24.5, 57],
+        [6.5, 67], [15.5, 67], [24.5, 67],
+        [6.5, 77], [15.5, 77], [24.5, 77],
+        [6.5, 86], [15.5, 86], [24.5, 86]
+      ]
+    },
+    {
+      id: 'greenhouse', name: '温室', emoji: '🍄', kinds: ['fungus'], cap: 12,
+      tip: '真菌住玻璃房',
+      slots: [
+        [23, 34], [28.5, 34], [34, 34], [39.5, 34],
+        [23, 41], [28.5, 41], [34, 41], [39.5, 41],
+        [23, 48], [28.5, 48], [34, 48], [39.5, 48]
+      ]
+    },
+    {
+      id: 'pond', name: '池塘', emoji: '🪷', kinds: ['algae', 'water'], cap: 6,
+      tip: '水生的泡在水里（海菜花 · 红瘰疣螈 · 云南闭壳龟 · 藻类）',
+      slots: [[43, 70], [49.5, 69.5], [54, 73], [44, 77], [50, 78], [46, 83]]
+    },
+    {
+      id: 'meadow', name: '草地', emoji: '🌿', kinds: ['animal'], cap: 0, roam: true,
+      tip: '动物自由遛弯',
+      rect: [52, 26, 32, 30]        /* x, y, w, h（百分比）：动物遛弯范围 */
+    }
+  ];
+
+  /* 点击开窗的「机器」三件 */
+  const MACHINES = [
+    { id: 'gacha', name: '扭蛋机', img: 'assets/buildings/gacha.webp', x: 47.5, y: 33, w: 6.4, act: 'm-gacha' },
+    { id: 'incubator', name: '孵化仓', img: 'assets/buildings/incubator.webp', x: 43.5, y: 50, w: 13, act: 'm-incubator' },
+    { id: 'storage', name: '保管室', img: 'assets/buildings/storage.webp', x: 62, y: 66, w: 8.4, act: 'm-storage' }
+  ];
+
+  /* 可按顺序修建的建筑：人（动物劳力）+ 植物（材料）+ 真菌（胶合料）
+     x/y 都落在底图右侧那几块带围栏的空地上 */
+  const BUILDINGS = [
+    {
+      id: 'canteen', name: '食堂', img: 'assets/buildings/canteen.webp', x: 77, y: 64, w: 10,
+      emoji: '🍲', order: 1,
+      desc: '清水 + 饲料 换可可豆，小生物也能来吃饭',
+      story: 'canteen'
+    },
+    {
+      id: 'bath', name: '澡堂', img: 'assets/buildings/bath.webp', x: 89, y: 65, w: 10,
+      emoji: '🛁', order: 2,
+      desc: '洗澡涨清洁值，顺便产营养液',
+      story: 'bath'
+    },
+    {
+      id: 'library', name: '图书馆', img: 'assets/buildings/library.webp', x: 76, y: 76, w: 10,
+      emoji: '📚', order: 3,
+      desc: '待在里面涨娱乐值',
+      story: 'library'
+    },
+    {
+      id: 'travel', name: '旅行社', img: 'assets/buildings/travel.webp', x: 88, y: 77, w: 10,
+      emoji: '🧭', order: 4,
+      desc: '一只当导游带团出游，回来带土特产和收藏品',
+      story: 'travel'
+    },
+    {
+      id: 'museum', name: '博物馆', img: 'assets/buildings/museum.webp', x: 82, y: 84, w: 11,
+      emoji: '🏛️', order: 5,
+      desc: '陈列旅行收藏品和成就奖杯',
+      story: 'museum'
+    }
+  ];
+
+  /* 修建/打工的通用规则 */
+  const BUILD_RULE = {
+    workExp: 12,          /* 打工基础经验 */
+    workNeed: 10,         /* 打工消耗的需求值（四项各降这么多） */
+    buildExp: 40,         /* 修建完成给玩家的经验 */
+    buildNeed: 26,        /* 修建消耗三位参与者的需求值 */
+    upgradeFactor: 3      /* 连续建设升级：需要的人数 = 1 + 已用次数 * 这个系数的阶梯 */
+  };
+
+  /* 旅行社带回来的收藏品（陈列在博物馆里）。rarity: 1 普通 / 2 稀有 / 3 传说 */
+  const COLLECTIONS = [
+    { id: 'col_tie', name: '扎染方巾', emoji: '🧣', rarity: 1, from: '周城' },
+    { id: 'col_cake', name: '鲜花饼', emoji: '🥮', rarity: 1, from: '昆明' },
+    { id: 'col_camellia', name: '山茶花标本', emoji: '🌺', rarity: 1, from: '楚雄' },
+    { id: 'col_mask', name: '火把节面具', emoji: '🎭', rarity: 1, from: '石林' },
+    { id: 'col_tea', name: '普洱茶饼', emoji: '🍵', rarity: 2, from: '普洱' },
+    { id: 'col_bronze', name: '斑铜香炉', emoji: '🏺', rarity: 2, from: '会泽' },
+    { id: 'col_dongba', name: '东巴纸灯', emoji: '🏮', rarity: 2, from: '丽江' },
+    { id: 'col_silver', name: '白族银饰', emoji: '💍', rarity: 2, from: '鹤庆' },
+    { id: 'col_pagoda', name: '三塔小模型', emoji: '🗼', rarity: 2, from: '大理' },
+    { id: 'col_buddha', name: '南传贝叶经', emoji: '📜', rarity: 3, from: '西双版纳' },
+    { id: 'col_feather', name: '孔雀翎羽', emoji: '🪶', rarity: 3, from: '德宏' },
+    { id: 'col_jade', name: '腾冲玉坠', emoji: '💎', rarity: 3, from: '腾冲' }
+  ];
+
+  /* ---------- 剧情对白（文字冒险）。lines: [{who, text}]，choice 可选 ---------- */
+  const STORY = {
+    /* Lv.3 + 至少 3 只成年体 → 最年长的动物发起 */
+    labor: {
+      title: '傍晚 · 乐园中央',
+      caster: '最年长的小动物',
+      lines: [
+        { who: 'narr', text: '傍晚的光把草地染成蜜色。你刚收好今天的投喂单，最年长的小动物踩着影子走过来，在你面前站定。' },
+        { who: 'me', text: '（它今天有点不一样，尾巴翘得笔直。）' },
+        { who: 'pet', text: '老板。我要代表大家，跟你说件事。' },
+        { who: 'pet', text: '你看——水有人浇，饭有人喂，虫子有人捉，无聊了你还给我们放音乐。' },
+        { who: 'pet', text: '我们实现了社会主义社会。' },
+        { who: 'me', text: '……啊？' },
+        { who: 'pet', text: '食品极大丰富，需求得到满足。按照这个阶段的规律，接下来会发生什么？' },
+        { who: 'pet', text: '劳动，成为生活的第一需要。' },
+        { who: 'pet', text: '所以我们想上班。' },
+        { who: 'me', text: '（它把爪子拍在胸口，很像那么回事。）' },
+        { who: 'pet', text: '盖一栋房子吧。要盖房子，得有人出力、有人出料、有人出胶。' },
+        { who: 'pet', text: '动物出劳力，植物出材料，真菌出胶合料——我们正好三样都有。' },
+        { who: 'pet', text: '你只要点头，指个地方就行。' }
+      ],
+      after: '可以开始修建食堂了。每修好一栋，大家都会找你聊两句。'
+    },
+    canteen: {
+      title: '第一次修建 · 食堂',
+      caster: '掌勺的那只',
+      lines: [
+        { who: 'pet', text: '先说吃饭。' },
+        { who: 'pet', text: '现在大家蹲在草地上啃饲料，路过的游客看了都摇头。' },
+        { who: 'pet', text: '要盖食堂。木头架子、草编屋顶、再加一个能烧水的小灶。' },
+        { who: 'pet', text: '食堂建好之后，投点清水和饲料进去，我们就能排队开饭——吃完饭还能给你挣可可豆。' },
+        { who: 'pet', text: '怎么样，是不是很划算？' }
+      ],
+      after: '食堂已解锁。投清水 + 饲料即可开饭。'
+    },
+    bath: {
+      title: '第二次修建 · 澡堂',
+      caster: '刚吃完的那只',
+      lines: [
+        { who: 'pet', text: '吃饱了。' },
+        { who: 'pet', text: '……你闻闻我。' },
+        { who: 'me', text: '（确实有点味道。）' },
+        { who: 'pet', text: '所以下一栋是澡堂。木桶、热水、再弄个能泡的池子。' },
+        { who: 'pet', text: '我们进去洗个澡，清洁值涨上去，顺便还能给你攒出营养液。' },
+        { who: 'pet', text: '一举两得，这活儿我们熟。' }
+      ],
+      after: '澡堂已解锁。放小生物进去洗澡，产出营养液。'
+    },
+    library: {
+      title: '第三次修建 · 图书馆',
+      caster: '最好学的那只',
+      lines: [
+        { who: 'pet', text: '吃也吃了，洗也洗了。' },
+        { who: 'pet', text: '可是老板，你有没有发现——我们没事干的时候，会开始发呆。' },
+        { who: 'pet', text: '发呆就是娱乐值在往下掉。' },
+        { who: 'pet', text: '盖个图书馆吧。放点书，放点画册，最好再放把摇椅。' },
+        { who: 'pet', text: '我们进去待一会儿，娱乐值就回来了，还不用你花钱买逗猫棒。' }
+      ],
+      after: '图书馆已解锁。待在里面可回复娱乐值。'
+    },
+    travel: {
+      title: '第四次修建 · 旅行社',
+      caster: '最能跑的那只',
+      lines: [
+        { who: 'pet', text: '老板，我想请个假。' },
+        { who: 'me', text: '请假？' },
+        { who: 'pet', text: '不是偷懒。我是想——世界那么大，我们一直待在这一片草地上。' },
+        { who: 'pet', text: '盖一间旅行社吧。我当导游，带几个同伴出去转一圈。' },
+        { who: 'pet', text: '回来的时候，总能给你捎点东西。土特产、小玩意儿，运气好还有收藏品。' },
+        { who: 'pet', text: '你出房子，我们出腿脚。' }
+      ],
+      after: '旅行社已解锁。派一只当导游，带同伴出游，回来随机带回物品与收藏品。'
+    },
+    museum: {
+      title: '第五次修建 · 博物馆',
+      caster: '管收的那只',
+      lines: [
+        { who: 'pet', text: '老板，东西越攒越多了。' },
+        { who: 'pet', text: '旅行带回来的收藏品堆在仓库角落，你的成就奖杯也落灰了。' },
+        { who: 'pet', text: '太可惜了。' },
+        { who: 'pet', text: '盖一座博物馆吧。圆顶、柱子、大理石台阶，气派一点。' },
+        { who: 'pet', text: '把收藏品一件件摆进去，把奖杯也供起来。' },
+        { who: 'pet', text: '这才叫一个家嘛。' }
+      ],
+      after: '博物馆已解锁。旅行收藏品与成就奖杯都会陈列在这里。'
+    }
+  };
+
   return {
-    VERSION: 'v1.17',
+    VERSION: 'v1.18',
+    WORLD: WORLD,
+    ZONES: ZONES,
+    MACHINES: MACHINES,
+    BUILDINGS: BUILDINGS,
+    BUILD_RULE: BUILD_RULE,
+    STORY: STORY,
+    COLLECTIONS: COLLECTIONS,
     EXAM_DATE: EXAM_DATE,
     PHASES: PHASES,
     BOOK_DAYS: BOOK_DAYS,

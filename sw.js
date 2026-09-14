@@ -6,7 +6,7 @@
  * - 版本号 CACHE 升一位即全量换新缓存（发新版记得 bump）
  * - 只拦本站 GET；云端 API 是跨域请求，天然不受影响，联网失败自动降级本地模式
  * ========================================================= */
-var CACHE = 'knowledge-cat-v21';
+var CACHE = 'knowledge-cat-v23';
 var ASSETS = [
   './',
   './index.html',
@@ -57,6 +57,16 @@ var ASSETS = [
   './assets/creatures/yunnanchahua.webp',
   './assets/creatures/yunnanhanxiao.webp',
   './assets/creatures/zhusun.webp',
+  /* v1.18：大世界地图 + 建筑立绘 */
+  './assets/map/world.webp',
+  './assets/buildings/gacha.webp',
+  './assets/buildings/incubator.webp',
+  './assets/buildings/storage.webp',
+  './assets/buildings/canteen.webp',
+  './assets/buildings/bath.webp',
+  './assets/buildings/library.webp',
+  './assets/buildings/travel.webp',
+  './assets/buildings/museum.webp',
 ];
 
 self.addEventListener('install', function (e) {

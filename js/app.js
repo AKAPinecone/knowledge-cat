@@ -7,11 +7,18 @@
   let curTab = 'garden';   /* 打开游戏先看到乐园（主体是游戏） */
   const shopQty = {};
   let podOpen = false;     /* 保存舱面板是否展开 */
+  /* v1.18 大世界地图 */
+  let wp = { x: 0, y: 0 }; /* 地图平移量（px） */
+  let wpInit = false;      /* 是否已经做过首次定位 */
+  let bxId = null;         /* 正在打开的修建弹窗：建筑 id */
+  let bxState = null;      /* 修建弹窗里选中的三人 {animal,plant,fungus} */
+  let laborAutoShown = false; /* 本会话里 Lv.3 剧情是否已自动弹过 */
   let vf = null;          /* 验证弹窗的临时状态 */
   let qz = null;          /* 破壳测验弹窗的临时状态 */
   let modalCleanup = null;/* 关窗时要执行的清理（比如停掉测验倒计时） */
   let evFilter = 'all';
   let studySig = '';      /* 学习页内容指纹：没变化就不重绘，避免手机上读着读着跳一下 */
+  let gardenSig = '';     /* 乐园页内容指纹：没变化就不重绘，别把手指下的地图拆了重建 */
 
   /* ---------------- 小工具 ---------------- */
   function $(s, r) { return (r || document).querySelector(s); }
@@ -168,6 +175,8 @@
       case 'food':  tone(520, 0.10, 'sine', 0.18, 0); tone(680, 0.12, 'sine', 0.16, 0.1); break;
       case 'bath':  tone(600, 0.10, 'sine', 0.15, 0); tone(500, 0.10, 'sine', 0.13, 0.08); tone(660, 0.10, 'sine', 0.13, 0.16); break;
       case 'clean': tone(440, 0.12, 'square', 0.12, 0); tone(700, 0.14, 'sine', 0.14, 0.1); break;
+      case 'music': tone(660, 0.14, 'sine', 0.13, 0); tone(880, 0.16, 'sine', 0.12, 0.1); tone(1046, 0.18, 'sine', 0.1, 0.22); break;
+      case 'build': noiseBurst(0.16, 0.12); tone(300, 0.2, 'triangle', 0.14, 0.05); tone(420, 0.22, 'triangle', 0.12, 0.16); break;
       default: tone(700, 0.12, 'sine', 0.15, 0);
     }
   }
@@ -441,7 +450,11 @@
         r.sick.forEach(function (p) { toast('😷 ' + esc(p.name) + ' 生病了：' + p.illness.name + '，去乐园用药水治它。', 'err', 7000); });
       }
       renderTop();
-      if (curTab === 'garden') renderView();
+      /* 乐园页含可拖动的地图：正在拖、或开着弹窗时不重绘，免得把手指下的地图抽走；
+         内容指纹没变也不重绘，省得每 8 秒抖一下。 */
+      if (curTab === 'garden') {
+        if (!activeMask() && !$('#world-vp.dragging') && gardenSignature() !== gardenSig) renderView();
+      }
       else if (curTab === 'study' && studySignature() !== studySig) renderView();
     }, 8000);
 
@@ -563,9 +576,18 @@
     else if (curTab === 'help') v.innerHTML = viewHelp();
     else if (curTab === 'docs') v.innerHTML = viewDocs();
     else if (curTab === 'notes') v.innerHTML = viewNotes();
-    if (curTab === 'garden') startPark(); else stopPark();
+    if (curTab === 'garden') { startPark(); wireWorld(); gardenSig = gardenSignature(); }
+    else stopPark();
     if (curTab === 'study') studySig = studySignature();
     wireView();
+    /* Lv.3 剧情：条件满足后自动开启一次，之后靠地图上的旗子 */
+    if (curTab === 'garden' && !laborAutoShown && !activeMask() &&
+        window.Game.pendingStory() === 'labor') {
+      laborAutoShown = true;
+      setTimeout(function () {
+        if (curTab === 'garden' && !activeMask()) openStoryModal('labor');
+      }, 600);
+    }
   }
 
   /* 学习页内容指纹：任务状态。内容没变就不重绘，免得手机上正读着被刷一下。 */
@@ -574,6 +596,28 @@
       return window.Study.ensureTodayTasks().map(function (t) {
         return t.uid + ':' + t.state;
       }).join('|');
+    } catch (e) { return ''; }
+  }
+
+  /* 乐园页内容指纹：地图上看得见的东西（小生物落位与生病/休眠、掉落胶囊、
+     工地进度、在岗人数、剧情旗子、保存舱开合）。内容没变就不重绘——
+     地图是可拖动的，8 秒拆一次会造成"抖动 + 手指下的元素被抽走"。 */
+  function gardenSignature() {
+    try {
+      const pets = S.pets.map(function (p) {
+        return p.id + (p.stored ? '|s' : '') + (p.illness ? '|i' : '') + (p.dormant ? '|d' : '') +
+          '|' + window.Game.stageOf(p).name;
+      }).join(',');
+      const caps = S.capsules.map(function (c) { return c.id + (c.place || 'x'); }).join(',');
+      const b = S.build || {};
+      const built = (b.built || []).join(',');
+      const lv = Object.keys(b.lv || {}).map(function (k) { return k + b.lv[k]; }).join(',');
+      const staff = Object.keys(b.staff || {}).map(function (k) { return k + (b.staff[k] || []).length; }).join(',');
+      const story = Object.keys(b.story || {}).filter(function (k) { return b.story[k]; }).sort().join(',');
+      return [pets, caps, built, lv, staff, story,
+        podOpen ? 'p1' : 'p0',
+        window.Game.pendingStory() || '',
+        window.Game.buildGate().ok ? 'g1' : 'g0'].join('|');
     } catch (e) { return ''; }
   }
 
@@ -808,12 +852,6 @@
    * 点小生物看状态；不舒服会冒会话气泡
    * ========================================================= */
 
-  /* 花盆圈坐标（容器百分比，顺时针一圈） */
-  const POT_RING = [
-    [8, 22], [25, 10], [45, 6], [65, 10], [83, 20], [92, 36],
-    [94, 56], [91, 74], [80, 87], [62, 93], [42, 96], [23, 92],
-    [10, 82], [4, 64], [3, 44], [6, 32]
-  ];
   function parkPosMap() { return (window.__parkPos = window.__parkPos || {}); }
 
   /* 不舒服气泡：生病 > 休眠 > 最缺的那项状态；都好好的就不冒泡 */
@@ -870,19 +908,17 @@
      投影得单独抬高一截，否则看着就像悬在半空。这里给容器打个标记。 */
   function artKindCls(sp) { return sp.img ? '' : ' pet-emoji'; }
 
-  function pottedPetHtml(p, i) {
-    const pos = POT_RING[i % POT_RING.length];
+  function pottedPetHtml(p, zoneId) {
     const sp = window.Game.speciesById(p.speciesId);
     return '<div class="park-pet potted' + (p.illness ? ' sick' : '') + (p.dormant ? ' dormant' : '') + artKindCls(sp) +
-      '" data-act="pet-open" data-id="' + p.id + '" style="left:' + pos[0] + '%;top:' + pos[1] + '%">' +
+      '" data-act="pet-open" data-id="' + p.id + '">' +
       petFaceHtml(p) + '<span class="pp-pot">' + potSvg() + '</span></div>';
   }
 
-  function pondPetHtml(p, i) {
-    /* 坐标相对池塘元素（ pond 150×76 ），让藻类真的泡在水里 */
+  function pondPetHtml(p) {
     const sp = window.Game.speciesById(p.speciesId);
     return '<div class="park-pet pond-pet' + (p.illness ? ' sick' : '') + artKindCls(sp) +
-      '" data-act="pet-open" data-id="' + p.id + '" style="left:' + (24 + (i % 3) * 26) + '%;top:' + (28 + (i % 2) * 34) + '%">' +
+      '" data-act="pet-open" data-id="' + p.id + '">' +
       petFaceHtml(p) + '</div>';
   }
 
@@ -959,52 +995,185 @@
     return h;
   }
 
-  function viewGarden() {
-    let h = '';
-    const loose = S.capsules.filter(function (c) { return !c.place; });
+  /* =========================================================
+   * v1.18 大世界地图（可拖动）+ 建筑系统
+   * 底图只有地形；区域槽位、机器、建筑都是浮在上面的立绘
+   * ========================================================= */
+  function zoneTagHtml(z, count) {
+    if (!z) return '';
+    return '<span class="wzone-tag wzone-tag-' + z.id + '">' + z.emoji + ' ' + z.name +
+      (z.roam ? '' : ' <i>' + count + '/' + z.cap + '</i>') + '</span>';
+  }
 
-    /* ---- 场景 ---- */
-    h += '<div class="park">';
-    h += '<div class="park-sky"><span class="sun">☀️</span><i class="cloud c1">☁️</i><i class="cloud c2">☁️</i><i class="cloud c3">☁️</i></div>';
+  function worldMapHtml() {
+    const nb = window.Game.nextBuilding();
+    const meadow = window.Game.zoneById('meadow');
+    const r = (meadow && meadow.rect) || [44, 22, 30, 18];
+    let h = '<div class="world-viewport" id="world-vp">';
+    h += '<div class="world-map" id="world-map">';
+    h += '<img class="world-img" src="' + D.WORLD.img + '" alt="乐园地图" draggable="false">';
 
-    h += parkRow('greenhouse', '🏡', '温室', '植物 · 真菌 · 藻类在这儿孵化');
-    h += parkRow('hatchery', '🐣', '孵化室', '小动物在这儿破壳');
-
-    /* ---- 空场（保存舱里的不出现在场地） ---- */
-    const pond = [];
-    const potted = [];
-    const animals = [];
-    S.pets.forEach(function (p) {
-      if (p.stored) return;
-      const kind = window.Game.speciesById(p.speciesId).kind;
-      if (kind === 'animal') animals.push(p);          /* 空场遛弯 */
-      else if (kind === 'algae') pond.push(p);         /* 池塘 */
-      else potted.push(p);                             /* 花盆圈 */
+    /* 固定槽位的区域：苗圃 / 温室 / 池塘 */
+    D.ZONES.forEach(function (z) {
+      if (z.roam) return;
+      const pets = window.Game.petsInZone(z.id);
+      h += '<div class="wzone wzone-' + z.id + '">';
+      z.slots.forEach(function (pos, i) {
+        const p = pets[i];
+        h += '<div class="wslot' + (p ? ' filled' : '') + '" style="left:' + pos[0] + '%;top:' + pos[1] + '%">' +
+          (p ? (z.id === 'pond' ? pondPetHtml(p) : pottedPetHtml(p, z.id)) : '<span class="wslot-dot"></span>') +
+          '</div>';
+      });
+      h += zoneTagHtml(z, pets.length);
+      h += '</div>';
     });
 
-    h += '<div class="park-field" id="park-field">';
-    h += '<div class="field-hill"></div>';
-    h += '<div class="pond"><span class="pond-tag">池塘</span>';
-    pond.forEach(function (p, i) { h += pondPetHtml(p, i); });
+    /* 草地：动物自由遛弯 */
+    const roamPets = window.Game.petsInZone('meadow');
+    h += '<div class="wzone wzone-meadow" id="wzone-meadow" style="left:' + r[0] + '%;top:' + r[1] +
+      '%;width:' + r[2] + '%;height:' + r[3] + '%">';
+    roamPets.forEach(function (p) { h += walkerPetHtml(p); });
+    h += zoneTagHtml(meadow, roamPets.length);
     h += '</div>';
-    potted.forEach(function (p, i) { h += pottedPetHtml(p, i); });
-    animals.forEach(function (p) { h += walkerPetHtml(p); });
-    if (!potted.length && !animals.length && !pond.length) {
-      h += '<div class="field-empty">空场还空着 —— 去孵化室破一颗壳，小生物就会搬进来。</div>';
+
+    /* 三台机器：点击开窗 */
+    D.MACHINES.forEach(function (m) {
+      h += '<button class="wmachine" data-act="' + m.act + '" style="left:' + m.x + '%;top:' + m.y +
+        '%;width:' + m.w + '%" title="' + esc(m.name) + '">' +
+        '<img src="' + m.img + '" alt="' + esc(m.name) + '" draggable="false"></button>';
+    });
+
+    /* 建筑：已建成 / 下一块空地 / 还没轮到 */
+    D.BUILDINGS.forEach(function (b) {
+      const built = window.Game.isBuilt(b.id);
+      if (built) {
+        h += '<button class="wbuilding built" data-act="build-open" data-id="' + b.id +
+          '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%" title="' + esc(b.name) + '">' +
+          '<img src="' + b.img + '" alt="' + esc(b.name) + '" draggable="false">' +
+          '<span class="wb-name">' + b.emoji + ' ' + b.name + ' Lv.' + window.Game.buildLv(b.id) + '</span></button>';
+      } else if (nb && nb.id === b.id) {
+        h += '<button class="wbuilding plot" data-act="build-open" data-id="' + b.id +
+          '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%" title="在这里盖' + esc(b.name) + '">' +
+          '<span class="wb-plus">＋</span><span class="wb-name">盖 ' + b.name + '</span></button>';
+      } else {
+        h += '<span class="wbuilding plot locked" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%">' +
+          '<span class="wb-lock">🔒</span><span class="wb-name">' + b.name + '</span></span>';
+      }
+    });
+
+    h += '</div>';
+
+    /* 有话想说的旗子：挂在【视口】上而不是地图上——地图能横向拖，
+       旗子要是跟着地图跑，拖到另一边就看不见了，容易漏掉剧情。 */
+    if (window.Game.pendingStory()) {
+      h += '<button class="wstory-flag" data-act="story-play">💬 有话想跟你说</button>';
     }
+    h += '<span class="world-pan-hint">👈 按住拖动，看全整个乐园 👉</span>';
     h += '</div>';
-    h += '<div class="park-tip">👆 点小生物看状态、照顾它 · 小动物会自己遛弯 · 不舒服会冒气泡</div>';
+    return h;
+  }
+
+  /* 地图按视口高度定标：横向比视口宽，左右可拖 */
+  function layoutWorld() {
+    const vp = $('#world-vp'), map = $('#world-map');
+    if (!vp || !map) return null;
+    const vw = vp.clientWidth || 320;
+    const vh = vp.clientHeight || Math.round(vw * 4 / 3);
+    const mw = Math.round(vh * (D.WORLD.w / D.WORLD.h));
+    map.style.width = mw + 'px';
+    map.style.height = vh + 'px';
+    return { vw: vw, vh: vh, mw: mw };
+  }
+  function clampPan(lay) {
+    const minX = Math.min(0, lay.vw - lay.mw);
+    wp.x = Math.max(minX, Math.min(0, wp.x));
+    wp.y = 0;
+  }
+  /* instant=true：刚落位/刚重绘时直接摆好，别让 .2s 过渡把它从错误位置滑过来 */
+  function applyPan(instant) {
+    const map = $('#world-map');
+    if (!map) return;
+    const tf = 'translate3d(' + Math.round(wp.x) + 'px,0,0)';
+    if (instant) {
+      map.style.transition = 'none';
+      map.style.transform = tf;
+      requestAnimationFrame(function () {
+        if (map.style) map.style.transition = '';
+      });
+    } else {
+      map.style.transform = tf;
+    }
+  }
+  function wireWorld() {
+    const vp = $('#world-vp');
+    if (!vp) return;
+    const lay = layoutWorld();
+    if (!lay) return;
+    if (!wpInit) {
+      /* 第一次进来：把视线落在温室 + 草地这一片 */
+      wp.x = -(lay.mw - lay.vw) * 0.42;
+      wpInit = true;
+    }
+    clampPan(lay);
+    applyPan(true);
+
+    let drag = null;
+    vp.onpointerdown = function (e) {
+      /* 从任何地方都能按住拖（包括按在小生物 / 建筑上）；
+         拖过 8px 之后落下的那次 click 会被下面的捕获监听吞掉，所以不会误点。 */
+      drag = { x: e.clientX, y: e.clientY, ox: wp.x, moved: 0, claimed: false, id: e.pointerId };
+    };
+    vp.onpointermove = function (e) {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.claimed) {
+        if (Math.abs(dx) < 6) return;
+        /* 竖向手势让给页面滚动，横向才接管 */
+        if (Math.abs(dy) > Math.abs(dx) + 4) { drag = null; return; }
+        drag.claimed = true;
+        vp.classList.add('dragging');
+        try { vp.setPointerCapture(e.pointerId); } catch (er) {}
+      }
+      drag.moved = Math.max(drag.moved, Math.abs(dx));
+      wp.x = drag.ox + dx;
+      clampPan(lay);
+      applyPan();
+    };
+    function endDrag() {
+      if (!drag) return;
+      const moved = drag.moved;
+      drag = null;
+      vp.classList.remove('dragging');
+      if (moved > 8) {
+        vp.dataset.dragged = '1';
+        setTimeout(function () { if (vp.dataset) delete vp.dataset.dragged; }, 80);
+      }
+    }
+    vp.onpointerup = endDrag;
+    vp.onpointercancel = endDrag;
+    /* 拖动结束后落下的那次 click 要拦掉，免得误点小生物（捕获阶段先于子元素） */
+    vp.addEventListener('click', function (e) {
+      if (vp.dataset.dragged === '1') { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+  }
+
+  function viewGarden() {
+    window.Game.ensureBuild();
+    const loose = S.capsules.filter(function (c) { return !c.place; });
+    let h = '';
+    h += '<div class="world-wrap">';
+    h += worldMapHtml();
+    h += '<div class="park-tip">👆 点小生物照顾它 · 点建筑和机器进去看看 · 地图上按住左右拖</div>';
     h += '<button class="sync-banner" data-act="sync">📲 换设备玩？点这里把进度搬过去（跨设备同步）</button>';
     h += saveNagHtml();
     h += '</div>';
 
-    /* ---- 保存舱（可折叠） ---- */
+    h += sitePanel();
     h += podPanel();
 
-    /* ---- 待安置 ---- */
     h += '<div class="panel">';
     h += '<div class="panel-head"><h2>🥚 待安置的胶囊</h2>' +
-      '<span class="hint">植物 / 真菌 / 藻类去温室，动物去孵化室</span></div>';
+      '<span class="hint">点「孵化仓」放进去孵化</span></div>';
     if (!loose.length) {
       h += '<div class="empty">没有待安置的胶囊。去扭蛋机抽一颗吧。</div>';
     } else {
@@ -1013,38 +1182,373 @@
       h += '</div>';
     }
     h += '</div>';
-
     return h;
   }
 
-  /* ---- 乐园运行时：小动物遛弯（4.6 秒换一个目标点，CSS 过渡走过去） ---- */
+  /* ---- 工地面板：进度 + 已建成的入口 ---- */
+  function sitePanel() {
+    const gate = window.Game.buildGate();
+    const nb = window.Game.nextBuilding();
+    const sawStory = window.Game.storySeen('labor');
+    const built = (D.BUILDINGS || []).filter(function (b) { return window.Game.isBuilt(b.id); });
+    let h = '<div class="panel" id="site-panel">';
+    h += '<div class="panel-head"><h2>🏗️ 乐园工地</h2><span class="hint">动物出劳力 · 植物出材料 · 真菌出胶合料</span></div>';
+    h += '<div class="site-dots">';
+    (D.BUILDINGS || []).forEach(function (b) {
+      const ok = window.Game.isBuilt(b.id);
+      const isNext = nb && nb.id === b.id;
+      h += '<span class="site-dot' + (ok ? ' ok' : (isNext ? ' next' : '')) + '" title="' + esc(b.name) + '">' +
+        (ok ? b.emoji : (isNext ? '＋' : '🔒')) + '</span>';
+    });
+    h += '</div>';
+
+    if (nb) {
+      const canDo = gate.ok && sawStory;
+      h += '<div class="site-next">';
+      h += '<div class="sn-info"><b>' + nb.emoji + ' ' + nb.name + '</b><span>' + esc(nb.desc) + '</span></div>';
+      h += '<button class="btn ' + (canDo ? 'btn-primary' : '') + '" data-act="build-open" data-id="' + nb.id + '">' +
+        (canDo ? '🔨 开工' : (sawStory ? '条件未满' : '先去聊聊')) + '</button>';
+      if (!sawStory) h += '<div class="site-why">先把 Lv.3 的那段对话看完——最年长的小动物有话要讲。</div>';
+      else if (!gate.ok) h += '<div class="site-why">' + esc(gate.msg) + '</div>';
+      h += '</div>';
+    } else {
+      h += '<div class="empty">五栋都盖起来了 —— 这一小片草地，成了个自给自足的小社会。</div>';
+    }
+
+    if (built.length) {
+      h += '<div class="site-built">';
+      built.forEach(function (b) {
+        const staff = window.Game.staffOf(b.id);
+        h += '<button class="sbt" data-act="build-open" data-id="' + b.id + '">' +
+          '<span class="sbt-ico">' + b.emoji + '</span>' +
+          '<span class="sbt-name">' + b.name + '</span>' +
+          '<span class="sbt-lv">Lv.' + window.Game.buildLv(b.id) + '</span>' +
+          '<span class="sbt-staff">👥 ' + staff.length + '/' + window.Game.staffCap(b.id) + '</span></button>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  /* ---- 乐园运行时：小动物在草地上遛弯（4.6 秒换目标点） ---- */
   let parkTimer = null;
   function stopPark() { if (parkTimer) { clearInterval(parkTimer); parkTimer = null; } }
   function startPark() {
     stopPark();
-    const field = document.getElementById('park-field');
-    if (!field) return;
-    $$('#park-field .walker').forEach(function (el) {
+    const zone = document.getElementById('wzone-meadow');
+    if (!zone) return;
+    $$('#wzone-meadow .walker').forEach(function (el) {
       const id = el.dataset.pet;
       const map = parkPosMap();
-      if (!map[id]) map[id] = { x: 12 + Math.random() * 70, y: 34 + Math.random() * 48 };
+      if (!map[id]) map[id] = { x: 10 + Math.random() * 74, y: 20 + Math.random() * 58 };
       el.style.left = map[id].x + '%';
       el.style.top = map[id].y + '%';
     });
     parkTimer = setInterval(parkTick, 4600);
   }
   function parkTick() {
-    const field = document.getElementById('park-field');
-    if (!field) { stopPark(); return; }
-    $$('#park-field .walker').forEach(function (el) {
+    const zone = document.getElementById('wzone-meadow');
+    if (!zone) { stopPark(); return; }
+    $$('#wzone-meadow .walker').forEach(function (el) {
       const id = el.dataset.pet;
       const pos = parkPosMap()[id];
       if (!pos) return;
-      pos.x = Math.max(6, Math.min(86, pos.x + (Math.random() * 40 - 20)));
-      pos.y = Math.max(30, Math.min(84, pos.y + (Math.random() * 26 - 13)));
+      pos.x = Math.max(8, Math.min(92, pos.x + (Math.random() * 40 - 20)));
+      pos.y = Math.max(14, Math.min(86, pos.y + (Math.random() * 26 - 13)));
       el.style.left = pos.x + '%';
       el.style.top = pos.y + '%';
       if (Math.random() < 0.5) el.classList.toggle('flip');
+    });
+  }
+
+  /* =========================================================
+   * 剧情（文字冒险） / 机器弹窗 / 建筑弹窗
+   * ========================================================= */
+  let bxPaint = null;   /* 修建弹窗的重绘函数 */
+
+  /* 弹窗里的按钮不归 wireView 管，得自己接 */
+  function wireModal(m) {
+    $$('[data-act]', m).forEach(function (el) {
+      if (el.tagName === 'SELECT') el.onchange = function () { onAction(el.dataset.act, el); };
+      else el.onclick = function () { onAction(el.dataset.act, el); };
+    });
+  }
+
+  function storyCaster(who, st) {
+    if (who === 'narr') return { name: '', ico: '🎬', cls: 'narr' };
+    if (who === 'me') return { name: '你', ico: '🧑', cls: 'me' };
+    return { name: st.caster || '小生物', ico: '🐾', cls: 'pet' };
+  }
+
+  function openStoryModal(key) {
+    const st = D.STORY && D.STORY[key];
+    if (!st) return;
+    let i = 0;
+    openModal({
+      title: '💬 ' + st.title,
+      body: '<div class="story-box" id="story-box" tabindex="0"></div>',
+      foot: '<button class="btn btn-ghost" data-act="story-skip">跳过</button>' +
+        '<button class="btn btn-primary" data-act="story-next">继续 ▶</button>',
+      onMount: function (m) {
+        const box = $('#story-box', m);
+        let finished = false;
+        function paint() {
+          box.innerHTML = st.lines.slice(0, i + 1).map(function (ln, idx) {
+            const c = storyCaster(ln.who, st);
+            return '<div class="story-line ' + c.cls + (idx === i ? ' now' : '') + '">' +
+              (c.name ? '<span class="sl-who">' + c.ico + ' ' + esc(c.name) + '</span>' : '') +
+              '<p>' + esc(ln.text) + '</p></div>';
+          }).join('');
+          requestAnimationFrame(function () { box.scrollTop = box.scrollHeight; });
+        }
+        function finish() {
+          if (finished) return;
+          finished = true;
+          window.Game.markStory(key);
+          closeModal();
+          toast('✅ ' + st.after, 'ok', 7000);
+          render();
+          /* 建筑剧情看完 → 顺手把开工面板递上来 */
+          const b = (D.BUILDINGS || []).filter(function (x) { return x.story === key; })[0];
+          if (b && !window.Game.isBuilt(b.id)) {
+            setTimeout(function () {
+              if (curTab === 'garden' && !activeMask()) openBuildingModal(b.id, true);
+            }, 550);
+          }
+        }
+        $$('[data-act]', m).forEach(function (el) {
+          el.onclick = function () {
+            if (el.dataset.act === 'story-skip') { i = st.lines.length - 1; return finish(); }
+            if (i >= st.lines.length - 1) return finish();
+            i++;
+            paint();
+          };
+        });
+        paint();
+      }
+    });
+  }
+
+  /* ---- 机器弹窗 ---- */
+  function openMachineModal(id) {
+    if (id === 'gacha') {
+      const c1 = D.GACHA.costPerPull, c10 = D.GACHA.costTenPull;
+      openModal({
+        title: '🎰 扭蛋机',
+        body: '<div class="bx-desc">投胶囊券，扭出一颗新的生命胶囊。</div>' +
+          '<div class="bx-lv">🎟️ 现有胶囊券 ' + S.cur.tickets + ' 张　·　保底还差 ' +
+          Math.max(0, D.GACHA.pity + 1 - (S.pity || 0)) + ' 次</div>',
+        foot: '<button class="btn btn-ghost" data-act="m-close">关闭</button>' +
+          '<button class="btn" data-act="pull" data-n="1">抽 1 次（🎟️ ' + c1 + '）</button>' +
+          '<button class="btn btn-gold" data-act="pull" data-n="10">十连（🎟️ ' + c10 + '）</button>',
+        onMount: wireModal
+      });
+      return;
+    }
+    if (id === 'incubator') {
+      openModal({
+        title: '🥚 孵化仓',
+        wide: true,
+        body: parkRow('greenhouse', '🏡', '温室托位', '植物 · 真菌 · 藻类在这儿孵化') +
+          parkRow('hatchery', '🐣', '动物托位', '小动物在这儿破壳'),
+        foot: '<button class="btn btn-ghost" data-act="m-close">关闭</button>',
+        onMount: wireModal
+      });
+      return;
+    }
+    /* 保管室：保存舱 + 旅行收藏品 */
+    const stored = S.pets.filter(function (p) { return p.stored; });
+    const cols = window.Game.collectionsOwned();
+    let h = '<div class="bx-lv">📦 保存舱 ' + stored.length + ' 只　·　🧭 收藏品 ' +
+      cols.length + '/' + (D.COLLECTIONS || []).length + '</div>';
+    if (stored.length) {
+      h += '<div class="pet-list">';
+      stored.forEach(function (p) {
+        const sp = window.Game.speciesById(p.speciesId);
+        const st = window.Game.stageOf(p);
+        h += '<div class="pet-card pod-card">' +
+          '<div class="pc-face' + (sp.img ? '' : ' pet-emoji') + '">' +
+          (sp.img ? '<img class="pc-img" src="' + sp.img + '" alt="">' : sp.emoji) + '</div>' +
+          '<div class="pc-body" data-act="pet-open" data-id="' + p.id + '">' +
+          '<div class="pc-name">' + esc(p.name) + '</div>' +
+          '<div class="pc-sub">' + esc(sp.name) + ' · ' + st.emoji + ' ' + st.name + ' · 📦 静止中</div></div>' +
+          '<button class="btn btn-sm btn-primary pod-take" data-act="unstore-pet" data-id="' + p.id + '">取出</button>' +
+          '</div>';
+      });
+      h += '</div>';
+    } else {
+      h += '<div class="empty">保存舱空着。成年体可以从它的状态面板放进这里，状态完全静止。</div>';
+    }
+    h += '<div class="panel-head" style="margin-top:16px"><h2>🧭 旅行收藏品</h2>' +
+      '<span class="hint">建好旅行社，让导游带回来</span></div>' + colGridHtml(cols);
+    openModal({
+      title: '📦 保管室', body: h,
+      foot: '<button class="btn btn-ghost" data-act="m-close">关闭</button>',
+      onMount: wireModal
+    });
+  }
+
+  function colGridHtml(cols) {
+    const own = {};
+    (cols || []).forEach(function (c) { own[c.id] = c; });
+    let h = '<div class="col-grid">';
+    (D.COLLECTIONS || []).forEach(function (c) {
+      const got = own[c.id];
+      h += '<div class="col-card r' + c.rarity + (got ? '' : ' miss') + '" title="' + esc(c.from) + '">' +
+        '<span class="col-ico">' + (got ? c.emoji : '❔') + '</span>' +
+        '<span class="col-name">' + (got ? esc(c.name) : '未收集') + '</span>' +
+        '<span class="col-meta">' + (got ? '×' + got.n + ' · ' + esc(c.from) : '· · ·') + '</span></div>';
+    });
+    h += '</div>';
+    return h;
+  }
+
+  /* ---- 建筑：修建面板 / 工作面板 ---- */
+  function buildBodyHtml(id, b) {
+    const cost = window.Game.buildCost(id);
+    const gate = window.Game.buildGate();
+    const up = cost.upgrade;
+    let h = '<div class="bx-desc">' + esc(b.desc) + '</div>';
+    h += '<div class="bx-cost">🧾 ' + (up ? '扩建到 Lv.' + (window.Game.buildLv(id) + 1) : '破土动工') +
+      '：动物 ×1（劳力）＋ 植物 ×1（材料）＋ 真菌 ×1（胶合料）<br>' +
+      '三位一起出工，需求值各 −' + cost.need + (cost.beans ? '　·　额外花费 🌰 ' + cost.beans : '') + '</div>';
+    if (!gate.ok) h += '<div class="warnbox">⚠️ ' + esc(gate.msg) + '</div>';
+    [['animal', '劳力', '动物'], ['plant', '材料', '植物'], ['fungus', '胶合料', '真菌']].forEach(function (r) {
+      const pool = window.Game.workersOf(r[0]);
+      h += '<div class="field"><label>出' + r[1] + '的' + r[2] + '（可选 ' + pool.length + ' 只）</label>' +
+        '<select data-act="bx-pick" data-role="' + r[0] + '">' +
+        '<option value="">— 选一只 —</option>' +
+        pool.map(function (p) {
+          const st = window.Game.stageOf(p);
+          return '<option value="' + p.id + '"' + (bxState && bxState[r[0]] === p.id ? ' selected' : '') + '>' +
+            esc(p.name) + '（' + esc(window.Game.speciesById(p.speciesId).name) + ' · ' + st.name +
+            (p.illness ? ' · 生病中' : '') + '）</option>';
+        }).join('') + '</select></div>';
+    });
+    const ready = bxState && bxState.animal && bxState.plant && bxState.fungus;
+    h += '<button class="btn btn-primary btn-block" data-act="bx-go" data-id="' + id + '"' +
+      (gate.ok && ready ? '' : ' disabled') + '>' + (up ? '🔨 扩建' : '🔨 开工') + '</button>';
+    return h;
+  }
+
+  function workBodyHtml(id, b) {
+    const lv = window.Game.buildLv(id);
+    const cap = window.Game.staffCap(id);
+    const staff = window.Game.staffOf(id);
+    let h = '<div class="bx-desc">' + esc(b.desc) + '</div>';
+    h += '<div class="bx-lv">Lv.' + lv + '　岗位 ' + staff.length + '/' + cap + '</div>';
+    if (staff.length) {
+      h += '<div class="staff-list">';
+      staff.forEach(function (pid) {
+        const p = window.Game.petById(pid);
+        if (!p) return;
+        const sp = window.Game.speciesById(p.speciesId);
+        h += '<div class="staff-chip">' +
+          '<span class="sc-face' + (sp.img ? '' : ' pet-emoji') + '">' +
+          (sp.img ? '<img src="' + sp.img + '" alt="">' : sp.emoji) + '</span>' +
+          '<span class="sc-name">' + esc(p.name) + '</span>' +
+          '<button class="sc-x" data-act="bx-unstaff" data-id="' + id + '" data-pet="' + p.id + '" title="让它下班">✕</button>' +
+          '</div>';
+      });
+      h += '</div>';
+    } else {
+      h += '<div class="empty">还没有小生物来上班。</div>';
+    }
+    const pool = S.pets.filter(function (p) {
+      return !p.stored && !p.illness && staff.indexOf(p.id) < 0;
+    });
+    if (pool.length && staff.length < cap) {
+      h += '<div class="field"><label>安排一只来上班</label>' +
+        '<select data-act="bx-staff" data-id="' + id + '"><option value="">— 选一只 —</option>' +
+        pool.map(function (p) {
+          const st = window.Game.stageOf(p);
+          const sp = window.Game.speciesById(p.speciesId);
+          return '<option value="' + p.id + '">' + esc(p.name) + '（' + esc(sp.name) + ' · ' + st.name + '）</option>';
+        }).join('') + '</select></div>';
+    }
+    if (id === 'canteen') {
+      const stk = (S.build.stock && S.build.stock[id]) || {};
+      h += '<div class="stock-row">' +
+        '<span class="stock-ico">💧 清水 ' + (stk.water || 0) + '</span>' +
+        '<span class="stock-ico">🍖 饲料 ' + (stk.food || 0) + '</span>' +
+        '<button class="btn btn-sm" data-act="bx-stock" data-id="' + id + '" data-item="water">投清水</button>' +
+        '<button class="btn btn-sm" data-act="bx-stock" data-id="' + id + '" data-item="food">投饲料</button>' +
+        '</div>';
+    }
+    const ACTS = {
+      canteen: { k: 'canteen', label: '🍲 开饭', tip: '按人头消耗清水 + 饲料，食堂上交可可豆' },
+      bath: { k: 'bath', label: '🛁 烧水洗澡', tip: '全员洗澡，清洁值回升，收到营养液' },
+      library: { k: 'library', label: '📚 一起看书', tip: '全员娱乐值回升，不用买逗猫棒' },
+      travel: { k: 'travel', label: '🧭 出团', tip: '第 1 只当导游，带同伴出游，回来带土特产和收藏品' },
+      museum: { k: 'museum', label: '🏛️ 查看陈列', tip: '看旅行收藏品和成就奖杯' }
+    };
+    const a = ACTS[id];
+    const done = window.Game.doneToday(id + ':' + id);
+    if (a) {
+      const lockable = a.k !== 'museum' && done;
+      h += '<button class="btn ' + (a.k === 'museum' ? '' : 'btn-primary') + ' btn-block" data-act="bx-do" ' +
+        'data-id="' + id + '" data-kind="' + a.k + '"' + (lockable ? ' disabled' : '') + '>' +
+        a.label + (lockable ? '（今天做过了）' : '') + '</button>';
+      h += '<div class="bx-tip">' + a.tip + '</div>';
+    }
+    h += '<button class="btn btn-sm btn-block" data-act="bx-up" data-id="' + id + '">🔨 扩建（更大容量 · 更多产出）</button>';
+    return h;
+  }
+
+  function openBuildingModal(id, forceBuild) {
+    const b = window.Game.buildingById(id);
+    if (!b) return;
+    const built = window.Game.isBuilt(id);
+    const isNext = (window.Game.nextBuilding() || {}).id === id;
+    if (!built && !isNext) { toast('这栋还锁着，先把前面那栋盖好。', 'warn'); return; }
+    if (!window.Game.storySeen('labor')) { toast('先去乐园跟最年长的小动物聊两句。', 'warn'); return; }
+    /* 第一次修：先听它把话说完 */
+    if (!built && !forceBuild && !window.Game.storySeen(b.story)) { openStoryModal(b.story); return; }
+    const mode = (!built || forceBuild) ? 'build' : 'work';
+    bxId = id;
+    bxState = { animal: null, plant: null, fungus: null };
+    openModal({
+      title: (mode === 'build' ? '🏗️ ' : '🏢 ') + b.emoji + ' ' + b.name +
+        (built ? ' · Lv.' + window.Game.buildLv(id) : ' · 准备开工'),
+      body: '<div id="bx-body"></div>',
+      foot: '<button class="btn btn-ghost" data-act="m-close">关闭</button>',
+      onMount: function (m) {
+        bxPaint = function () {
+          const body = $('#bx-body', m);
+          if (!body) return;
+          body.innerHTML = (mode === 'build' ? buildBodyHtml(id, b) : workBodyHtml(id, b));
+          wireModal(m);
+        };
+        bxPaint();
+      },
+      onClose: function () { bxPaint = null; }
+    });
+  }
+
+  function openMuseumModal() {
+    const cols = window.Game.collectionsOwned();
+    const achs = D.ACHIEVEMENTS.filter(function (a) { return S.achievements[a.id]; });
+    let h = '<div class="bx-lv">🧭 收藏品 ' + cols.length + '/' + (D.COLLECTIONS || []).length +
+      '　·　🏆 奖杯 ' + achs.length + '/' + D.ACHIEVEMENTS.length + '</div>';
+    h += '<div class="panel-head" style="margin-top:14px"><h2>🧭 收藏品陈列</h2>' +
+      '<span class="hint">旅行社一次次带回来的</span></div>' + colGridHtml(cols);
+    h += '<div class="panel-head" style="margin-top:16px"><h2>🏆 成就奖杯</h2>' +
+      '<span class="hint">你干成过的事</span></div>';
+    if (!achs.length) h += '<div class="empty">还没有奖杯。</div>';
+    else {
+      h += '<div class="ach-grid">';
+      achs.forEach(function (a) {
+        h += '<div class="ach-card got"><span class="ac-ico">🏆</span>' +
+          '<span class="ac-name">' + esc(a.name) + '</span>' +
+          '<span class="ac-desc">' + esc(a.desc || '') + '</span></div>';
+      });
+      h += '</div>';
+    }
+    openModal({
+      title: '🏛️ 博物馆', body: h,
+      foot: '<button class="btn btn-ghost" data-act="m-close">关闭</button>',
+      onMount: wireModal
     });
   }
 
@@ -2104,6 +2608,79 @@
     if (act === 'goto-notes') return switchTab('notes');
     if (act === 'goto-evidence') return switchTab('evidence');
     if (act === 'goto-me') return switchTab('me');
+    /* ---- v1.18 大世界：机器 / 建筑 / 剧情 ---- */
+    if (act === 'm-close') { closeModal(); return; }
+    if (act === 'm-gacha') return openMachineModal('gacha');
+    if (act === 'm-incubator') return openMachineModal('incubator');
+    if (act === 'm-storage') return openMachineModal('storage');
+    if (act === 'story-play') {
+      const k = window.Game.pendingStory();
+      if (!k) { let msg = '现在没有新剧情。'; if (!window.Game.storySeen('labor')) msg = '照顾等级到 Lv.3、且至少 3 只成年小生物时，会有人来找你。';
+        else if (!window.Game.buildGate().ok) msg = window.Game.buildGate().msg;
+        return toast(msg, 'warn'); }
+      return openStoryModal(k);
+    }
+    if (act === 'build-open') return openBuildingModal(ds.id);
+    if (act === 'bx-up') return openBuildingModal(ds.id, true);
+    if (act === 'bx-pick') {
+      if (bxState) bxState[ds.role] = el.value || null;
+      const go = $('[data-act="bx-go"][data-id="' + bxId + '"]', activeMask() || document);
+      if (go) go.disabled = !(bxState && bxState.animal && bxState.plant && bxState.fungus);
+      return;
+    }
+    if (act === 'bx-go') {
+      const r = window.Game.buildStart(ds.id, bxState || {});
+      if (!r.ok) return toast('❌ ' + r.msg, 'err');
+      playSfx('build');
+      toast('✅ ' + r.msg, 'ok', 7000);
+      closeModal();
+      const nk = window.Game.pendingStory();
+      render();
+      /* 建好一栋 → 下一栋的剧情接着来 */
+      if (r.built && nk) setTimeout(function () { if (!activeMask()) openStoryModal(nk); }, 700);
+      return;
+    }
+    if (act === 'bx-unstaff') {
+      const r = window.Game.removeStaff(ds.id, ds.pet);
+      toast((r.ok ? '👋 ' + r.msg : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
+      if (bxPaint) bxPaint(); else render();
+      renderTop();
+      return;
+    }
+    if (act === 'bx-staff') {
+      if (!el.value) return;
+      const r = window.Game.addStaff(ds.id, el.value);
+      toast((r.ok ? '👜 ' + r.msg : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
+      if (bxPaint) bxPaint(); else render();
+      renderTop();
+      return;
+    }
+    if (act === 'bx-stock') {
+      const r = window.Game.canteenStock(ds.id, ds.item);
+      toast((r.ok ? '🥣 ' + r.msg : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
+      if (bxPaint) bxPaint(); else render();
+      return;
+    }
+    if (act === 'bx-do') {
+      const k = ds.kind;
+      if (k === 'museum') return openMuseumModal();
+      let r = null;
+      if (k === 'canteen') r = window.Game.canteenRun(ds.id);
+      else if (k === 'bath') r = window.Game.bathRun(ds.id);
+      else if (k === 'library') r = window.Game.libraryRun(ds.id);
+      else if (k === 'travel') r = window.Game.travelRun(ds.id);
+      if (!r) return;
+      toast((r.ok ? '✅ ' : '❌ ') + r.msg, r.ok ? 'ok' : 'warn', 6500);
+      if (r.ok) {
+        if (k === 'canteen') playSfx('food');
+        else if (k === 'bath') playSfx('bath');
+        else if (k === 'library') playSfx('music');
+        else if (k === 'travel') playCheer();
+      }
+      if (bxPaint) bxPaint(); else render();
+      renderTop();
+      return;
+    }
     if (act === 'wrong-open') return openWrongQuiz();
     if (act === 'zh-open') return openPracticePanel('interview');
     if (act === 'sp-open-hub') return openPracticePanel('script');
@@ -2146,7 +2723,10 @@
       const id = ds.kind === 'greenhouse' ? 'slot_green' : 'slot_hatch';
       const r = window.Game.buy(id, 1);
       toast((r.ok ? '🏡 ' + r.msg : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
-      return render();
+      render();
+      /* 孵化仓弹窗里的托位也要跟着刷新 */
+      if (activeMask() && $('#modal-root .prow-slots')) openMachineModal('incubator');
+      return;
     }
     if (act === 'care') {
       const r = window.Game.care(ds.id, ds.care);
