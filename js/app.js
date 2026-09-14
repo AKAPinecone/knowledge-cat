@@ -1275,15 +1275,22 @@
     });
   }
 
-  function storyCaster(who, st) {
+  /* 说话的人：pet 用剧情的 caster；若传了 name（比如 Lv.3 由「最年长的那只」开口），
+     就用它自己的名字，读起来才像同伴在跟你说话。 */
+  function storyCaster(who, st, name) {
     if (who === 'narr') return { name: '', ico: '🎬', cls: 'narr' };
     if (who === 'me') return { name: '你', ico: '🧑', cls: 'me' };
-    return { name: st.caster || '小生物', ico: '🐾', cls: 'pet' };
+    return { name: name || st.caster || '小生物', ico: '🐾', cls: 'pet' };
   }
 
   function openStoryModal(key) {
     const st = D.STORY && D.STORY[key];
     if (!st) return;
+    /* Lv.3 那段是"最年长的那只"发起：用它的真名，并把正文里的 {pet} 换掉 */
+    let elder = null;
+    if (key === 'labor') elder = window.Game.oldestAdult();
+    const elderName = elder ? (elder.name || '小生物') : '';
+    const say = function (t) { return elderName ? String(t).replace(/\{pet\}/g, elderName) : t; };
     let i = 0;
     openModal({
       title: '💬 ' + st.title,
@@ -1295,10 +1302,10 @@
         let finished = false;
         function paint() {
           box.innerHTML = st.lines.slice(0, i + 1).map(function (ln, idx) {
-            const c = storyCaster(ln.who, st);
+            const c = storyCaster(ln.who, st, elderName);
             return '<div class="story-line ' + c.cls + (idx === i ? ' now' : '') + '">' +
               (c.name ? '<span class="sl-who">' + c.ico + ' ' + esc(c.name) + '</span>' : '') +
-              '<p>' + esc(ln.text) + '</p></div>';
+              '<p>' + esc(say(ln.text)) + '</p></div>';
           }).join('');
           requestAnimationFrame(function () { box.scrollTop = box.scrollHeight; });
         }

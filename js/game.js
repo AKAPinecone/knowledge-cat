@@ -489,6 +489,11 @@ window.Game = (function () {
     return S.pets.filter(function (p) { return canStore(p); });
   }
   function adultCount() { return adultPets().length; }
+  /* 最年长的成年体（同伴里说话最有分量的那只）：Lv.3 剧情由它开口 */
+  function oldestAdult() {
+    const arr = adultPets().slice().sort(function (a, b) { return (a.bornAt || 0) - (b.bornAt || 0); });
+    return arr[0] || null;
+  }
   /* 某类 kind 里能干活的小生物 */
   function workersOf(kind) {
     return S.pets.filter(function (p) {
@@ -776,6 +781,7 @@ window.Game = (function () {
     buildGate: buildGate,
     adultPets: adultPets,
     adultCount: adultCount,
+    oldestAdult: oldestAdult,
     workersOf: workersOf,
     buildCost: buildCost,
     buildStart: buildStart,
