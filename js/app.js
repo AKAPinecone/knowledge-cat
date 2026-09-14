@@ -910,9 +910,11 @@
 
   function pottedPetHtml(p, zoneId) {
     const sp = window.Game.speciesById(p.speciesId);
-    return '<div class="park-pet potted' + (p.illness ? ' sick' : '') + (p.dormant ? ' dormant' : '') + artKindCls(sp) +
+    /* 苗圃（nursery）是沃土地：植物直接种地里，不套花盆；温室窗口里才用盆 */
+    const inBed = zoneId === 'nursery';
+    return '<div class="park-pet potted' + (inBed ? ' no-pot' : '') + (p.illness ? ' sick' : '') + (p.dormant ? ' dormant' : '') + artKindCls(sp) +
       '" data-act="pet-open" data-id="' + p.id + '">' +
-      petFaceHtml(p) + '<span class="pp-pot">' + potSvg() + '</span></div>';
+      petFaceHtml(p) + (inBed ? '' : '<span class="pp-pot">' + potSvg() + '</span>') + '</div>';
   }
 
   function pondPetHtml(p) {
@@ -1013,11 +1015,18 @@
     h += '<div class="world-map" id="world-map">';
     h += '<img class="world-img" src="' + D.WORLD.img + '" alt="乐园地图" draggable="false">';
 
-    /* 固定槽位的区域：苗圃 / 温室 / 池塘 */
+    /* 固定槽位的区域：苗圃 / 池塘；enter 型（温室）只画热区，点了开窗进去 */
     D.ZONES.forEach(function (z) {
       if (z.roam) return;
       const pets = window.Game.petsInZone(z.id);
       h += '<div class="wzone wzone-' + z.id + '">';
+      if (z.enter) {
+        const d = z.door || { x: 50, y: 50, w: 16 };
+        h += '<button class="wzone-enter" data-act="z-enter" data-id="' + z.id + '" style="left:' + d.x + '%;top:' + d.y + '%;width:' + d.w + '%" title="' + esc(z.name) + ' · 点我进去">' +
+          '<span class="wze-tag">' + z.emoji + ' ' + esc(z.name) + ' ' + pets.length + '/' + z.cap + ' · 点我进去</span></button>';
+        h += '</div>';
+        return;
+      }
       z.slots.forEach(function (pos, i) {
         const p = pets[i];
         h += '<div class="wslot' + (p ? ' filled' : '') + '" style="left:' + pos[0] + '%;top:' + pos[1] + '%">' +
@@ -1334,6 +1343,28 @@
         });
         paint();
       }
+    });
+  }
+
+  /* ---- 区域窗口（进入型区域：温室。玻璃房只是外观，里面在这看） ---- */
+  function openZoneModal(zid) {
+    const z = window.Game.zoneById(zid);
+    if (!z) return;
+    const pets = window.Game.petsInZone(zid);
+    let h = '<div class="bx-lv">' + z.emoji + ' ' + esc(z.tip || '') + ' · ' + pets.length + '/' + z.cap + '</div>';
+    h += '<div class="zone-grid">';
+    const n = Math.max(z.cap, pets.length);
+    for (let i = 0; i < n; i++) {
+      const p = pets[i];
+      h += '<div class="zone-cell' + (p ? ' filled' : '') + '">' +
+        (p ? pottedPetHtml(p, zid) : '<span class="wslot-dot"></span>') + '</div>';
+    }
+    h += '</div>';
+    openModal({
+      title: z.emoji + ' ' + z.name,
+      body: h,
+      foot: '<button class="btn btn-ghost" data-act="m-close">关上门出去</button>',
+      onMount: wireModal
     });
   }
 
@@ -2617,6 +2648,7 @@
     if (act === 'goto-me') return switchTab('me');
     /* ---- v1.18 大世界：机器 / 建筑 / 剧情 ---- */
     if (act === 'm-close') { closeModal(); return; }
+    if (act === 'z-enter') return openZoneModal(ds.id);
     if (act === 'm-gacha') return openMachineModal('gacha');
     if (act === 'm-incubator') return openMachineModal('incubator');
     if (act === 'm-storage') return openMachineModal('storage');

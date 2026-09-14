@@ -621,78 +621,76 @@ window.GAME_DATA = (function () {
    * v1.18 大世界地图（可拖动）+ 建筑系统
    * 底图只有地形；建筑/机器都是浮在上面的立绘（百分比定位）
    * ========================================================= */
-  const WORLD = { img: 'assets/map/world.webp', w: 1536, h: 933, ratio: 1536 / 933 };
+  const WORLD = { img: 'assets/map/world.webp', w: 2150, h: 1024, ratio: 2150 / 1024 };
 
   /* 区域：小生物按 kind 归位。slots 是 [x%, y%]，相对底图
-     （坐标是照着 assets/map/world.webp 实拍对的：左花圃 / 左中玻璃房 / 中下池塘 / 中右草地 / 右侧围栏空地） */
+     （坐标照着 v1.19 新底图对的：左下耕地 / 左中空玻璃房 / 中下池塘 / 右侧大片草地）
+     greenhouse 是 enter 型：地图上只画一个玻璃房，点它开窗进去，12 个槽在窗口里。 */
   const ZONES = [
     {
       id: 'nursery', name: '苗圃', emoji: '🌱', kinds: ['plant'], cap: 12,
-      tip: '植物安家在这儿',
+      tip: '植物直接种在沃土里',
       slots: [
-        [6.5, 57], [15.5, 57], [24.5, 57],
-        [6.5, 67], [15.5, 67], [24.5, 67],
-        [6.5, 77], [15.5, 77], [24.5, 77],
-        [6.5, 86], [15.5, 86], [24.5, 86]
+        [6.5, 60], [13, 60], [19, 60],
+        [6.5, 69.5], [13, 69.5], [19, 69.5],
+        [6.5, 79], [13, 79], [19, 79],
+        [6.5, 88], [13, 88], [19, 88]
       ]
     },
     {
       id: 'greenhouse', name: '温室', emoji: '🍄', kinds: ['fungus'], cap: 12,
-      tip: '真菌住玻璃房',
-      slots: [
-        [23, 34], [28.5, 34], [34, 34], [39.5, 34],
-        [23, 41], [28.5, 41], [34, 41], [39.5, 41],
-        [23, 48], [28.5, 48], [34, 48], [39.5, 48]
-      ]
+      tip: '真菌住玻璃房（点玻璃房进去）',
+      enter: true,                       /* 点击进入型：窗口里摆 12 个槽 */
+      door: { x: 21.8, y: 40, w: 17 }    /* 玻璃房热区（中心 + 宽度） */
     },
     {
       id: 'pond', name: '池塘', emoji: '🪷', kinds: ['algae', 'water'], cap: 6,
       tip: '水生的泡在水里（海菜花 · 红瘰疣螈 · 云南闭壳龟 · 藻类）',
-      slots: [[43, 70], [49.5, 69.5], [54, 73], [44, 77], [50, 78], [46, 83]]
+      slots: [[31, 71], [37.5, 69], [42, 74], [32, 79], [38, 81.5], [35, 86]]
     },
     {
       id: 'meadow', name: '草地', emoji: '🌿', kinds: ['animal'], cap: 0, roam: true,
       tip: '动物自由遛弯',
-      rect: [52, 26, 32, 30]        /* x, y, w, h（百分比）：动物遛弯范围 */
+      rect: [46, 40, 51, 56]        /* x, y, w, h（百分比）：动物遛弯范围（v1.19 大幅扩大） */
     }
   ];
 
   /* 点击开窗的「机器」三件 */
   const MACHINES = [
-    { id: 'gacha', name: '扭蛋机', img: 'assets/buildings/gacha.webp', x: 47.5, y: 33, w: 6.4, act: 'm-gacha' },
-    { id: 'incubator', name: '孵化仓', img: 'assets/buildings/incubator.webp', x: 43.5, y: 50, w: 13, act: 'm-incubator' },
-    { id: 'storage', name: '保管室', img: 'assets/buildings/storage.webp', x: 62, y: 66, w: 8.4, act: 'm-storage' }
+    { id: 'gacha', name: '扭蛋机', img: 'assets/buildings/gacha.webp', x: 50, y: 43, w: 6, act: 'm-gacha' },
+    { id: 'incubator', name: '孵化仓', img: 'assets/buildings/incubator.webp', x: 55, y: 61, w: 12, act: 'm-incubator' },
+    { id: 'storage', name: '保管室', img: 'assets/buildings/storage.webp', x: 48, y: 80, w: 8, act: 'm-storage' }
   ];
 
   /* 可按顺序修建的建筑：人（动物劳力）+ 植物（材料）+ 真菌（胶合料）
-     x/y 都落在底图右侧那几块带围栏的空地上 */
+     v1.19：全部摆到右侧大草地上，相互留足间距 */
   const BUILDINGS = [
     {
-      id: 'canteen', name: '食堂', img: 'assets/buildings/canteen.webp', x: 77, y: 64, w: 10,
+      id: 'canteen', name: '食堂', img: 'assets/buildings/canteen.webp', x: 68, y: 47, w: 10,
       emoji: '🍲', order: 1,
       desc: '清水 + 饲料 换可可豆，小生物也能来吃饭',
       story: 'canteen'
     },
     {
-      id: 'bath', name: '澡堂', img: 'assets/buildings/bath.webp', x: 89, y: 65, w: 10,
+      id: 'bath', name: '澡堂', img: 'assets/buildings/bath.webp', x: 83, y: 49, w: 10,
       emoji: '🛁', order: 2,
       desc: '洗澡涨清洁值，顺便产营养液',
       story: 'bath'
     },
     {
-      id: 'library', name: '图书馆', img: 'assets/buildings/library.webp', x: 76, y: 76, w: 10,
+      id: 'library', name: '图书馆', img: 'assets/buildings/library.webp', x: 66, y: 66, w: 10,
       emoji: '📚', order: 3,
       desc: '待在里面涨娱乐值',
       story: 'library'
     },
     {
-      id: 'travel', name: '旅行社', img: 'assets/buildings/travel.webp', x: 88, y: 77, w: 10,
+      id: 'travel', name: '旅行社', img: 'assets/buildings/travel.webp', x: 83, y: 68, w: 10,
       emoji: '🧭', order: 4,
       desc: '一只当导游带团出游，回来带土特产和收藏品',
       story: 'travel'
     },
     {
-      id: 'museum', name: '博物馆', img: 'assets/buildings/museum.webp', x: 82, y: 84, w: 11,
+      id: 'museum', name: '博物馆', img: 'assets/buildings/museum.webp', x: 74, y: 84, w: 11,
       emoji: '🏛️', order: 5,
       desc: '陈列旅行收藏品和成就奖杯',
       story: 'museum'
@@ -813,7 +811,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.18',
+    VERSION: 'v1.19',
     WORLD: WORLD,
     ZONES: ZONES,
     MACHINES: MACHINES,

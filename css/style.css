@@ -1117,6 +1117,11 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
 /* 花盆里的植物 / 真菌 */
 .potted .pp-body{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:2;}
 .potted .pp-emoji{font-size:31px;animation:sway 3.4s ease-in-out infinite;}
+/* 苗圃沃土地：不套花盆，植物直接立在土上（再配一个小土堆底座） */
+.potted.no-pot .pp-body{bottom:8px;}
+.potted.no-pot::after{content:'';position:absolute;left:50%;bottom:2px;transform:translateX(-50%);
+  width:34px;height:10px;border-radius:50%;background:#8a5a34;
+  box-shadow:inset 0 2px 3px rgba(60,32,12,.45), inset 0 -2px 3px rgba(255,220,180,.25);}
 /* 遛弯的小动物 */
 .walker{transition:left 4.4s linear, top 4.4s linear;}
 .walker .pp-body{position:absolute;left:50%;top:50%;transform:translate(-50%,-72%);z-index:2;transition:transform .5s;}
@@ -1517,9 +1522,8 @@ img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
   border-radius:999px;padding:2px 8px;white-space:nowrap;pointer-events:none;
   backdrop-filter:blur(3px);box-shadow:0 2px 6px rgba(20,50,30,.12);}
 .wzone-tag i{font-style:normal;color:#5B7263;font-weight:600;}
-.wzone-tag-nursery{left:15.5%;top:50.5%;transform:translateX(-50%);}
-.wzone-tag-greenhouse{left:30%;top:18.5%;transform:translateX(-50%);}
-.wzone-tag-pond{left:46%;top:58.5%;transform:translateX(-50%);}
+.wzone-tag-nursery{left:13%;top:53.5%;transform:translateX(-50%);}
+.wzone-tag-pond{left:34%;top:59.5%;transform:translateX(-50%);}
 
 /* 固定槽位 */
 .wslot{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;
@@ -1528,11 +1532,31 @@ img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
   background:rgba(90,130,80,.18);border:1.5px dashed rgba(80,120,70,.45);}
 .wslot .park-pet{left:50%;top:50%;transform:scale(.72);}
 
-/* 草地：动物自由遛弯的范围 */
+/* 草地：动物自由遛弯的范围。
+   注意 .wzone 是 pointer-events:none，草地没有 .wslot 那样的兜底，
+   动物按钮必须自己恢复 auto，否则整片草地的点击全部穿透（v1.18 踩过：点动物没反应） */
 .wzone-meadow{position:absolute;border-radius:20px;
   border:1.5px dashed rgba(255,255,255,.55);}
-.wzone-meadow .park-pet{transform:scale(.78);transition:left 4.2s linear,top 4.2s linear;}
+.wzone-meadow .park-pet{transform:scale(.78);transition:left 4.2s linear,top 4.2s linear;
+  pointer-events:auto;}
 .wzone-tag-meadow{left:4%;bottom:4%;}
+
+/* 进入型区域（温室）：地图上只画玻璃房外观，整个房子是一块热区 */
+.wzone-enter{position:absolute;transform:translate(-50%,-50%);aspect-ratio:1/1;
+  padding:0;border:0;background:none;cursor:pointer;pointer-events:auto;border-radius:18px;}
+.wzone-enter:active{transform:translate(-50%,-50%) scale(.97);}
+.wze-tag{position:absolute;left:50%;top:-26px;transform:translateX(-50%);white-space:nowrap;
+  font-size:11px;font-weight:700;color:#fff;background:rgba(38,102,150,.6);
+  padding:3px 10px;border-radius:99px;box-shadow:0 2px 8px rgba(20,50,30,.2);}
+
+/* 温室窗口里的槽位网格 */
+.zone-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px;}
+.zone-cell{position:relative;height:86px;border-radius:14px;display:flex;align-items:flex-end;justify-content:center;
+  background:linear-gradient(160deg,#F2FAF3,#E4F1E6);border:1.5px dashed rgba(80,120,70,.35);overflow:visible;}
+.zone-cell.filled{border-style:solid;border-color:#BFE0C8;}
+.zone-cell .park-pet{position:relative;left:auto;top:auto;transform:scale(.9);margin-bottom:10px;}
+.zone-cell .wslot-dot{margin-bottom:34px;}
+@media (max-width:400px){.zone-grid{grid-template-columns:repeat(3,1fr);gap:7px;}.zone-cell{height:74px;}}
 
 /* 机器：点击开窗 */
 .wmachine{position:absolute;transform:translate(-50%,-50%);padding:0;border:0;background:none;
