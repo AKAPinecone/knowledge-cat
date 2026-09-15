@@ -43,7 +43,7 @@ window.Store = (function () {
       bag: { water: 5, fert: 3, pest: 2, food: 5, soap: 2, music: 3, teaser: 3 },
       capsules: [],
       pets: [],
-      slots: { greenhouse: 4, hatchery: 4 },
+      slots: { pod: 8 },     /* v1.20：孵化仓只有一个托位池（老存档 greenhouse+hatchery 由 migrate 合并） */
       /* 大世界建筑系统（v1.18） */
       build: {
         built: [],         /* 已建成的建筑 id，按修建顺序 */
@@ -199,6 +199,16 @@ window.Store = (function () {
       if (t === 'a' && !Array.isArray(s.build[k])) s.build[k] = [];
       if (t === 'o' && typeof s.build[k] !== 'object') s.build[k] = {};
     });
+    /* v1.20：孵化仓托位合并成一个池（S.slots.pod），胶囊的 place 统一改成 'pod'。
+       老存档里 greenhouse / hatchery 两个池的容量相加就是新池容量。 */
+    if (!s.slots || typeof s.slots !== 'object') s.slots = {};
+    if (typeof s.slots.pod !== 'number') {
+      s.slots.pod = (Number(s.slots.greenhouse) || 0) + (Number(s.slots.hatchery) || 0);
+    }
+    if (!s.slots.pod) s.slots.pod = 8;
+    if (Array.isArray(s.capsules)) {
+      s.capsules.forEach(function (c) { if (c && c.place) c.place = 'pod'; });
+    }
   }
 
   /* localStorage 只有 5MB 上下，而证据库里每条凭证都带一张 base64 缩略图。

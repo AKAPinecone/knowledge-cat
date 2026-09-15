@@ -931,52 +931,21 @@
       petFaceHtml(p) + '</div>';
   }
 
-  /* 场景排：温室 / 孵化室（只放正在孵化的胶囊 + 空托位） */
-  function parkRow(kind, ico, name, sub) {
-    const caps = S.capsules.filter(function (c) { return c.place === kind; });
-    const cap = S.slots[kind] || 0;
-    let h = '<div class="park-row park-row-' + kind + '">';
-    h += '<div class="prow-head"><span class="prow-ico">' + ico + '</span><b>' + name + '</b>' +
-      '<span class="prow-sub">' + sub + '</span>' +
-      '<span class="spacer"></span>' +
-      '<span class="slot-badge">🥚 ' + caps.length + ' / ' + cap + '</span>' +
-      '<button class="btn btn-sm prow-add" data-act="expand" data-kind="' + kind + '" title="扩一个孵化位（🌰 120）">➕</button></div>';
-    h += '<div class="prow-slots">';
-    const n = Math.max(cap, caps.length);
-    for (let i = 0; i < n; i++) {
-      const c = caps[i];
-      h += '<div class="hatch-slot' + (c ? ' filled' : '') + '">';
-      if (c) {
-        const sp = window.Game.speciesById(c.speciesId);
-        const prog = Math.min(1, (Date.now() - c.hatchStart) / (c.hatchMinutes * 60000));
-        const ready = prog >= 1;
-        h += '<button class="hatch-pod' + (ready ? ' ready' : '') + '" data-act="cap-open" data-id="' + c.id + '" title="' + esc(sp.name) + '">' +
-          spArt(sp, 'hp-emoji') +
-          '<span class="hp-bar"><i style="width:' + Math.round(prog * 100) + '%"></i></span>' +
-          (ready ? '<span class="hp-tag">✨破壳</span>' : '') +
-          '</button>';
-      } else {
-        h += '<span class="slot-empty">＋</span>';
-      }
-      h += '</div>';
-    }
-    h += '</div></div>';
-    return h;
-  }
+  /* 场景排：温室 / 孵化室（v1.20 起孵化仓改用 incubatorBodyHtml 的两个板块，这里不再需要） */
 
-  /* ---------------- 保存舱面板（可折叠） ---------------- */
+  /* ---------------- 保管室（保存舱）面板（可折叠） ---------------- */
   function podPanel() {
     const stored = S.pets.filter(function (p) { return p.stored; });
     let h = '<div class="panel pod-panel' + (podOpen ? ' open' : '') + '">';
     h += '<div class="panel-head pod-head" data-act="pod-toggle">' +
-      '<h2>📦 保存舱</h2>' +
-      '<span class="hint">成年体仓库 · 状态静止</span>' +
+      '<h2>📦 保管室</h2>' +
+      '<span class="hint">谁都能存 · 状态静止</span>' +
       '<span class="spacer"></span>' +
       '<span class="pod-count">' + stored.length + ' 只</span>' +
       '<span class="pod-caret">' + (podOpen ? '▾' : '▸') + '</span></div>';
     if (podOpen) {
       if (!stored.length) {
-        h += '<div class="empty">保存舱空着。成熟的成年体（「成熟 / 圆满」）可以从它的状态面板放进这里——状态会完全静止、不再消耗道具。需要它时再「取出」回到场地。</div>';
+        h += '<div class="empty">保管室空着。任何阶段的小生物都可以从它的状态面板放进这里——状态会完全静止、不再消耗道具。需要它时再「取出」回到场地。</div>';
       } else {
         h += '<div class="pet-list">';
         stored.forEach(function (p) {
@@ -1072,10 +1041,16 @@
 
     h += '</div>';
 
-    /* 有话想说的旗子：挂在【视口】上而不是地图上——地图能横向拖，
-       旗子要是跟着地图跑，拖到另一边就看不见了，容易漏掉剧情。 */
-    if (window.Game.pendingStory()) {
+    /* 剧情旗子 / 工地入口：挂在【视口】上而不是地图上——地图能横向拖，
+       旗子要是跟着地图跑，拖到另一边就看不见了，容易漏掉剧情。
+       该说的话都说完之后，旗子变成「去开工」——只要下一栋还能修，
+       门口永远有一条路，不会出现"没旗子、也不知道该点哪儿"的死局。 */
+    const ps = window.Game.pendingStory();
+    if (ps) {
       h += '<button class="wstory-flag" data-act="story-play">💬 有话想跟你说</button>';
+    } else if (nb && window.Game.storySeen('labor') && window.Game.buildGate().ok) {
+      h += '<button class="wstory-flag wstory-build" data-act="build-open" data-id="' + nb.id + '">🔨 ' +
+        nb.emoji + ' ' + esc(nb.name) + '工地等着你</button>';
     }
     h += '<span class="world-pan-hint">👈 按住拖动，看全整个乐园 👉</span>';
     h += '</div>';
@@ -1295,9 +1270,10 @@
   function openStoryModal(key) {
     const st = D.STORY && D.STORY[key];
     if (!st) return;
-    /* Lv.3 那段是"最年长的那只"发起：用它的真名，并把正文里的 {pet} 换掉 */
+    /* Lv.3 那段是"最年长的那只"发起：用它的真名，并把正文里的 {pet} 换掉。
+       没有成年体时（v1.20 起不再卡这个）就退回全体里最年长的那只。 */
     let elder = null;
-    if (key === 'labor') elder = window.Game.oldestAdult();
+    if (key === 'labor') elder = window.Game.elderPet ? window.Game.elderPet() : window.Game.oldestAdult();
     const elderName = elder ? (elder.name || '小生物') : '';
     const say = function (t) { return elderName ? String(t).replace(/\{pet\}/g, elderName) : t; };
     let i = 0;
@@ -1368,6 +1344,82 @@
     });
   }
 
+  /* ---- 孵化仓（v1.20）：只有「未孵化 / 孵化完成」两个板块 ----
+     以前按 温室托位 / 动物托位 分成两栏，和地图上的「温室」区域语义打架，
+     而且玩家得先搞清楚物种属于哪个家才能放。现在一颗池子，按进度分板块。 */
+  function incProgOf(c) {
+    return Math.min(1, (Date.now() - c.hatchStart) / (c.hatchMinutes * 60000));
+  }
+  function incCellHtml(c, prog) {
+    const sp = window.Game.speciesById(c.speciesId);
+    const done = prog >= 1;
+    const gate = window.Game.quizGate(c.id);
+    const needQuiz = done && gate.on && !gate.passed;
+    return '<div class="inc-cell filled' + (done ? ' ready' : '') + '">' +
+      '<button class="inc-pod" data-act="cap-open" data-id="' + c.id +
+      '" title="' + esc(sp.name) + '">' + spArt(sp, 'hp-emoji') +
+      '<span class="hp-bar"><i style="width:' + Math.round(prog * 100) + '%"></i></span>' +
+      (done ? '<span class="hp-tag">✨</span>' : '') + '</button>' +
+      '<div class="inc-name">' + esc(sp.name) + '</div>' +
+      (done
+        ? '<button class="btn btn-sm btn-primary" data-act="hatch" data-id="' + c.id + '">' +
+          (needQuiz ? '🧠 答题破壳' : '破壳') + '</button>'
+        : '<button class="btn btn-sm btn-ghost" data-act="speedup" data-id="' + c.id +
+          '" title="消耗 1 个加速沙漏，推进 30 分钟">⏳ ' + Math.round(prog * 100) + '%</button>') +
+      '</div>';
+  }
+  function incubatorBodyHtml() {
+    const inPod = S.capsules.filter(function (c) { return c.place; });
+    const hatching = inPod.filter(function (c) { return incProgOf(c) < 1; });
+    const ready = inPod.filter(function (c) { return incProgOf(c) >= 1; });
+    const loose = S.capsules.filter(function (c) { return !c.place; });
+    const u = window.Game.usedSlots();
+    const empty = Math.max(0, u.cap - u.used);
+
+    let h = '<div class="inc-head"><span class="bx-lv">🥚 托位 ' + u.used + '/' + u.cap +
+      '　·　未孵化 ' + hatching.length + '　·　可破壳 ' + ready.length + '</span>' +
+      '<button class="btn btn-sm" data-act="expand" title="🌰 120 扩一个托位">➕ 扩托位</button></div>';
+
+    /* 板块一：未孵化 */
+    let placeSel = '';
+    if (loose.length && empty > 0) {
+      placeSel = '<select class="inc-place" data-act="place"><option value="">＋ 放一颗进来…</option>' +
+        loose.map(function (c) {
+          const sp = window.Game.speciesById(c.speciesId);
+          return '<option value="' + c.id + '">' + sp.emoji + ' ' + esc(sp.name) + '</option>';
+        }).join('') + '</select>';
+    }
+    h += '<section class="inc-sec"><div class="inc-sec-head">' +
+      '<span class="inc-t">🕒 未孵化</span><span class="inc-n">' + hatching.length + '</span>' +
+      '<span class="spacer"></span>' +
+      (placeSel || (loose.length ? '<span class="inc-sub">托位满了，先扩一个</span>'
+        : '<span class="inc-sub">没有待安置的胶囊</span>')) +
+      '</div><div class="inc-grid">';
+    hatching.forEach(function (c) { h += incCellHtml(c, incProgOf(c)); });
+    for (let i = 0; i < empty; i++) h += '<div class="inc-cell empty"><span class="wslot-dot"></span></div>';
+    if (!hatching.length && !empty) h += '<div class="empty">仓里空着。</div>';
+    h += '</div></section>';
+
+    /* 板块二：孵化完成 */
+    h += '<section class="inc-sec"><div class="inc-sec-head">' +
+      '<span class="inc-t">✨ 孵化完成</span><span class="inc-n">' + ready.length + '</span>' +
+      '<span class="spacer"></span><span class="inc-sub">破壳前先答一份小卷</span></div>' +
+      '<div class="inc-grid">';
+    if (ready.length) ready.forEach(function (c) { h += incCellHtml(c, 1); });
+    else h += '<div class="empty">还没有到点的胶囊。</div>';
+    h += '</div></section>';
+    return h;
+  }
+
+  /* 孵化仓弹窗开着时就地刷新（绝不关窗再开窗——用户可能已经划到别处了） */
+  function refreshIncModal() {
+    const board = $('#inc-board');
+    const m = activeMask();
+    if (!board || !m || !document.documentElement.contains(board)) return;
+    board.innerHTML = incubatorBodyHtml();
+    wireModal(m);
+  }
+
   /* ---- 机器弹窗 ---- */
   function openMachineModal(id) {
     if (id === 'gacha') {
@@ -1386,10 +1438,9 @@
     }
     if (id === 'incubator') {
       openModal({
-        title: '🥚 孵化仓',
+        title: '🥚 胶囊孵化仓',
         wide: true,
-        body: parkRow('greenhouse', '🏡', '温室托位', '植物 · 真菌 · 藻类在这儿孵化') +
-          parkRow('hatchery', '🐣', '动物托位', '小动物在这儿破壳'),
+        body: '<div class="inc-board" id="inc-board">' + incubatorBodyHtml() + '</div>',
         foot: '<button class="btn btn-ghost" data-act="m-close">关闭</button>',
         onMount: wireModal
       });
@@ -1398,7 +1449,7 @@
     /* 保管室：保存舱 + 旅行收藏品 */
     const stored = S.pets.filter(function (p) { return p.stored; });
     const cols = window.Game.collectionsOwned();
-    let h = '<div class="bx-lv">📦 保存舱 ' + stored.length + ' 只　·　🧭 收藏品 ' +
+    let h = '<div class="bx-lv">📦 保管室 ' + stored.length + ' 只　·　🧭 收藏品 ' +
       cols.length + '/' + (D.COLLECTIONS || []).length + '</div>';
     if (stored.length) {
       h += '<div class="pet-list">';
@@ -1416,7 +1467,7 @@
       });
       h += '</div>';
     } else {
-      h += '<div class="empty">保存舱空着。成年体可以从它的状态面板放进这里，状态完全静止。</div>';
+      h += '<div class="empty">保管室空着。任何阶段的小生物都能从它的状态面板放进这里，状态完全静止。</div>';
     }
     h += '<div class="panel-head" style="margin-top:16px"><h2>🧭 旅行收藏品</h2>' +
       '<span class="hint">建好旅行社，让导游带回来</span></div>' + colGridHtml(cols);
@@ -1540,9 +1591,14 @@
     const built = window.Game.isBuilt(id);
     const isNext = (window.Game.nextBuilding() || {}).id === id;
     if (!built && !isNext) { toast('这栋还锁着，先把前面那栋盖好。', 'warn'); return; }
-    if (!window.Game.storySeen('labor')) { toast('先去乐园跟最年长的小动物聊两句。', 'warn'); return; }
-    /* 第一次修：先听它把话说完 */
-    if (!built && !forceBuild && !window.Game.storySeen(b.story)) { openStoryModal(b.story); return; }
+    /* 第一次修：先把该说的话听完。
+       v1.20 起这里不再"等级不够就拦下"——那样一旦剧情的条件判定有偏差，
+       玩家会被卡在门口连面板都看不到。改成一律把面板打开，面板里显示差什么。 */
+    if (!built && !forceBuild) {
+      const ps = window.Game.pendingStory();
+      if (ps === 'labor') { openStoryModal('labor'); return; }
+      if (ps && ps === b.story) { openStoryModal(b.story); return; }
+    }
     const mode = (!built || forceBuild) ? 'build' : 'work';
     bxId = id;
     bxState = { animal: null, plant: null, fungus: null };
@@ -1698,10 +1754,9 @@
 
   function capsuleCard(c) {
     const sp = window.Game.speciesById(c.speciesId);
-    const home = window.Game.homeOf(sp);
     const prog = c.place ? Math.min(1, (Date.now() - c.hatchStart) / (c.hatchMinutes * 60000)) : 0;
     const canHatch = c.place && prog >= 1;
-    const u = window.Game.usedSlots(home);
+    const u = window.Game.usedSlots();
     const full = u.used >= u.cap;
     const gate = window.Game.quizGate(c.id);
 
@@ -1723,12 +1778,13 @@
         }
       }
     } else {
-      h += '<div class="caps-meta">出处：' + esc(sp.home || '云南') + ' ｜ 需要「' + window.Game.homeName(home) + '」</div>';
+      h += '<div class="caps-meta">出处：' + esc(sp.home || '云南') + ' ｜ 放进孵化仓就能开始孵化</div>';
     }
     h += '</div>';
     h += '<div class="caps-acts">';
     if (!c.place) {
-      h += '<button class="btn btn-sm btn-primary" data-act="place" data-id="' + c.id + '" data-home="' + home + '"' + (full ? ' disabled title="托位已满"' : '') + '>放入' + window.Game.homeName(home) + '</button>';
+      h += '<button class="btn btn-sm btn-primary" data-act="place" data-id="' + c.id + '"' +
+        (full ? ' disabled title="托位已满"' : '') + '>放入孵化仓</button>';
     } else if (canHatch) {
       const needQuiz = gate.on && !gate.passed;
       h += '<button class="btn btn-sm btn-primary" data-act="hatch" data-id="' + c.id + '"' +
@@ -1802,10 +1858,10 @@
     body += '</div>';
 
     if (p.stored) {
-      body += '<div class="warnbox" style="margin-top:10px">📦 在保存舱中：状态静止，不衰减、不生病，护理已暂停。</div>' +
+      body += '<div class="warnbox" style="margin-top:10px">📦 在保管室中：状态静止，不衰减、不生病，护理已暂停。</div>' +
         '<div class="pet-acts" style="margin-top:10px"><button class="btn btn-primary" id="cm-unstore">📭 取出（放回场地）</button></div>';
     } else if (window.Game.canStore(p)) {
-      body += '<div class="pet-acts" style="margin-top:10px"><button class="btn btn-ghost" id="cm-store">📦 放入保存舱</button></div>';
+      body += '<div class="pet-acts" style="margin-top:10px"><button class="btn btn-ghost" id="cm-store">📦 放进保管室（幼体也能存）</button></div>';
     }
 
     body += '<div class="hint" style="margin-top:10px">出生 ' + fmtWhen(p.bornAt) + ' · 陪伴你 ' + fmtHM(mins) +
@@ -1828,7 +1884,7 @@
         if (storeBtn) storeBtn.onclick = function () {
           const r = window.Game.storePet(p.id);
           if (!r.ok) { toast('❌ ' + r.msg, 'err'); return; }
-          closeModal(); render(); toast('📦 ' + esc(p.name) + ' 已放进保存舱。', 'ok');
+          closeModal(); render(); toast('📦 ' + esc(p.name) + ' 已放进保管室。', 'ok');
         };
         const unstoreBtn = $('#cm-unstore', m);
         if (unstoreBtn) unstoreBtn.onclick = function () {
@@ -1872,7 +1928,7 @@
     let body = '<div style="text-align:center;margin-bottom:10px"><div style="font-size:52px">' + sp.emoji + '</div>' +
       '<div style="font-size:16px;font-weight:700;margin-top:4px">' + esc(sp.name) +
       ' <span class="badge-rar rar-' + sp.rarity + '">' + rarityName(sp.rarity) + '</span></div>' +
-      '<div style="font-size:12.5px;color:#8AA394;margin-top:2px">住在' + window.Game.homeName(window.Game.homeOf(sp)) + ' · 出身 ' + esc(sp.home) + '</div></div>';
+      '<div style="font-size:12.5px;color:#8AA394;margin-top:2px">住在' + window.Game.zoneNameFor(sp) + ' · 出身 ' + esc(sp.home) + '</div></div>';
     body += '<div class="okbox" style="text-align:left">' + esc(sp.tip) + '</div>';
 
     if (ready) {
@@ -1961,7 +2017,7 @@
             ' <span class="badge-rar rar-' + sp.rarity + '">' + rarityName(sp.rarity) + '</span></div>' +
           '<div style="font-size:11.5px;color:#8AA394">' + (known ? esc(sp.tip) : '还没见过这个物种') + '</div>' +
         '</div>' +
-        '<span class="tag">' + window.Game.homeName(window.Game.homeOf(sp)) + '</span>' +
+        '<span class="tag">' + window.Game.zoneNameFor(sp) + '</span>' +
       '</div>';
     });
     h += '</div></div>';
@@ -1997,7 +2053,7 @@
         '<div style="font-size:34px">' + sp.emoji + '</div>' +
         '<div style="font-size:13px;font-weight:700;margin-top:4px">' + esc(sp.name) + '</div>' +
         '<div><span class="badge-rar rar-' + sp.rarity + '">' + rarityName(sp.rarity) + '</span></div>' +
-        '<div style="font-size:11px;color:#8AA394;margin-top:4px">' + window.Game.homeName(window.Game.homeOf(sp)) + '</div>' +
+        '<div style="font-size:11px;color:#8AA394;margin-top:4px">' + window.Game.zoneNameFor(sp) + '</div>' +
         '</div>';
     });
     body += '</div>';
@@ -2034,7 +2090,7 @@
         const locked = it.reqLevel && S.cur.level < it.reqLevel;
         const q = shopQty[it.id] || 1;
         const own = (it.kind === 'facility')
-          ? (it.id === 'hourglass' ? (S.bag.hourglass || 0) : (it.id === 'slot_green' ? S.slots.greenhouse : S.slots.hatchery))
+          ? (it.id === 'hourglass' ? (S.bag.hourglass || 0) : window.Game.podCap())
           : (S.bag[it.id] || 0);
         const ownLabel = it.kind === 'facility'
           ? (it.id === 'hourglass' ? '持有 ' + own + ' 个' : '当前 ' + own + ' 个托位')
@@ -2654,7 +2710,7 @@
     if (act === 'm-storage') return openMachineModal('storage');
     if (act === 'story-play') {
       const k = window.Game.pendingStory();
-      if (!k) { let msg = '现在没有新剧情。'; if (!window.Game.storySeen('labor')) msg = '照顾等级到 Lv.3、且至少 3 只成年小生物时，会有人来找你。';
+      if (!k) { let msg = '现在没有新剧情。'; if (!window.Game.storySeen('labor')) msg = '照顾等级到 Lv.3 之后，最年长的那只就会来找你谈劳动。';
         else if (!window.Game.buildGate().ok) msg = window.Game.buildGate().msg;
         return toast(msg, 'warn'); }
       return openStoryModal(k);
@@ -2735,9 +2791,10 @@
     }
     if (act === 'me-edit') return openProfileModal();
     if (act === 'place') {
-      const r = window.Game.placeCapsule(ds.id, ds.home);
-      toast((r.ok ? '🌱 已经放进' + window.Game.homeName(ds.home) + '，开始孵化。' : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
-      return render();
+      const r = window.Game.placeCapsule(ds.id);
+      toast((r.ok ? '🌱 已经放进孵化仓，开始孵化。' : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
+      render();
+      return refreshIncModal();
     }
     if (act === 'hatch') {
       const g = window.Game.quizGate(ds.id);
@@ -2756,16 +2813,15 @@
     if (act === 'speedup') {
       const r = window.Game.speedUp(ds.id);
       toast((r.ok ? '⏳ 推进了 30 分钟。' : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
-      return render();
+      render();
+      return refreshIncModal();
     }
     if (act === 'expand') {
-      const id = ds.kind === 'greenhouse' ? 'slot_green' : 'slot_hatch';
-      const r = window.Game.buy(id, 1);
+      /* 托位只有一个池（v1.20）：两种扩展位都加在同一个池上 */
+      const r = window.Game.buy('slot_green', 1);
       toast((r.ok ? '🏡 ' + r.msg : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
       render();
-      /* 孵化仓弹窗里的托位也要跟着刷新 */
-      if (activeMask() && $('#modal-root .prow-slots')) openMachineModal('incubator');
-      return;
+      return refreshIncModal();
     }
     if (act === 'care') {
       const r = window.Game.care(ds.id, ds.care);
@@ -2906,7 +2962,7 @@
         $('#hn-ok', mask).onclick = function () {
           window.Game.renamePet(r.pet.id, $('#hn', mask).value || r.pet.name);
           closeModal();
-          toast('🌿 ' + esc(r.pet.name) + ' 正式住进' + window.Game.homeName(window.Game.homeOf(sp)) + '了。记得常来看看它。', 'ok', 6000);
+          toast('🌿 ' + esc(r.pet.name) + ' 正式住进' + window.Game.zoneNameFor(sp) + '了。记得常来看看它。', 'ok', 6000);
           render();
         };
       }
@@ -3360,7 +3416,7 @@
       '<tr><th>成长值</th><td>' + Math.round(p.growth) + '</td></tr>' +
       '<tr><th>被照顾</th><td>' + p.careCount + ' 次</td></tr>' +
       '<tr><th>出身地</th><td>' + esc(sp.home) + '</td></tr>' +
-      '<tr><th>安置处</th><td>' + window.Game.homeName(window.Game.homeOf(sp)) + '</td></tr>' +
+      '<tr><th>安置处</th><td>' + window.Game.zoneNameFor(sp) + '</td></tr>' +
       '</table>';
     openModal({
       title: '📋 ' + esc(p.name) + ' 的档案', body: body,

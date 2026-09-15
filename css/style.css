@@ -1088,6 +1088,42 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
 @keyframes wiggle{0%,100%{transform:rotate(-8deg) translateY(0)}50%{transform:rotate(8deg) translateY(-3px)}}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
 
+/* ---- 孵化仓：两个板块（v1.20「🕒 未孵化 / ✨ 孵化完成」）----
+   以前分「温室托位 / 动物托位」两栏，玩家得先搞清物种归属才能放；
+   现在一颗池子（S.slots.pod），按孵化进度分板块，托位用 ➕ 扩。 */
+.inc-board{display:flex;flex-direction:column;gap:12px;}
+.inc-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.inc-head .bx-lv{flex:1;min-width:0;}
+.inc-sec{background:#FAFCFA;border:1.5px solid var(--line,#E3ECE4);border-radius:16px;
+  padding:10px 11px 12px;}
+.inc-sec-head{display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap;}
+.inc-t{font-size:13.5px;font-weight:800;color:#22483A;}
+.inc-n{background:var(--green-soft,#EAF4EC);border:1px solid var(--line,#E3ECE4);border-radius:99px;
+  padding:1px 8px;font-size:11.5px;font-weight:700;color:var(--green-deep,#2E7A4C);}
+.inc-sec-head .spacer{flex:1;}
+.inc-sub{font-size:11.5px;color:#8AA394;}
+.inc-place{font-size:16px;min-height:38px;border:1.5px solid var(--line,#E3ECE4);border-radius:11px;
+  background:#fff;padding:4px 8px;font-family:inherit;color:#22483A;max-width:62%;}
+.inc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:9px;}
+.inc-cell{border:2px dashed #BFD9C4;border-radius:14px;min-height:108px;padding:7px 4px 8px;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:5px;
+  background:rgba(255,255,255,.5);}
+.inc-cell.filled{border-style:solid;border-color:#DCE9DE;background:#FFFDF6;}
+.inc-cell.ready{border-color:#E9CF8E;background:#FFF9EC;box-shadow:0 2px 8px rgba(190,150,60,.12);}
+.inc-cell.empty{justify-content:center;}
+.inc-pod{position:relative;border:0;background:transparent;padding:2px;cursor:pointer;min-height:48px;
+  display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;}
+.inc-pod:active{transform:scale(.95);}
+.inc-cell .hp-bar{width:56px;}
+.inc-name{font-size:11px;font-weight:700;color:#3C5B48;text-align:center;line-height:1.2;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.inc-cell .btn{width:100%;}
+@media (max-width:400px){
+  .inc-grid{grid-template-columns:repeat(auto-fill,minmax(74px,1fr));}
+  .inc-place{max-width:100%;}
+  .inc-cell{min-height:100px;}
+}
+
 /* ---- 空场 ---- */
 .park-field{position:relative;margin:12px;height:310px;border-radius:18px;border:2.5px solid #7CC176;
   background:
@@ -1102,35 +1138,36 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
   color:#256B3E;font-size:13.5px;font-weight:600;text-shadow:0 1px 0 rgba(255,255,255,.5);text-align:center;padding:0 20px;}
 .park-tip{text-align:center;font-size:12px;color:var(--ink-3);padding:0 12px 12px;}
 
-/* ---- 小生物 ---- */
-.park-pet{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;cursor:pointer;z-index:6;
+/* ---- 小生物 ----
+   v1.20：整体放大约 25%（用户反馈「图标太小了」） */
+.park-pet{position:absolute;width:78px;height:78px;margin:-39px 0 0 -39px;cursor:pointer;z-index:6;
   -webkit-tap-highlight-color:transparent;}
 .park-pet:active .pp-emoji{transform:scale(.92);}
 .pp-body{display:block;}
 .pp-emoji{display:block;line-height:1;filter:drop-shadow(0 3px 2px rgba(0,0,0,.14));}
 .pp-shadow{position:absolute;left:50%;bottom:0;width:34px;height:10px;margin-left:-17px;border-radius:50%;
   background:radial-gradient(ellipse, rgba(0,0,0,.20), transparent 70%);z-index:1;}
-.pp-pot{position:absolute;left:50%;bottom:-2px;transform:translateX(-50%);font-size:25px;line-height:1;z-index:1;
+.pp-pot{position:absolute;left:50%;bottom:-2px;transform:translateX(-50%);font-size:32px;line-height:1;z-index:1;
   filter:drop-shadow(0 2px 1px rgba(0,0,0,.14));}
-.pp-happy{position:absolute;top:-8px;right:-6px;font-size:13px;line-height:1;animation:pulse 2.2s ease-in-out infinite;z-index:3;}
+.pp-happy{position:absolute;top:-8px;right:-6px;font-size:15px;line-height:1;animation:pulse 2.2s ease-in-out infinite;z-index:3;}
 
 /* 花盆里的植物 / 真菌 */
-.potted .pp-body{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:2;}
-.potted .pp-emoji{font-size:31px;animation:sway 3.4s ease-in-out infinite;}
+.potted .pp-body{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:2;}
+.potted .pp-emoji{font-size:40px;animation:sway 3.4s ease-in-out infinite;}
 /* 苗圃沃土地：不套花盆，植物直接立在土上（再配一个小土堆底座） */
-.potted.no-pot .pp-body{bottom:8px;}
-.potted.no-pot::after{content:'';position:absolute;left:50%;bottom:2px;transform:translateX(-50%);
-  width:34px;height:10px;border-radius:50%;background:#8a5a34;
+.potted.no-pot .pp-body{bottom:10px;}
+.potted.no-pot::after{content:'';position:absolute;left:50%;bottom:3px;transform:translateX(-50%);
+  width:44px;height:13px;border-radius:50%;background:#8a5a34;
   box-shadow:inset 0 2px 3px rgba(60,32,12,.45), inset 0 -2px 3px rgba(255,220,180,.25);}
 /* 遛弯的小动物 */
 .walker{transition:left 4.4s linear, top 4.4s linear;}
 .walker .pp-body{position:absolute;left:50%;top:50%;transform:translate(-50%,-72%);z-index:2;transition:transform .5s;}
-.walker .pp-emoji{font-size:37px;animation:waddle 1.7s ease-in-out infinite;}
+.walker .pp-emoji{font-size:47px;animation:waddle 1.7s ease-in-out infinite;}
 .walker.flip .pp-body{transform:translate(-50%,-72%) scaleX(-1);}
 /* 池塘里的藻类 */
-.pond-pet{width:56px;height:56px;z-index:5;}
+.pond-pet{width:68px;height:68px;z-index:5;}
 .pond-pet .pp-body{position:absolute;left:50%;top:50%;transform:translate(-50%,-58%);z-index:2;}
-.pond-pet .pp-emoji{font-size:29px;animation:bob 3s ease-in-out infinite;}
+.pond-pet .pp-emoji{font-size:37px;animation:bob 3s ease-in-out infinite;}
 /* 生病 / 休眠的样子 */
 .park-pet.sick .pp-emoji{filter:grayscale(.4) drop-shadow(0 3px 2px rgba(0,0,0,.14));}
 .park-pet.dormant{opacity:.66;}
@@ -1155,8 +1192,8 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
 
 /* ---- 生物弹窗 ---- */
 .cm-head{display:flex;gap:12px;align-items:flex-start;}
-.cm-face{width:64px;height:64px;border-radius:50%;background:var(--green-soft);border:2px solid var(--line);
-  display:flex;align-items:center;justify-content:center;font-size:34px;flex:0 0 auto;}
+.cm-face{width:74px;height:74px;border-radius:50%;background:var(--green-soft);border:2px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:40px;flex:0 0 auto;}
 #cm-rename{white-space:nowrap;}
 .sname{white-space:nowrap;}
 
@@ -1180,9 +1217,9 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
   .hatch-slot{width:76px;height:92px;}
   .hp-emoji{font-size:31px;}
   .pond{width:122px;height:62px;}
-  .park-pet{width:58px;height:58px;margin:-29px 0 0 -29px;}
-  .walker .pp-emoji{font-size:33px;}
-  .potted .pp-emoji{font-size:28px;}
+  .park-pet{width:70px;height:70px;margin:-35px 0 0 -35px;}
+  .walker .pp-emoji{font-size:42px;}
+  .potted .pp-emoji{font-size:36px;}
 }
 
 
@@ -1224,24 +1261,24 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
 img.pp-img{width:1em;height:1em;object-fit:contain;display:block;}
 .dex-ico img.pp-img{display:inline-block;vertical-align:-0.18em;}
 /* 地面投影：空场上的小生物脚下有椭圆软阴影，立体感 */
-.pp-shadow{width:50px;height:14px;margin-left:-25px;bottom:-3px;
+.pp-shadow{width:60px;height:16px;margin-left:-30px;bottom:-3px;
   background:radial-gradient(ellipse, rgba(15,42,26,.36), transparent 70%);}
-.walker .pp-shadow{width:68px;height:17px;margin-left:-34px;bottom:3px;}
-.potted .pp-shadow{width:40px;height:9px;margin-left:-20px;bottom:14px;}
-.pond-pet .pp-shadow{width:44px;height:10px;margin-left:-22px;}
+.walker .pp-shadow{width:84px;height:21px;margin-left:-42px;bottom:3px;}
+.potted .pp-shadow{width:48px;height:11px;margin-left:-24px;bottom:16px;}
+.pond-pet .pp-shadow{width:54px;height:12px;margin-left:-27px;}
 /* 各场景立绘尺寸 */
-.walker img.pp-img{width:56px;height:56px;}
-.potted img.pp-img{width:42px;height:42px;}
-.pond-pet img.pp-img{width:40px;height:40px;}
-.hp-emoji img.pp-img{width:40px;height:40px;}
-.caps-ico img.pp-img{width:32px;height:32px;}
-.dex-ico img.pp-img{width:22px;height:22px;}
+.walker img.pp-img{width:70px;height:70px;}
+.potted img.pp-img{width:52px;height:52px;}
+.pond-pet img.pp-img{width:50px;height:50px;}
+.hp-emoji img.pp-img{width:48px;height:48px;}
+.caps-ico img.pp-img{width:38px;height:38px;}
+.dex-ico img.pp-img{width:26px;height:26px;}
 /* 图片版阴影离身体近一点：walker 身体上移，投影保持在地面 */
 @media (max-width:720px){
-  .walker img.pp-img{width:50px;height:50px;}
-  .potted img.pp-img{width:38px;height:38px;}
-  .hp-emoji img.pp-img{width:36px;height:36px;}
-  .walker .pp-shadow{width:54px;height:13px;margin-left:-27px;}
+  .walker img.pp-img{width:62px;height:62px;}
+  .potted img.pp-img{width:46px;height:46px;}
+  .hp-emoji img.pp-img{width:44px;height:44px;}
+  .walker .pp-shadow{width:66px;height:16px;margin-left:-33px;}
 }
 
 /* ============ v1.3 跨设备同步：显眼入口（云端已下线） ============ */
@@ -1319,7 +1356,7 @@ img.pp-img{width:1em;height:1em;object-fit:contain;display:block;}
 
 /* ---- 照顾动作：头像弹一下 + 飘出小表情 ---- */
 .cm-face{position:relative;overflow:visible;}
-img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
+img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 .cm-face.bounce{animation:careBounce .42s ease;}
 @keyframes careBounce{0%{transform:scale(1)}35%{transform:scale(1.13)}70%{transform:scale(.96)}100%{transform:scale(1)}}
 .care-fx{position:absolute;bottom:8px;font-size:17px;line-height:1;pointer-events:none;z-index:5;
@@ -1341,8 +1378,8 @@ img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
 
 /* ---- 花盆贴图（内联 SVG，盆里干干净净没有草） ---- */
 .pp-pot{font-size:0;line-height:0;}
-.pp-pot .pot-svg{width:36px;height:36px;display:block;}
-.potted img.pp-img{width:40px;height:40px;}
+.pp-pot .pot-svg{width:46px;height:46px;display:block;}
+.potted img.pp-img{width:52px;height:52px;}
 
 /* ---- 自建任务：模型选择卡 ---- */
 .tm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:2px;}
@@ -1358,12 +1395,12 @@ img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
 /* ---- 阴影贴地：消掉"小动物在飘"的感觉 ----
    分两种情况：立绘（图片底边就是脚，投影贴着就行）
    与 emoji（字形框自带上下留白，看上去脚比框底高，得把投影再抬高一点） */
-.walker.pet-emoji .pp-shadow{bottom:7px;}
-.pond-pet.pet-emoji .pp-shadow{bottom:8px;}
+.walker.pet-emoji .pp-shadow{bottom:9px;}
+.pond-pet.pet-emoji .pp-shadow{bottom:10px;}
 @media (max-width:720px){
-  .walker.pet-emoji .pp-shadow{bottom:9px;}
-  .potted .pp-pot .pot-svg{width:32px;height:32px;}
-  .potted img.pp-img{width:36px;height:36px;}
+  .walker.pet-emoji .pp-shadow{bottom:11px;}
+  .potted .pp-pot .pot-svg{width:40px;height:40px;}
+  .potted img.pp-img{width:46px;height:46px;}
 }
 
 /* ============ v1.7 每日签到 / 完成任务奖励 / 环形库伯圈 / 物资角标 ============ */
@@ -1528,16 +1565,16 @@ img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
 /* 固定槽位 */
 .wslot{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;
   pointer-events:auto;display:flex;align-items:center;justify-content:center;}
-.wslot-dot{width:24px;height:11px;border-radius:50%;
+.wslot-dot{width:28px;height:13px;border-radius:50%;
   background:rgba(90,130,80,.18);border:1.5px dashed rgba(80,120,70,.45);}
-.wslot .park-pet{left:50%;top:50%;transform:scale(.72);}
+.wslot .park-pet{left:50%;top:50%;transform:scale(.74);}
 
 /* 草地：动物自由遛弯的范围。
    注意 .wzone 是 pointer-events:none，草地没有 .wslot 那样的兜底，
    动物按钮必须自己恢复 auto，否则整片草地的点击全部穿透（v1.18 踩过：点动物没反应） */
 .wzone-meadow{position:absolute;border-radius:20px;
   border:1.5px dashed rgba(255,255,255,.55);}
-.wzone-meadow .park-pet{transform:scale(.78);transition:left 4.2s linear,top 4.2s linear;
+.wzone-meadow .park-pet{transform:scale(.80);transition:left 4.2s linear,top 4.2s linear;
   pointer-events:auto;}
 .wzone-tag-meadow{left:4%;bottom:4%;}
 
@@ -1677,14 +1714,14 @@ img.cm-face-art{width:54px;height:54px;object-fit:contain;display:block;}
 .ach-card .ac-desc{font-size:11px;color:#8A6D1F;line-height:1.45;}
 
 @media (max-width:720px){
-  .wslot{width:56px;height:56px;margin:-28px 0 0 -28px;}
-  .wslot .park-pet{transform:scale(.66);}
-  .wzone-meadow .park-pet{transform:scale(.72);}
+  .wslot{width:62px;height:62px;margin:-31px 0 0 -31px;}
+  .wslot .park-pet{transform:scale(.68);}
+  .wzone-meadow .park-pet{transform:scale(.74);}
   .wzone-tag{font-size:10.5px;}
   .world-pan-hint{font-size:10.5px;}
 }
 @media (max-width:400px){
-  .wslot{width:48px;height:48px;margin:-24px 0 0 -24px;}
+  .wslot{width:54px;height:54px;margin:-27px 0 0 -27px;}
   .wb-name{font-size:9.5px;padding:1px 5px;}
   .wstory-flag{font-size:12px;padding:6px 13px;}
   .col-grid{grid-template-columns:repeat(auto-fill,minmax(84px,1fr));}

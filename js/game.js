@@ -30,6 +30,16 @@ window.Game = (function () {
     return (sp.kind === 'animal') ? 'hatchery' : 'greenhouse';
   }
   function homeName(kind) { return (kind === 'animal' || kind === 'hatchery') ? '孵化室' : '温室'; }
+  /* 这只小生物现在住在地图的哪片区域（苗圃 / 温室 / 池塘 / 草地） */
+  function zoneNameFor(sp) {
+    let id = 'nursery';
+    if (sp.water === true || sp.kind === 'algae') id = 'pond';
+    else if (sp.kind === 'animal') id = 'meadow';
+    else if (sp.kind === 'fungus') id = 'greenhouse';
+    const zs = D.ZONES || [];
+    for (let i = 0; i < zs.length; i++) if (zs[i].id === id) return zs[i].name;
+    return '乐园';
+  }
 
   /* ---------------- 扭蛋 ---------------- */
   function rollRarity() {
@@ -80,23 +90,25 @@ window.Game = (function () {
   /* ---------------- 放槽与孵化 ----------------
    * 托位（孵化位）只数正在孵化的胶囊。破壳后的小生物住进乐园的
    * 空场 / 花盆圈，不再占用托位 —— 孵化位留给下一颗胶囊。 */
-  function usedSlots(kind) {
-    const inUse = S.capsules.filter(function (c) {
-      return c.place === kind;
-    }).length;
-    return { used: inUse, cap: S.slots[kind] };
+  /* v1.20：孵化仓不再分「温室托位 / 动物托位」，合并成一个托位池
+     （S.slots.pod）。板块只按孵化进度分：孵化中 / 待破壳。 */
+  function podCap() {
+    if (!S.slots) S.slots = {};
+    if (typeof S.slots.pod !== 'number') {
+      S.slots.pod = (S.slots.greenhouse || 0) + (S.slots.hatchery || 0) || 8;
+    }
+    return S.slots.pod;
+  }
+  function usedSlots() {
+    return { used: S.capsules.filter(function (c) { return c.place; }).length, cap: podCap() };
   }
 
   function placeCapsule(capId, kind) {
     const c = S.capsules.filter(function (x) { return x.id === capId; })[0];
     if (!c) return { ok: false, msg: '找不到这颗胶囊' };
-    const sp = speciesById(c.speciesId);
-    if (homeOf(sp) !== kind) {
-      return { ok: false, msg: '这颗胶囊里的生命需要「' + homeName(homeOf(sp)) + '」，放错地方不会孵化哦' };
-    }
-    const u = usedSlots(kind);
-    if (u.used >= u.cap) return { ok: false, msg: homeName(homeOf(sp)) + '的托位满了（' + u.used + '/' + u.cap + '），先扩展或腾位置' };
-    c.place = kind;
+    const u = usedSlots();
+    if (u.used >= u.cap) return { ok: false, msg: '孵化仓的托位满了（' + u.used + '/' + u.cap + '），先扩展或腾位置' };
+    c.place = 'pod';
     c.hatchStart = Date.now();
     c.hatchProgress = 0;
     c.ready = false;
@@ -290,35 +302,35 @@ window.Game = (function () {
     return { ok: true, msg: msg, pet: pet, leveled: lvlAfter > lvlBefore };
   }
 
-  /* ---------------- 保存舱 ----------------
-     成年体（成熟 / 圆满）才能进保存舱；舱内所有状态静止（不衰减、不生病）。 */
-  function canStore(pet) {
+  /* ---------------- 保管室（保存舱） ----------------
+     v1.20 起不限阶段：幼体也能放进去静静待着（状态依旧完全静止）。
+     「成年体」的判定单独留在 isAdult()，别和能不能入库混在一起。 */
+  function isAdult(pet) {
     const st = stageOf(pet);
     return st.key === 'adult' || st.key === 'elite';
   }
+  /* 旧接口：语义已放宽成"任何小生物都能进保管室"，保留名字免得外部调用炸掉 */
+  function canStore(pet) { return !!pet; }
   function storePet(petId) {
     const pet = S.pets.filter(function (p) { return p.id === petId })[0];
     if (!pet) return { ok: false, msg: '找不到这只小生物' };
-    if (pet.stored) return { ok: false, msg: pet.name + '已经在保存舱里了' };
-    if (!canStore(pet)) {
-      return { ok: false, msg: '只有「成熟 / 圆满」的成年体才能进保存舱（' + pet.name + '现在还是' + stageOf(pet).name + '）' };
-    }
+    if (pet.stored) return { ok: false, msg: pet.name + '已经在保管室里了' };
     pet.stored = true;
     window.Store.save(true);
-    window.Store.pushLog('📦 ' + pet.name + ' 住进了保存舱，状态已静止。');
-    return { ok: true, pet: pet };
+    window.Store.pushLog('📦 ' + pet.name + ' 住进了保管室，状态已静止。');
+    return { ok: true, pet: pet, msg: pet.name + ' 住进了保管室（' + stageOf(pet).name + '），状态已静止。' };
   }
   function unstorePet(petId) {
     const pet = S.pets.filter(function (p) { return p.id === petId })[0];
     if (!pet) return { ok: false, msg: '找不到这只小生物' };
-    if (!pet.stored) return { ok: false, msg: pet.name + '不在保存舱里' };
+    if (!pet.stored) return { ok: false, msg: pet.name + '不在保管室里' };
     pet.stored = false;
     pet.lastCare = Date.now();
     pet.illness = null;
     pet.illnessSince = 0;
     pet.dormant = false;
     window.Store.save(true);
-    window.Store.pushLog('📭 ' + pet.name + ' 从保存舱回到了场地。');
+    window.Store.pushLog('📭 ' + pet.name + ' 从保管室回到了场地。');
     return { ok: true, pet: pet };
   }
 
@@ -369,13 +381,14 @@ window.Game = (function () {
     /* 设施类比较特殊 */
     if (it.kind === 'facility') {
       if (itemId === 'slot_green' || itemId === 'slot_hatch') {
-        const key = itemId === 'slot_green' ? 'greenhouse' : 'hatchery';
-        if (S.slots[key] >= 8) return { ok: false, msg: '已经扩到最大 8 个托位了' };
+        /* v1.20：温室托位 / 孵化仓托位合并成一个托位池，两种扩展位都加在同一个池上 */
+        const cap = podCap();
+        if (cap >= 12) return { ok: false, msg: '已经扩到最大 12 个托位了' };
         if (S.cur.beans < it.price) return { ok: false, msg: '可可豆不够（需要 ' + it.price + '）' };
         S.cur.beans -= it.price;
-        S.slots[key]++;
+        S.slots.pod = cap + 1;
         window.Store.save(true);
-        return { ok: true, msg: (key === 'greenhouse' ? '温室' : '孵化仓') + '托位扩展到 ' + S.slots[key] + ' 个' };
+        return { ok: true, msg: '孵化仓托位扩展到 ' + S.slots.pod + ' 个' };
       }
       if (itemId === 'hourglass') {
         if (S.cur.beans < it.price * qty) return { ok: false, msg: '可可豆不够' };
@@ -479,19 +492,39 @@ window.Game = (function () {
     for (let i = 0; i < list.length; i++) if (!isBuilt(list[i].id)) return list[i];
     return null;
   }
-  /* 开工门槛：Lv.3 + 至少 3 只成年体 */
+  /* 开工门槛：照顾等级 Lv.3+，且三类角色都有人（动物劳力 / 植物材料 / 真菌胶合料）。
+     v1.20 起不再要求「至少 3 只成年体」——那个门槛会让等级早就够、但没把某几只喂到
+     成熟/圆满的玩家被死死卡在门外（连剧情都看不到）。缺谁就直说缺谁。 */
+  const BUILD_ROLES = [['animal', '劳力', '动物'], ['plant', '材料', '植物'], ['fungus', '胶合料', '真菌']];
   function buildGate() {
-    if (S.cur.level < 3) return { ok: false, why: 'level', msg: '照顾等级到 Lv.3 才能开工（现在是 Lv.' + S.cur.level + '）' };
-    if (adultCount() < 3) return { ok: false, why: 'adult', msg: '至少要 3 只成年小生物才凑得齐人手（现在 ' + adultCount() + ' 只）' };
+    if (S.cur.level < 3) {
+      return { ok: false, why: 'level', msg: '照顾等级到 Lv.3 才能开工（现在是 Lv.' + S.cur.level + '）' };
+    }
+    const miss = BUILD_ROLES.filter(function (r) { return workersOf(r[0]).length === 0; });
+    if (miss.length) {
+      return {
+        ok: false, why: 'crew',
+        msg: '还缺出' + miss.map(function (m) { return m[1]; }).join('、') + '的小生物（需要' +
+          miss.map(function (m) { return m[2]; }).join('、') + '）'
+      };
+    }
     return { ok: true };
   }
   function adultPets() {
-    return S.pets.filter(function (p) { return canStore(p); });
+    return S.pets.filter(function (p) { return isAdult(p); });
   }
   function adultCount() { return adultPets().length; }
-  /* 最年长的成年体（同伴里说话最有分量的那只）：Lv.3 剧情由它开口 */
+  /* 最年长的成年体（同伴里说话最有分量的那只）：Lv.3 剧情优先由它开口 */
   function oldestAdult() {
     const arr = adultPets().slice().sort(function (a, b) { return (a.bornAt || 0) - (b.bornAt || 0); });
+    return arr[0] || null;
+  }
+  /* 剧情发起人：优先成年体里最年长的；一只成年体都没有时，退回全体里最年长的
+     （否则 Lv.3 剧情会因为没有成年体而永远开不了口） */
+  function elderPet() {
+    const a = oldestAdult();
+    if (a) return a;
+    const arr = S.pets.slice().sort(function (x, y) { return (x.bornAt || 0) - (y.bornAt || 0); });
     return arr[0] || null;
   }
   /* 某类 kind 里能干活的小生物 */
@@ -525,7 +558,7 @@ window.Game = (function () {
       if (!isBuilt(list[i].id)) return { ok: false, msg: '按顺序来：先修好「' + list[i].name + '」' };
     }
     assign = assign || {};
-    const roles = [['animal', '劳力'], ['plant', '材料'], ['fungus', '胶合料']];
+    const roles = BUILD_ROLES;
     const crew = {};
     for (let i = 0; i < roles.length; i++) {
       const kind = roles[i][0], label = roles[i][1];
@@ -581,9 +614,9 @@ window.Game = (function () {
     window.Store.save(true);
     return true;
   }
-  /* Lv.3 + ≥3 成年体 → 最年长者开口 */
+  /* 照顾等级到 Lv.3 就该有人来找你谈劳动（v1.20 起不再卡成年体数量） */
   function laborReady() {
-    return !storySeen('labor') && S.cur.level >= 3 && adultCount() >= 3;
+    return !storySeen('labor') && S.cur.level >= 3 && S.pets.length > 0;
   }
   /* 该看哪段剧情：labor 优先，然后是「已解锁但还没看」的下一栋 */
   function pendingStory() {
@@ -609,7 +642,7 @@ window.Game = (function () {
     if (arr.length >= staffCap(id)) return { ok: false, msg: '位置满了（' + arr.length + '/' + staffCap(id) + '），扩建能多招几员' };
     const pet = S.pets.filter(function (p) { return p.id === petId; })[0];
     if (!pet) return { ok: false, msg: '找不到这只小生物' };
-    if (pet.stored) return { ok: false, msg: pet.name + '还在保存舱里，先取出来' };
+    if (pet.stored) return { ok: false, msg: pet.name + '还在保管室里，先取出来' };
     if (pet.illness) return { ok: false, msg: pet.name + '正在生病，先治好' };
     arr.push(petId);
     window.Store.save(true);
@@ -781,7 +814,9 @@ window.Game = (function () {
     buildGate: buildGate,
     adultPets: adultPets,
     adultCount: adultCount,
+    isAdult: isAdult,
     oldestAdult: oldestAdult,
+    elderPet: elderPet,
     workersOf: workersOf,
     buildCost: buildCost,
     buildStart: buildStart,
@@ -803,6 +838,7 @@ window.Game = (function () {
     speciesById: speciesById,
     homeOf: homeOf,
     homeName: homeName,
+    zoneNameFor: zoneNameFor,
     pull: pull,
     placeCapsule: placeCapsule,
     speedUp: speedUp,
@@ -812,6 +848,7 @@ window.Game = (function () {
     quizAvailable: quizAvailable,
     markQuizPassed: markQuizPassed,
     usedSlots: usedSlots,
+    podCap: podCap,
     stageOf: stageOf,
     careActionsFor: careActionsFor,
     care: care,

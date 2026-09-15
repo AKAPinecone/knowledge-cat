@@ -190,9 +190,8 @@ window.GAME_DATA = (function () {
     { id: 'med_cold',   name: '感冒冲剂', kind: 'medicine', price: 12, emoji: '💊', desc: '专治受凉打喷嚏。' },
     { id: 'med_gut',    name: '肠胃片',   kind: 'medicine', price: 12, emoji: '💊', desc: '专治吃多了闹肚子。' },
     { id: 'med_kit',    name: '百宝药箱', kind: 'medicine', price: 30, emoji: '🧰', desc: '万能药，任何病一箱搞定。' },
-    /* 设施与加速 */
-    { id: 'slot_green', name: '温室扩展位', kind: 'facility', price: 120, emoji: '🏡', desc: '温室托位 +1（最多 8 个）。' },
-    { id: 'slot_hatch', name: '孵化仓扩展位', kind: 'facility', price: 120, emoji: '🏗️', desc: '孵化仓托位 +1（最多 8 个）。' },
+    /* 设施与加速。v1.20：原来「温室托位 / 动物托位」两种扩展位合并成一个托位池，只留一个商品 */
+    { id: 'slot_green', name: '孵化仓扩展位', kind: 'facility', price: 120, emoji: '🏡', desc: '孵化仓托位 +1（最多 12 个）。' },
     { id: 'hourglass',  name: '加速沙漏',   kind: 'facility', price: 20,  emoji: '⏳', desc: '把一只正在孵化的胶囊进度推进 30 分钟。' }
   ];
 
@@ -624,17 +623,32 @@ window.GAME_DATA = (function () {
   const WORLD = { img: 'assets/map/world.webp', w: 2150, h: 1024, ratio: 2150 / 1024 };
 
   /* 区域：小生物按 kind 归位。slots 是 [x%, y%]，相对底图
-     （坐标照着 v1.19 新底图对的：左下耕地 / 左中空玻璃房 / 中下池塘 / 右侧大片草地）
-     greenhouse 是 enter 型：地图上只画一个玻璃房，点它开窗进去，12 个槽在窗口里。 */
+     （坐标照着 v1.20 底图重标的：左下耕地 / 左中空玻璃房 / 中下池塘 / 右侧大片草地）
+     greenhouse 是 enter 型：地图上只画一个玻璃房，点它开窗进去，12 个槽在窗口里。
+
+     ★ 伪 3D 斜向对齐（v1.20）：
+     底图上的地面是一个斜的网格，耕地的两条边就是网格轴：
+        e1 (左角→上角) ≈ -47°，沿「跨垄」方向、垄与垄的间隔方向
+        e2 (左角→下角) ≈ +41°，沿「垄沟」方向（垄就是顺着 e2 长出来的）
+     苗圃的 12 个槽 = 4 条垄 × 每垄 3 株，站在真实垄面上（u 是垄心、v 是沿垄位置）：
+        u = 0.06 / 0.29 / 0.52 / 0.76   （实测垄心附近）
+        v = 0.20 / 0.50 / 0.80
+     池塘的 6 个槽按水面的椭圆（中心 35.1% / 75.9%，rx 158px、ry 96px）摆成 2 行 3 列。 */
   const ZONES = [
     {
       id: 'nursery', name: '苗圃', emoji: '🌱', kinds: ['plant'], cap: 12,
-      tip: '植物直接种在沃土里',
+      tip: '植物直接种在沃土里（一排排顺着垄）',
       slots: [
-        [6.5, 60], [13, 60], [19, 60],
-        [6.5, 69.5], [13, 69.5], [19, 69.5],
-        [6.5, 79], [13, 79], [19, 79],
-        [6.5, 88], [13, 88], [19, 88]
+        /* 12 个坑位 = 底图上 3 条垄（第 1/3/5 条）× 每条 4 株，v1.20 重排。
+           坐标来自田块仿射系 p = Wc + u*e1 + v*e2（标定见 dev/ridges.py / field_range.py）：
+             6 条垄心 u = 0.052/0.228/0.423/0.607/0.801/0.972（亮度剖面实测），取 0.052/0.423/0.801；
+             沿垄 v 取土掩膜可用长度的 18%/42%/66%/90%（等距）。
+           为什么 3 垄 x 4 而不是 6 垄 x 2：相邻两垄在手机上只隔 ≈24 CSS px，立绘 31~46 px 会糊；
+             隔一条垄用（≈48 px）刚好不打架，每条垄 4 株又能把垄从头铺到尾。
+           改完务必跑 dev/lay_nursery_final.py（贴真实立绘）与 dev/map-zoom.js 肉眼核对。 */
+        [2.93, 73.76], [5.23, 77.98], [7.52, 82.2], [9.82, 86.42],     /* 垄 1 */
+        [6.07, 66.66], [8.37, 70.88], [10.67, 75.09], [12.97, 79.31],  /* 垄 2 */
+        [9.28, 59.42], [11.58, 63.64], [13.88, 67.86], [16.17, 72.07]  /* 垄 3 */
       ]
     },
     {
@@ -646,51 +660,56 @@ window.GAME_DATA = (function () {
     {
       id: 'pond', name: '池塘', emoji: '🪷', kinds: ['algae', 'water'], cap: 6,
       tip: '水生的泡在水里（海菜花 · 红瘰疣螈 · 云南闭壳龟 · 藻类）',
-      slots: [[31, 71], [37.5, 69], [42, 74], [32, 79], [38, 81.5], [35, 86]]
+      slots: [
+        [30.81, 73.13], [35.07, 73.13], [39.34, 73.13],
+        [30.81, 78.74], [35.07, 78.74], [39.34, 78.74]
+      ]
     },
     {
       id: 'meadow', name: '草地', emoji: '🌿', kinds: ['animal'], cap: 0, roam: true,
       tip: '动物自由遛弯',
-      rect: [46, 40, 51, 56]        /* x, y, w, h（百分比）：动物遛弯范围（v1.19 大幅扩大） */
+      rect: [46, 48, 51, 48]        /* x, y, w, h（百分比）：动物遛弯范围（v1.20 收到草地上，别走进树线） */
     }
   ];
 
-  /* 点击开窗的「机器」三件 */
+  /* 点击开窗的「机器」三件。
+     v1.20：扭蛋机挪出树线（原来 y=43 站在树里），三件都落在草地上、彼此不压。 */
   const MACHINES = [
-    { id: 'gacha', name: '扭蛋机', img: 'assets/buildings/gacha.webp', x: 50, y: 43, w: 6, act: 'm-gacha' },
-    { id: 'incubator', name: '孵化仓', img: 'assets/buildings/incubator.webp', x: 55, y: 61, w: 12, act: 'm-incubator' },
-    { id: 'storage', name: '保管室', img: 'assets/buildings/storage.webp', x: 48, y: 80, w: 8, act: 'm-storage' }
+    { id: 'gacha', name: '扭蛋机', img: 'assets/buildings/gacha.webp', x: 36, y: 55, w: 4.5, act: 'm-gacha' },
+    { id: 'incubator', name: '孵化仓', img: 'assets/buildings/incubator.webp', x: 78, y: 57, w: 8, act: 'm-incubator' },
+    { id: 'storage', name: '保管室', img: 'assets/buildings/storage.webp', x: 48, y: 74, w: 6, act: 'm-storage' }
   ];
 
   /* 可按顺序修建的建筑：人（动物劳力）+ 植物（材料）+ 真菌（胶合料）
-     v1.19：全部摆到右侧大草地上，相互留足间距 */
+     ★ v1.20：五栋排在同一条斜线上——沿底图草地里那条土路的方向（≈ -20.5°），
+     从左上往右下依次落位，并排对齐、互不遮挡，不再摆成方格子。 */
   const BUILDINGS = [
     {
-      id: 'canteen', name: '食堂', img: 'assets/buildings/canteen.webp', x: 68, y: 47, w: 10,
+      id: 'canteen', name: '食堂', img: 'assets/buildings/canteen.webp', x: 47.5, y: 56, w: 8,
       emoji: '🍲', order: 1,
       desc: '清水 + 饲料 换可可豆，小生物也能来吃饭',
       story: 'canteen'
     },
     {
-      id: 'bath', name: '澡堂', img: 'assets/buildings/bath.webp', x: 83, y: 49, w: 10,
+      id: 'bath', name: '澡堂', img: 'assets/buildings/bath.webp', x: 57.5, y: 63.85, w: 8,
       emoji: '🛁', order: 2,
       desc: '洗澡涨清洁值，顺便产营养液',
       story: 'bath'
     },
     {
-      id: 'library', name: '图书馆', img: 'assets/buildings/library.webp', x: 66, y: 66, w: 10,
+      id: 'library', name: '图书馆', img: 'assets/buildings/library.webp', x: 67.5, y: 71.7, w: 8,
       emoji: '📚', order: 3,
       desc: '待在里面涨娱乐值',
       story: 'library'
     },
     {
-      id: 'travel', name: '旅行社', img: 'assets/buildings/travel.webp', x: 83, y: 68, w: 10,
+      id: 'travel', name: '旅行社', img: 'assets/buildings/travel.webp', x: 77.5, y: 79.55, w: 8,
       emoji: '🧭', order: 4,
       desc: '一只当导游带团出游，回来带土特产和收藏品',
       story: 'travel'
     },
     {
-      id: 'museum', name: '博物馆', img: 'assets/buildings/museum.webp', x: 74, y: 84, w: 11,
+      id: 'museum', name: '博物馆', img: 'assets/buildings/museum.webp', x: 87.5, y: 87.4, w: 8,
       emoji: '🏛️', order: 5,
       desc: '陈列旅行收藏品和成就奖杯',
       story: 'museum'
@@ -811,7 +830,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.19',
+    VERSION: 'v1.20',
     WORLD: WORLD,
     ZONES: ZONES,
     MACHINES: MACHINES,
