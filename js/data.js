@@ -244,7 +244,7 @@ window.GAME_DATA = (function () {
   const STAGES = [
     { key: 'baby',  name: '幼体', min: 0,   emoji: '🌱' },
     { key: 'teen',  name: '成长', min: 100, emoji: '🌿' },
-    { key: 'adult', name: '成熟', min: 300, emoji: '🌳' },
+    { key: 'adult', name: '成熟', min: 150, emoji: '🌳' },
     { key: 'elite', name: '圆满', min: 700, emoji: '🏵️' }
   ];
 
@@ -673,43 +673,43 @@ window.GAME_DATA = (function () {
   ];
 
   /* 点击开窗的「机器」三件。
-     v1.20：扭蛋机挪出树线（原来 y=43 站在树里），三件都落在草地上、彼此不压。 */
+     v1.21：三台机器改到池塘上方、道路左侧的空地，交错成三角，不压道路/温室/池塘。 */
   const MACHINES = [
-    { id: 'gacha', name: '扭蛋机', img: 'assets/buildings/gacha.webp', x: 36, y: 55, w: 4.5, act: 'm-gacha' },
-    { id: 'incubator', name: '孵化仓', img: 'assets/buildings/incubator.webp', x: 78, y: 57, w: 8, act: 'm-incubator' },
-    { id: 'storage', name: '保管室', img: 'assets/buildings/storage.webp', x: 48, y: 74, w: 6, act: 'm-storage' }
+    { id: 'gacha', name: '扭蛋机', img: 'assets/buildings/gacha.webp', x: 30, y: 42, w: 4.5, act: 'm-gacha' },
+    { id: 'incubator', name: '孵化仓', img: 'assets/buildings/incubator.webp', x: 36, y: 48, w: 8, act: 'm-incubator' },
+    { id: 'storage', name: '保管室', img: 'assets/buildings/storage.webp', x: 26, y: 55, w: 6, act: 'm-storage' }
   ];
 
   /* 可按顺序修建的建筑：人（动物劳力）+ 植物（材料）+ 真菌（胶合料）
-     ★ v1.20：五栋排在同一条斜线上——沿底图草地里那条土路的方向（≈ -20.5°），
-     从左上往右下依次落位，并排对齐、互不遮挡，不再摆成方格子。 */
+     v1.21：五栋建筑与它们的预存空间全部改到道路右侧的大片草地，z 字形交错排布，
+     不排成一行也不排成一列，彼此间距足够、都能点得到。 */
   const BUILDINGS = [
     {
-      id: 'canteen', name: '食堂', img: 'assets/buildings/canteen.webp', x: 47.5, y: 56, w: 8,
+      id: 'canteen', name: '食堂', img: 'assets/buildings/canteen.webp', x: 58, y: 46, w: 8,
       emoji: '🍲', order: 1,
       desc: '清水 + 饲料 换可可豆，小生物也能来吃饭',
       story: 'canteen'
     },
     {
-      id: 'bath', name: '澡堂', img: 'assets/buildings/bath.webp', x: 57.5, y: 63.85, w: 8,
+      id: 'bath', name: '澡堂', img: 'assets/buildings/bath.webp', x: 76, y: 52, w: 8,
       emoji: '🛁', order: 2,
       desc: '洗澡涨清洁值，顺便产营养液',
       story: 'bath'
     },
     {
-      id: 'library', name: '图书馆', img: 'assets/buildings/library.webp', x: 67.5, y: 71.7, w: 8,
+      id: 'library', name: '图书馆', img: 'assets/buildings/library.webp', x: 66, y: 68, w: 8,
       emoji: '📚', order: 3,
       desc: '待在里面涨娱乐值',
       story: 'library'
     },
     {
-      id: 'travel', name: '旅行社', img: 'assets/buildings/travel.webp', x: 77.5, y: 79.55, w: 8,
+      id: 'travel', name: '旅行社', img: 'assets/buildings/travel.webp', x: 84, y: 72, w: 8,
       emoji: '🧭', order: 4,
       desc: '一只当导游带团出游，回来带土特产和收藏品',
       story: 'travel'
     },
     {
-      id: 'museum', name: '博物馆', img: 'assets/buildings/museum.webp', x: 87.5, y: 87.4, w: 8,
+      id: 'museum', name: '博物馆', img: 'assets/buildings/museum.webp', x: 72, y: 82, w: 8,
       emoji: '🏛️', order: 5,
       desc: '陈列旅行收藏品和成就奖杯',
       story: 'museum'
@@ -830,7 +830,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.20',
+    VERSION: 'v1.21',
     WORLD: WORLD,
     ZONES: ZONES,
     MACHINES: MACHINES,

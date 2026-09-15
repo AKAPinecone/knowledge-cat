@@ -47,6 +47,7 @@ window.Store = (function () {
       /* 大世界建筑系统（v1.18） */
       build: {
         built: [],         /* 已建成的建筑 id，按修建顺序 */
+        under: {},        /* v1.21：建造中 { id:{startAt,finishAt,lvAfter,assign} } */
         story: {},         /* 已看过的剧情：{ labor:true, canteen:true, ... } */
         assign: {},        /* 修建时指派的三人：{ canteen:{a,p,f} }（宠物 id） */
         staff: {},         /* 建筑里安排的小生物：{ canteen:[petId,...] } */
@@ -191,7 +192,7 @@ window.Store = (function () {
     /* 老存档补大世界建筑系统（v1.18）。
        built/story/assign/staff/stock/day/lv 是对象，trips/collection 是数组。 */
     if (!s.build || typeof s.build !== 'object') s.build = {};
-    [['built', 'o'], ['story', 'o'], ['assign', 'o'], ['staff', 'o'],
+    [['built', 'o'], ['under', 'o'], ['story', 'o'], ['assign', 'o'], ['staff', 'o'],
      ['stock', 'o'], ['day', 'o'], ['lv', 'o'],
      ['trips', 'a'], ['collection', 'a']].forEach(function (pair) {
       const k = pair[0], t = pair[1];
@@ -559,7 +560,7 @@ window.Store = (function () {
     let minutes = (now - last) / 60000;
     if (minutes < 0) minutes = 0;
     if (minutes > 60 * 24 * 30) minutes = 60 * 24 * 30; /* 上限 30 天 */
-    const report = { minutes: Math.round(minutes), grown: [], hatched: [], sick: [], recovered: [] };
+    const report = { minutes: Math.round(minutes), grown: [], hatched: [], sick: [], recovered: [], built: [] };
 
     /* 1. 孵化推进 —— 每次都要算（与界面上的进度条保持一致），不受"不足 1 分钟"影响 */
     state.capsules.forEach(function (c) {
@@ -570,6 +571,25 @@ window.Store = (function () {
         report.hatched.push(c);
       }
     });
+
+    /* 1.5 离线期间 / 在线轮询到期的建筑建造 */
+    if (state.build && state.build.under) {
+      if (window.Game && window.Game.finishOfflineBuilds) {
+        const done = window.Game.finishOfflineBuilds(now);
+        if (done && done.length) report.built = (report.built || []).concat(done);
+      } else {
+        Object.keys(state.build.under).forEach(function (id) {
+          const u = state.build.under[id];
+          if (now >= u.finishAt) {
+            if (!state.build.built) state.build.built = [];
+            if (state.build.built.indexOf(id) < 0) state.build.built.push(id);
+            state.build.lv[id] = u.lvAfter;
+            state.build.assign[id] = u.assign;
+            delete state.build.under[id];
+          }
+        });
+      }
+    }
 
     if (minutes < 1) { state.lastTick = now; return report; }
 

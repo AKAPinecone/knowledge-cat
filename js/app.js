@@ -449,6 +449,9 @@
       if (r.sick.length) {
         r.sick.forEach(function (p) { toast('😷 ' + esc(p.name) + ' 生病了：' + p.illness.name + '，去乐园用药水治它。', 'err', 7000); });
       }
+      if (r.built && r.built.length) {
+        r.built.forEach(function (f) { toast('🏗️ ' + f.msg, 'ok', 6000); });
+      }
       renderTop();
       /* 乐园页含可拖动的地图：正在拖、或开着弹窗时不重绘，免得把手指下的地图抽走；
          内容指纹没变也不重绘，省得每 8 秒抖一下。 */
@@ -614,7 +617,12 @@
       const lv = Object.keys(b.lv || {}).map(function (k) { return k + b.lv[k]; }).join(',');
       const staff = Object.keys(b.staff || {}).map(function (k) { return k + (b.staff[k] || []).length; }).join(',');
       const story = Object.keys(b.story || {}).filter(function (k) { return b.story[k]; }).sort().join(',');
-      return [pets, caps, built, lv, staff, story,
+      /* 建造中的剩余分钟：让进度条每隔约 1 分钟自然推进一次 */
+      const under = Object.keys(b.under || {}).map(function (k) {
+        const u = b.under[k];
+        return k + ':' + Math.round(Math.max(0, u.finishAt - Date.now()) / 60000);
+      }).join(',');
+      return [pets, caps, built, lv, staff, story, under,
         podOpen ? 'p1' : 'p0',
         window.Game.pendingStory() || '',
         window.Game.buildGate().ok ? 'g1' : 'g0'].join('|');
@@ -1021,14 +1029,23 @@
         '<img src="' + m.img + '" alt="' + esc(m.name) + '" draggable="false"></button>';
     });
 
-    /* 建筑：已建成 / 下一块空地 / 还没轮到 */
+    /* 建筑：已建成 / 建造中 / 下一块空地 / 还没轮到 */
     D.BUILDINGS.forEach(function (b) {
       const built = window.Game.isBuilt(b.id);
+      const uc = window.Game.buildProgress(b.id);
       if (built) {
         h += '<button class="wbuilding built" data-act="build-open" data-id="' + b.id +
           '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%" title="' + esc(b.name) + '">' +
           '<img src="' + b.img + '" alt="' + esc(b.name) + '" draggable="false">' +
           '<span class="wb-name">' + b.emoji + ' ' + b.name + ' Lv.' + window.Game.buildLv(b.id) + '</span></button>';
+      } else if (uc.on) {
+        const pct = Math.round(uc.p * 100);
+        const minLeft = Math.max(1, Math.ceil(uc.remain / 60000));
+        h += '<button class="wbuilding plot under" data-act="build-open" data-id="' + b.id +
+          '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%" title="' + esc(b.name) + ' 建造中">' +
+          '<span class="wb-plus">🏗️</span>' +
+          '<span class="wb-progress"><i style="width:' + pct + '%"></i></span>' +
+          '<span class="wb-name">' + b.name + ' · ' + pct + '%（约' + minLeft + '分钟）</span></button>';
       } else if (nb && nb.id === b.id) {
         h += '<button class="wbuilding plot" data-act="build-open" data-id="' + b.id +
           '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%" title="在这里盖' + esc(b.name) + '">' +
@@ -1048,7 +1065,7 @@
     const ps = window.Game.pendingStory();
     if (ps) {
       h += '<button class="wstory-flag" data-act="story-play">💬 有话想跟你说</button>';
-    } else if (nb && window.Game.storySeen('labor') && window.Game.buildGate().ok) {
+    } else if (nb && window.Game.storySeen('labor') && window.Game.buildGate().ok && !window.Game.underConstruction(nb.id)) {
       h += '<button class="wstory-flag wstory-build" data-act="build-open" data-id="' + nb.id + '">🔨 ' +
         nb.emoji + ' ' + esc(nb.name) + '工地等着你</button>';
     }
@@ -1380,20 +1397,12 @@
       '　·　未孵化 ' + hatching.length + '　·　可破壳 ' + ready.length + '</span>' +
       '<button class="btn btn-sm" data-act="expand" title="🌰 120 扩一个托位">➕ 扩托位</button></div>';
 
-    /* 板块一：未孵化 */
-    let placeSel = '';
-    if (loose.length && empty > 0) {
-      placeSel = '<select class="inc-place" data-act="place"><option value="">＋ 放一颗进来…</option>' +
-        loose.map(function (c) {
-          const sp = window.Game.speciesById(c.speciesId);
-          return '<option value="' + c.id + '">' + sp.emoji + ' ' + esc(sp.name) + '</option>';
-        }).join('') + '</select>';
-    }
+    /* 板块一：未孵化（待安置的胶囊改在「保管室」里统一管理，见 v1.21） */
     h += '<section class="inc-sec"><div class="inc-sec-head">' +
       '<span class="inc-t">🕒 未孵化</span><span class="inc-n">' + hatching.length + '</span>' +
       '<span class="spacer"></span>' +
-      (placeSel || (loose.length ? '<span class="inc-sub">托位满了，先扩一个</span>'
-        : '<span class="inc-sub">没有待安置的胶囊</span>')) +
+      (loose.length ? '<span class="inc-sub">还有 ' + loose.length + ' 颗待安置胶囊在「保管室」</span>'
+        : '<span class="inc-sub">没有待安置的胶囊</span>') +
       '</div><div class="inc-grid">';
     hatching.forEach(function (c) { h += incCellHtml(c, incProgOf(c)); });
     for (let i = 0; i < empty; i++) h += '<div class="inc-cell empty"><span class="wslot-dot"></span></div>';
@@ -1446,33 +1455,10 @@
       });
       return;
     }
-    /* 保管室：保存舱 + 旅行收藏品 */
-    const stored = S.pets.filter(function (p) { return p.stored; });
-    const cols = window.Game.collectionsOwned();
-    let h = '<div class="bx-lv">📦 保管室 ' + stored.length + ' 只　·　🧭 收藏品 ' +
-      cols.length + '/' + (D.COLLECTIONS || []).length + '</div>';
-    if (stored.length) {
-      h += '<div class="pet-list">';
-      stored.forEach(function (p) {
-        const sp = window.Game.speciesById(p.speciesId);
-        const st = window.Game.stageOf(p);
-        h += '<div class="pet-card pod-card">' +
-          '<div class="pc-face' + (sp.img ? '' : ' pet-emoji') + '">' +
-          (sp.img ? '<img class="pc-img" src="' + sp.img + '" alt="">' : sp.emoji) + '</div>' +
-          '<div class="pc-body" data-act="pet-open" data-id="' + p.id + '">' +
-          '<div class="pc-name">' + esc(p.name) + '</div>' +
-          '<div class="pc-sub">' + esc(sp.name) + ' · ' + st.emoji + ' ' + st.name + ' · 📦 静止中</div></div>' +
-          '<button class="btn btn-sm btn-primary pod-take" data-act="unstore-pet" data-id="' + p.id + '">取出</button>' +
-          '</div>';
-      });
-      h += '</div>';
-    } else {
-      h += '<div class="empty">保管室空着。任何阶段的小生物都能从它的状态面板放进这里，状态完全静止。</div>';
-    }
-    h += '<div class="panel-head" style="margin-top:16px"><h2>🧭 旅行收藏品</h2>' +
-      '<span class="hint">建好旅行社，让导游带回来</span></div>' + colGridHtml(cols);
+    /* 保管室：待安置胶囊 + 保存的小生物 + 旅行收藏品 */
     openModal({
-      title: '📦 保管室', body: h,
+      title: '📦 保管室',
+      body: '<div id="storage-board">' + storageBoardHtml() + '</div>',
       foot: '<button class="btn btn-ghost" data-act="m-close">关闭</button>',
       onMount: wireModal
     });
@@ -1491,6 +1477,74 @@
     });
     h += '</div>';
     return h;
+  }
+
+  /* 保管室面板内容（可原地刷新）：待安置胶囊 + 存放的小生物 + 旅行收藏品 */
+  function storageBoardHtml() {
+    const stored = S.pets.filter(function (p) { return p.stored; });
+    const cols = window.Game.collectionsOwned();
+    const loose = S.capsules.filter(function (c) { return !c.place; });
+    let h = '<div class="bx-lv">📦 保管室 ' + stored.length + ' 只　·　🥚 待安置胶囊 ' + loose.length +
+      ' 颗　·　🧭 收藏品 ' + cols.length + '/' + (D.COLLECTIONS || []).length + '</div>';
+
+    /* 待安置胶囊（v1.21：从孵化仓挪到保管室统一管理） */
+    h += '<div class="panel-head" style="margin-top:6px"><h2>🥚 待安置胶囊</h2>' +
+      '<span class="hint">放进孵化仓才会开始孵化</span></div>';
+    if (loose.length) {
+      h += '<div class="pet-list">';
+      loose.forEach(function (c) {
+        const sp = window.Game.speciesById(c.speciesId);
+        h += '<div class="caps">' +
+          '<div class="caps-ico">' + spArt(sp, 'caps-ico') + '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div class="caps-name">' + esc(sp.name) + ' <span class="badge-rar rar-' + sp.rarity + '">' + rarityName(sp.rarity) + '</span></div>' +
+            '<div class="caps-meta">出处：' + esc(sp.home || '云南') + '</div>' +
+          '</div>' +
+          '<div class="caps-acts"><button class="btn btn-sm btn-primary" data-act="place" data-id="' + c.id + '">放入孵化仓</button></div>' +
+          '</div>';
+      });
+      h += '</div>';
+    } else {
+      h += '<div class="empty">没有待安置的胶囊——都已经在孵化仓里开始孵化了。</div>';
+    }
+
+    /* 存放的小生物 */
+    h += '<div class="panel-head" style="margin-top:16px"><h2>📦 存放的小生物</h2>' +
+      '<span class="hint">谁都能存 · 状态静止</span></div>';
+    if (stored.length) {
+      h += '<div class="pet-list">';
+      stored.forEach(function (p) {
+        const sp = window.Game.speciesById(p.speciesId);
+        const st = window.Game.stageOf(p);
+        h += '<div class="pet-card pod-card">' +
+          '<div class="pc-face' + (sp.img ? '' : ' pet-emoji') + '">' +
+          (sp.img ? '<img class="pc-img" src="' + sp.img + '" alt="">' : sp.emoji) + '</div>' +
+          '<div class="pc-body" data-act="pet-open" data-id="' + p.id + '">' +
+          '<div class="pc-name">' + esc(p.name) + '</div>' +
+          '<div class="pc-sub">' + esc(sp.name) + ' · ' + st.emoji + ' ' + st.name + ' · 📦 静止中</div></div>' +
+          '<button class="btn btn-sm btn-primary pod-take" data-act="unstore-pet" data-id="' + p.id + '">取出</button>' +
+          '</div>';
+      });
+      h += '</div>';
+    } else {
+      h += '<div class="empty">保管室空着。任何阶段的小生物都能从它的状态面板放进这里，状态完全静止。</div>';
+    }
+
+    /* 旅行收藏品 */
+    h += '<div class="panel-head" style="margin-top:16px"><h2>🧭 旅行收藏品</h2>' +
+      '<span class="hint">建好旅行社，让导游带回来</span></div>' + colGridHtml(cols);
+    return h;
+  }
+
+  /* 保管室弹窗开着时就地刷新（绝不关窗再开窗） */
+  function refreshStorageModal() {
+    const board = document.getElementById('storage-board');
+    const m = activeMask();
+    if (!board || !m || !document.documentElement.contains(board)) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div id="storage-board">' + storageBoardHtml() + '</div>';
+    board.parentNode.replaceChild(wrap.firstChild, board);
+    wireModal(m);
   }
 
   /* ---- 建筑：修建面板 / 工作面板 ---- */
@@ -1517,7 +1571,7 @@
     });
     const ready = bxState && bxState.animal && bxState.plant && bxState.fungus;
     h += '<button class="btn btn-primary btn-block" data-act="bx-go" data-id="' + id + '"' +
-      (gate.ok && ready ? '' : ' disabled') + '>' + (up ? '🔨 扩建' : '🔨 开工') + '</button>';
+      (gate.ok && ready ? '' : ' disabled') + '>' + (up ? '🔨 开始扩建' : '🔨 开始建造') + '</button>';
     return h;
   }
 
@@ -1591,6 +1645,23 @@
     const built = window.Game.isBuilt(id);
     const isNext = (window.Game.nextBuilding() || {}).id === id;
     if (!built && !isNext) { toast('这栋还锁着，先把前面那栋盖好。', 'warn'); return; }
+    /* 建造中：只读进度面板（不能再开工，等它自己建完或离线回来结算） */
+    const uc = window.Game.buildProgress(id);
+    if (uc.on) {
+      const lvAfter = (window.Game.buildLv(id) || 0) + 1;
+      const minLeft = Math.max(1, Math.ceil(uc.remain / 60000));
+      openModal({
+        title: '🏗️ ' + b.emoji + ' ' + b.name + ' · 建造中',
+        body: '<div class="bx-desc">' + esc(b.desc) + '</div>' +
+          '<div class="bx-cost">建造到 Lv.' + lvAfter + '</div>' +
+          '<div class="bar bar-lg" style="margin:14px 0 8px"><i style="width:' + Math.round(uc.p * 100) +
+          '%;background:linear-gradient(90deg,#8FD3A8,#4CA96B)"></i></div>' +
+          '<div class="bx-cost">建造进度 ' + Math.round(uc.p * 100) + '%　·　约 ' + minLeft + ' 分钟后完工</div>',
+        foot: '<button class="btn btn-ghost" data-act="m-close">关闭</button>',
+        onMount: wireModal
+      });
+      return;
+    }
     /* 第一次修：先把该说的话听完。
        v1.20 起这里不再"等级不够就拦下"——那样一旦剧情的条件判定有偏差，
        玩家会被卡在门口连面板都看不到。改成一律把面板打开，面板里显示差什么。 */
@@ -2794,6 +2865,7 @@
       const r = window.Game.placeCapsule(ds.id);
       toast((r.ok ? '🌱 已经放进孵化仓，开始孵化。' : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
       render();
+      if (document.getElementById('storage-board')) refreshStorageModal();
       return refreshIncModal();
     }
     if (act === 'hatch') {

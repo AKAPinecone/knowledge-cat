@@ -492,20 +492,23 @@ window.Game = (function () {
     for (let i = 0; i < list.length; i++) if (!isBuilt(list[i].id)) return list[i];
     return null;
   }
-  /* 开工门槛：照顾等级 Lv.3+，且三类角色都有人（动物劳力 / 植物材料 / 真菌胶合料）。
-     v1.20 起不再要求「至少 3 只成年体」——那个门槛会让等级早就够、但没把某几只喂到
-     成熟/圆满的玩家被死死卡在门外（连剧情都看不到）。缺谁就直说缺谁。 */
+  /* 开工门槛：照顾等级 Lv.3+，且三类角色都有成年体（动物劳力 / 植物材料 / 真菌胶合料），
+     并且成年体总数 ≥3。只有成年个体才能出工 / 打工。 */
   const BUILD_ROLES = [['animal', '劳力', '动物'], ['plant', '材料', '植物'], ['fungus', '胶合料', '真菌']];
   function buildGate() {
     if (S.cur.level < 3) {
       return { ok: false, why: 'level', msg: '照顾等级到 Lv.3 才能开工（现在是 Lv.' + S.cur.level + '）' };
     }
+    if (adultCount() < 3) {
+      return { ok: false, why: 'adults', msg: '需要至少 3 只成年体才能开工（现在有 ' + adultCount() + ' 只）' };
+    }
     const miss = BUILD_ROLES.filter(function (r) { return workersOf(r[0]).length === 0; });
     if (miss.length) {
       return {
         ok: false, why: 'crew',
-        msg: '还缺出' + miss.map(function (m) { return m[1]; }).join('、') + '的小生物（需要' +
-          miss.map(function (m) { return m[2]; }).join('、') + '）'
+        msg: '还缺出' + miss.map(function (m) { return m[1]; }).join('、') + '的成年' +
+          miss.map(function (m) { return m[2]; }).join('、') +
+          '（只有成年个体能参与修建）'
       };
     }
     return { ok: true };
@@ -527,10 +530,11 @@ window.Game = (function () {
     const arr = S.pets.slice().sort(function (x, y) { return (x.bornAt || 0) - (y.bornAt || 0); });
     return arr[0] || null;
   }
-  /* 某类 kind 里能干活的小生物 */
+  /* 某类 kind 里能干活的小生物：只有成年体才能出工 */
   function workersOf(kind) {
     return S.pets.filter(function (p) {
       if (p.stored) return false;
+      if (!isAdult(p)) return false;
       return speciesById(p.speciesId).kind === kind;
     });
   }
@@ -545,6 +549,59 @@ window.Game = (function () {
     };
   }
 
+  /* v1.21 建筑建造时长：目标等级越高，耗时越长。
+     公式：目标等级 Lv.N 需要 N × 15 分钟（Lv.1 = 15 分钟，Lv.2 = 30 分钟……） */
+  function buildDurationMs(id) {
+    const targetLv = (buildLv(id) || 0) + 1;
+    return targetLv * 15 * 60000;
+  }
+  function underConstruction(id) {
+    return !!(S.build.under && S.build.under[id] && S.build.under[id].finishAt > Date.now());
+  }
+  function buildProgress(id) {
+    const u = S.build.under && S.build.under[id];
+    if (!u) return { on: false, p: 0, remain: 0 };
+    const now = Date.now();
+    if (now >= u.finishAt) return { on: false, p: 1, remain: 0 };
+    const p = Math.min(1, (now - u.startAt) / (u.finishAt - u.startAt));
+    return { on: true, p: p, remain: u.finishAt - now };
+  }
+  /* 完成所有到期的建造（含离线回来） */
+  function finishOfflineBuilds(now) {
+    if (!S.build || !S.build.under) return [];
+    const finished = [];
+    now = now || Date.now();
+    Object.keys(S.build.under).forEach(function (id) {
+      const u = S.build.under[id];
+      if (now >= u.finishAt) {
+        if (!isBuilt(id)) S.build.built.push(id);
+        S.build.lv[id] = u.lvAfter;
+        S.build.assign[id] = u.assign;
+        delete S.build.under[id];
+        S.cur.exp += D.BUILD_RULE.buildExp;
+        const lvlBefore = S.cur.level;
+        S.cur.level = levelOf(S.cur.exp);
+        const b = buildingById(id);
+        let msg = (u.lvAfter > 1
+          ? '🔨 ' + (b ? b.name : id) + ' 扩建到 Lv.' + u.lvAfter
+          : '🎉 ' + (b ? b.name : id) + ' 建好了！' + (b ? b.emoji : ''));
+        if (S.cur.level > lvlBefore) {
+          const rw = levelReward(S.cur.level);
+          S.cur.beans += rw.beans;
+          S.cur.tickets += rw.tickets;
+          msg += '　🎖️ 升级到 Lv.' + S.cur.level + '！+' + rw.beans + ' 豆 +' + rw.tickets + ' 券';
+        }
+        window.Store.pushLog('🏗️ ' + msg);
+        finished.push({ id: id, name: b ? b.name : id, msg: msg });
+      }
+    });
+    if (finished.length) {
+      window.Store.save(true);
+      checkAchievements();
+    }
+    return finished;
+  }
+
   function buildStart(id, assign) {
     ensureBuild();
     const b = buildingById(id);
@@ -557,6 +614,7 @@ window.Game = (function () {
       if (list[i].id === id) break;
       if (!isBuilt(list[i].id)) return { ok: false, msg: '按顺序来：先修好「' + list[i].name + '」' };
     }
+    if (S.build.under && S.build.under[id]) return { ok: false, msg: b.name + '已经在建造中了' };
     assign = assign || {};
     const roles = BUILD_ROLES;
     const crew = {};
@@ -567,6 +625,7 @@ window.Game = (function () {
       if (!pet) return { ok: false, msg: '还没选好出' + label + '的小生物' };
       if (speciesById(pet.speciesId).kind !== kind) return { ok: false, msg: '出' + label + '的那只不合适' };
       if (pet.stored || pet.illness) return { ok: false, msg: pet.name + '现在没法出力' };
+      if (!isAdult(pet)) return { ok: false, msg: pet.name + '还没成年，不能参与修建' };
       crew[kind] = pet;
     }
     const cost = buildCost(id);
@@ -579,31 +638,19 @@ window.Game = (function () {
         p.stats[s] = Math.max(0, p.stats[s] - cost.need);
       });
     });
-    const wasBuilt = isBuilt(id);
-    if (!wasBuilt) S.build.built.push(id);
-    S.build.lv[id] = buildLv(id) + 1;
-    S.build.assign[id] = { animal: crew.animal.id, plant: crew.plant.id, fungus: crew.fungus.id };
-    if (!Array.isArray(S.build.staff[id])) S.build.staff[id] = [];
-    if (!S.build.stock[id] || typeof S.build.stock[id] !== 'object') S.build.stock[id] = {};
-    if (!S.build.day) S.build.day = {};
-
-    const lvlBefore = S.cur.level;
-    S.cur.exp += D.BUILD_RULE.buildExp;
-    const lvlAfter = levelOf(S.cur.exp);
-    S.cur.level = lvlAfter;
-    let msg = wasBuilt
-      ? '🔨 ' + b.name + ' 扩建到 Lv.' + S.build.lv[id] + '，能容下 ' + staffCap(id) + ' 只小生物。'
-      : '🎉 ' + b.name + ' 建好了！' + b.emoji;
-    if (lvlAfter > lvlBefore) {
-      const rw = levelReward(lvlAfter);
-      S.cur.beans += rw.beans;
-      S.cur.tickets += rw.tickets;
-      msg += '　🎖️ 升级到 Lv.' + lvlAfter + '！+' + rw.beans + ' 豆 +' + rw.tickets + ' 券';
-    }
-    window.Store.pushLog('🏗️ ' + msg);
+    const targetLv = (buildLv(id) || 0) + 1;
+    const duration = buildDurationMs(id);
+    if (!S.build.under) S.build.under = {};
+    S.build.under[id] = {
+      startAt: Date.now(),
+      finishAt: Date.now() + duration,
+      lvAfter: targetLv,
+      assign: { animal: crew.animal.id, plant: crew.plant.id, fungus: crew.fungus.id }
+    };
+    const minutes = Math.round(duration / 60000);
+    window.Store.pushLog('🏗️ ' + b.name + ' 开工了！预计 ' + minutes + ' 分钟后建成。');
     window.Store.save(true);
-    checkAchievements();
-    return { ok: true, msg: msg, leveled: lvlAfter > lvlBefore, built: !wasBuilt };
+    return { ok: true, msg: b.name + ' 开始建造，预计 ' + minutes + ' 分钟后完工', minutes: minutes };
   }
 
   /* ---------------- 剧情 ---------------- */
@@ -614,9 +661,9 @@ window.Game = (function () {
     window.Store.save(true);
     return true;
   }
-  /* 照顾等级到 Lv.3 就该有人来找你谈劳动（v1.20 起不再卡成年体数量） */
+  /* 照顾等级到 Lv.3 且成年体 ≥3 时，最年长的成年体发起劳动剧情 */
   function laborReady() {
-    return !storySeen('labor') && S.cur.level >= 3 && S.pets.length > 0;
+    return !storySeen('labor') && S.cur.level >= 3 && adultCount() >= 3;
   }
   /* 该看哪段剧情：labor 优先，然后是「已解锁但还没看」的下一栋 */
   function pendingStory() {
@@ -644,6 +691,7 @@ window.Game = (function () {
     if (!pet) return { ok: false, msg: '找不到这只小生物' };
     if (pet.stored) return { ok: false, msg: pet.name + '还在保管室里，先取出来' };
     if (pet.illness) return { ok: false, msg: pet.name + '正在生病，先治好' };
+    if (!isAdult(pet)) return { ok: false, msg: pet.name + '还没成年，不能来打工' };
     arr.push(petId);
     window.Store.save(true);
     return { ok: true, msg: '👜 ' + pet.name + ' 来' + buildingById(id).name + '上班了。' };
@@ -819,6 +867,10 @@ window.Game = (function () {
     elderPet: elderPet,
     workersOf: workersOf,
     buildCost: buildCost,
+    buildDurationMs: buildDurationMs,
+    underConstruction: underConstruction,
+    buildProgress: buildProgress,
+    finishOfflineBuilds: finishOfflineBuilds,
     buildStart: buildStart,
     storySeen: storySeen,
     markStory: markStory,

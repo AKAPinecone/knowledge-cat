@@ -1572,8 +1572,7 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 /* 草地：动物自由遛弯的范围。
    注意 .wzone 是 pointer-events:none，草地没有 .wslot 那样的兜底，
    动物按钮必须自己恢复 auto，否则整片草地的点击全部穿透（v1.18 踩过：点动物没反应） */
-.wzone-meadow{position:absolute;border-radius:20px;
-  border:1.5px dashed rgba(255,255,255,.55);}
+.wzone-meadow{position:absolute;border-radius:20px;}
 .wzone-meadow .park-pet{transform:scale(.80);transition:left 4.2s linear,top 4.2s linear;
   pointer-events:auto;}
 .wzone-tag-meadow{left:4%;bottom:4%;}
@@ -1622,6 +1621,11 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 .wb-plus{font-size:26px;font-weight:800;color:#fff;text-shadow:0 2px 5px rgba(20,50,30,.45);line-height:1;}
 .wbuilding.plot.locked{opacity:.55;cursor:default;border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.1);}
 .wb-lock{font-size:18px;line-height:1;}
+.wbuilding.plot.under{border-style:solid;border-color:#7BC8A0;background:linear-gradient(160deg,rgba(122,199,141,.25),rgba(122,199,141,.12));}
+.wbuilding.plot.under .wb-progress{position:absolute;left:8%;bottom:18%;width:84%;height:6px;border-radius:99px;background:rgba(255,255,255,.5);overflow:hidden;}
+.wbuilding.plot.under .wb-progress > i{display:block;height:100%;background:#4CA96B;border-radius:99px;}
+.wbuilding.plot.under .wb-name{color:#2E7A4C;font-size:10px;}
+.wbuilding.plot.under .wb-plus{font-size:22px;margin-bottom:2px;}
 
 /* 有话想说 */
 .wstory-flag{position:absolute;left:50%;top:5%;transform:translateX(-50%);
