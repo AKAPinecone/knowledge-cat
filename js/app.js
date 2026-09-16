@@ -1735,7 +1735,7 @@
 
     h += '<div class="qbank-rule">' +
       '<span>📋 每次抽 <b>' + s.need + '</b> 题</span>' +
-      '<span>⏱️ 限时 <b>' + s.minutes + '</b> 分钟</span>' +
+      '<span>' + (s.minutes > 0 ? '⏱️ 限时 <b>' + s.minutes + '</b> 分钟' : '⏱️ <b>不限时</b>') + '</span>' +
       '<span>🎯 答对 <b>' + Math.round(s.passRate * 100) + '%</b> 才放行</span>' +
       '</div>';
 
@@ -1842,8 +1842,9 @@
         if (gate.on && gate.passed) {
           h += '<div class="caps-quiz ok">✅ 破壳测验已通过（' + c.quizResult.correct + '/' + c.quizResult.total + '，及格 ' + c.quizResult.line + ' 题）</div>';
         } else if (gate.on) {
-          h += '<div class="caps-quiz">🧠 破壳前先答 ' + gate.count + ' 道题：限时 ' + gate.minutes +
-            ' 分钟，答对 ' + gate.passLine + ' 道才会出来</div>';
+          h += '<div class="caps-quiz">🧠 破壳前先答 ' + gate.count + ' 道题：' +
+            (gate.minutes > 0 ? '限时 ' + gate.minutes + ' 分钟，' : '不限时，') +
+            '答对 ' + gate.passLine + ' 道才会出来</div>';
         } else {
           h += '<div class="caps-quiz muted">题库还没接入，先直接破壳（见本页底部「破壳题库」）</div>';
         }
@@ -1859,7 +1860,9 @@
     } else if (canHatch) {
       const needQuiz = gate.on && !gate.passed;
       h += '<button class="btn btn-sm btn-primary" data-act="hatch" data-id="' + c.id + '"' +
-        (needQuiz ? ' title="先过破壳测验：' + gate.count + ' 题 / ' + gate.minutes + ' 分钟 / 答对 ' + gate.passLine + ' 题"' : '') +
+        (needQuiz ? ' title="先过破壳测验：' + gate.count + ' 题' +
+          (gate.minutes > 0 ? ' / ' + gate.minutes + ' 分钟' : ' / 不限时') +
+          ' / 答对 ' + gate.passLine + ' 题"' : '') +
         '>' + (needQuiz ? '🧠 答题破壳' : '破壳') + '</button>';
     } else {
       h += '<button class="btn btn-sm btn-ghost" data-act="speedup" data-id="' + c.id + '" title="消耗 1 个加速沙漏，推进 30 分钟">⏳ 加速</button>';
@@ -2007,8 +2010,9 @@
       if (gate.on && gate.passed) {
         body += '<div class="hint" style="margin-top:8px">✅ 破壳测验已通过（' + c.quizResult.correct + '/' + c.quizResult.total + '），随时可以破壳。</div>';
       } else if (gate.on) {
-        body += '<div class="warnbox" style="margin-top:10px;text-align:left">🧠 破壳前先答 ' + gate.count + ' 道题：限时 ' + gate.minutes +
-          ' 分钟，答对 ' + gate.passLine + ' 道才放行。</div>';
+        body += '<div class="warnbox" style="margin-top:10px;text-align:left">🧠 破壳前先答 ' + gate.count + ' 道题：' +
+          (gate.minutes > 0 ? '限时 ' + gate.minutes + ' 分钟，' : '不限时，') +
+          '答对 ' + gate.passLine + ' 道才放行。</div>';
       } else {
         body += '<div class="hint" style="margin-top:8px">题库还没接入，直接破壳。</div>';
       }
@@ -2433,8 +2437,8 @@
       (qs.bank.total ? '题库 ' + qs.bank.total + ' 题' : '题库未接入') + '</span></div>';
     if (!qs.attempts) {
       h += '<div class="empty">还没答过。题库接好之后，每次小生物出生前都会来一份 <b>' + qs.bank.need +
-        '</b> 题的小卷：限时 ' + qs.bank.minutes + ' 分钟，答对 ' +
-        Math.round(qs.bank.passRate * 100) + '% 才放行。</div>';
+        '</b> 题的小卷：' + (qs.bank.minutes > 0 ? '限时 ' + qs.bank.minutes + ' 分钟，' : '不限时，') +
+        '答对 ' + Math.round(qs.bank.passRate * 100) + '% 才放行。</div>';
     } else {
       h += '<table class="mini" style="margin-top:4px">' +
         '<tr><th>答过</th><th>通过</th><th>累计答题</th><th>总正确率</th></tr>' +
@@ -2695,11 +2699,11 @@
 
     h += '<h3>七、破壳测验（小生物出生前的关卡）</h3>';
     h += '<p>小生物要从温室 / 孵化仓出来的那一刻，先过「破壳测验」：<b>每次 1 道题</b>，<b>答对就破壳</b>。答错了不破壳，可以再答一题；第二次还错，会给你看这道题的解析，看完同样能破壳（无限次数、不扣任何东西）。这样既挡住乱点破壳，又不让人卡住。</p>';
-    h += '<p>这是整个游戏<b>唯一</b>带倒计时的地方，因为它要的就是考场那点限时感。学习任务那边仍然没有任何倒计时，两者是两回事，别混。</p>';
+    h += '<p><b>不限时。</b>整张卷子只有 1 道题，用不上倒计时 —— 而倒计时对 ADHD 来说是压力源不是动力。慢慢想，想不出来就看解析（看完照样破壳）。游戏里<b>没有任何倒计时</b>，学习任务那边也一样。</p>';
     h += '<table class="mini"><tr><th>它在做什么</th><th>怎么做的</th></tr>' +
       '<tr><td>抽题</td><td>四科轮流取，一张卷子尽量四科都沾到；每次都是<b>新抽</b>的。</td></tr>' +
       '<tr><td>防背答案</td><td>每道题的<b>选项顺序都会重新打乱</b>，记住"答案是 B"没用。</td></tr>' +
-      '<tr><td>交卷</td><td>可以随时交；时间到<b>自动交卷</b>，没答的算错。</td></tr>' +
+      '<tr><td>交卷</td><td>随时交卷，<b>没有时间压力</b>；没答的算错。</td></tr>' +
       '<tr><td>复盘</td><td>交卷后直接列出错题：你选了什么、正确答案、解析。看一眼再答下一份。</td></tr>' +
       '<tr><td>留档</td><td>成绩存一份进<b>证据库</b>，日后能回看"为了这只小生物我答过几份卷子"。</td></tr></table>';
     h += '<div class="hintbox">📥 <b>题库现在还是空的。</b>端口已经接好了：在「🙋 我的」页找到「破壳题库」，粘贴导入即可，不用改代码。' +
@@ -3044,11 +3048,10 @@
   /* =========================================================
    * 破壳测验
    * 小生物出生前的关卡：每次 1 题，答对即破壳；答错可再答一次并看解析。
-   * 这是全游戏唯一带倒计时的地方 —— 因为它就是要模拟考场那点限时感。
-   * 学习任务仍然没有任何倒计时（那是另一回事）。
+   * v1.22：不限时 —— 一题卷子用不上倒计时，而倒计时对 ADHD 是压力源不是动力。
    * ========================================================= */
   /* ---------------- 错题复习（自由练习，不限破壳时） ----------------
-     全游戏唯一带倒计时的是破壳测验；这里不计时，点开就做，做完看成绩。 */
+     点开就做，不计时，做完看成绩。 */
   let wz = null;
   function openWrongQuiz() {
     const all = window.QBank.all();
@@ -3204,7 +3207,8 @@
       previousIds: [],
       attempt: 1,
       idx: 0,
-      endsAt: Date.now() + (cfg.minutes || 5) * 60000,
+      /* v1.22：minutes<=0 表示不限时，不设截止、不启动倒计时 */
+      endsAt: (cfg.minutes > 0) ? (Date.now() + cfg.minutes * 60000) : 0,
       timer: null,
       done: false,
       result: null
@@ -3220,7 +3224,9 @@
       },
       onMount: function (mask) {
         renderQuiz(mask);
-        qz.timer = setInterval(function () { tickQuiz(mask); }, 1000);
+        if (qz && qz.endsAt > 0) {
+          qz.timer = setInterval(function () { tickQuiz(mask); }, 1000);
+        }
       }
     });
   }
@@ -3234,12 +3240,14 @@
     if (!body || !foot) return;
 
     const p = qz.paper[qz.idx];
-    const left = Math.max(0, Math.round((qz.endsAt - Date.now()) / 1000));
+    const left = qz.endsAt > 0 ? Math.max(0, Math.round((qz.endsAt - Date.now()) / 1000)) : -1;
     const answered = qz.answers.filter(function (a) { return Array.isArray(a) && a.length > 0; }).length;
     const line = window.QBank.passLine(qz.paper.length);
 
     let h = '<div class="qz-bar">' +
-      '<span class="qz-clock' + (left <= 60 ? ' urgent' : '') + '" id="qz-clock">⏱️ ' + fmtClock(left) + '</span>' +
+      (left >= 0
+        ? '<span class="qz-clock' + (left <= 60 ? ' urgent' : '') + '" id="qz-clock">⏱️ ' + fmtClock(left) + '</span>'
+        : '<span class="qz-clock" id="qz-clock">🍃 不限时</span>') +
       '<span class="qz-pill">第 ' + (qz.idx + 1) + ' / ' + qz.paper.length + ' 题</span>' +
       '<span class="qz-pill">已答 ' + answered + '</span>' +
       '<span class="qz-pill">答对 ' + line + ' 题及格</span>' +
@@ -3301,9 +3309,9 @@
     if (act === 'submit') return submitQuiz(mask, false);
   }
 
-  /* 每秒只改时钟那一小段文字，不重绘整张卷子 */
+  /* 每秒只改时钟那一小段文字，不重绘整张卷子；不限时（endsAt=0）时不会被调用 */
   function tickQuiz(mask) {
-    if (!qz || qz.done) return;
+    if (!qz || qz.done || qz.endsAt <= 0) return;
     const left = Math.max(0, Math.round((qz.endsAt - Date.now()) / 1000));
     const el = $('#qz-clock', mask);
     if (el) {
@@ -3415,11 +3423,11 @@
     qz.answers = paper.map(function () { return []; });
     qz.idx = 0;
     qz.attempt = (qz.attempt || 1) + 1;
-    qz.endsAt = Date.now() + (cfg.minutes || 5) * 60000;
+    qz.endsAt = (cfg.minutes > 0) ? (Date.now() + cfg.minutes * 60000) : 0;
     qz.done = false;
     qz.result = null;
-    if (qz.timer) clearInterval(qz.timer);
-    qz.timer = setInterval(function () { tickQuiz(mask); }, 1000);
+    if (qz.timer) { clearInterval(qz.timer); qz.timer = null; }
+    if (qz.endsAt > 0) qz.timer = setInterval(function () { tickQuiz(mask); }, 1000);
     renderQuiz(mask);
   }
 

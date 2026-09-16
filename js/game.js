@@ -133,10 +133,10 @@ window.Game = (function () {
   }
 
   /* ---------------- 破壳测验闸门 ----------------
-   * 小生物要从温室 / 孵化仓出来，先过 1 道题（限时 5 分钟 / 70%）。
+   * 小生物要从温室 / 孵化仓出来，先过 1 道题（v1.22 起不限时 / 70%）。
    * 题库是空的（端口已接、题还没来）→ 闸门自动放行，不挡路。 */
   function quizCfg() {
-    return window.GAME_DATA.HATCH_QUIZ || { count: 1, minutes: 5, passRate: 0.7, minCount: 1, maxAttempts: 2 };
+    return window.GAME_DATA.HATCH_QUIZ || { count: 1, minutes: 0, passRate: 0.7, minCount: 1, maxAttempts: 2 };
   }
   function quizAvailable() {
     return !!(window.QBank && window.QBank.count() > 0);
@@ -181,8 +181,9 @@ window.Game = (function () {
     if (gate.on && !gate.passed) {
       return {
         ok: false, needQuiz: true,
-        msg: '破壳前要先过一份 ' + gate.count + ' 题的小卷（限时 ' + gate.minutes +
-          ' 分钟，至少答对 ' + gate.passLine + ' 题）'
+        msg: '破壳前要先过一份 ' + gate.count + ' 题的小卷（' +
+          (gate.minutes > 0 ? '限时 ' + gate.minutes + ' 分钟，' : '不限时，') +
+          '至少答对 ' + gate.passLine + ' 题）'
       };
     }
     const sp = speciesById(c.speciesId);

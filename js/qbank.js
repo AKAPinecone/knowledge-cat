@@ -11,7 +11,7 @@
 window.QBank = (function () {
   const D = window.GAME_DATA;
 
-  function cfg() { return D.HATCH_QUIZ || { count: 10, minutes: 5, passRate: 0.7, minCount: 1 }; }
+  function cfg() { return D.HATCH_QUIZ || { count: 1, minutes: 0, passRate: 0.7, minCount: 1 }; }
   function st() { return window.Store.state; }
 
   /* ---------------- 小工具 ---------------- */
