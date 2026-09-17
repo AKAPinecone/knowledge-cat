@@ -1479,56 +1479,123 @@
     return h;
   }
 
+  /* ---- 保管室：格子 + 同物种堆叠（v1.23） ----
+     以前一个胶囊占一行、一只小生物占一张卡，攒到十几行就得一直往下滚。
+     现在同物种合成一格、右上角挂数量，点一下就在原地摊开这一格的成员：
+     要放的要取的要送养的，全在那一格底下，不翻页、不滚屏。 */
+  let stackOpen = null;   /* 摊开的是哪一格：{kind:'cap'|'pet', sp:'speciesId'} */
+
+  /* 同物种归堆；稀有的排前面，同稀有度按数量多的排前面 */
+  function stackGroups(list) {
+    const map = {}, keys = [];
+    (list || []).forEach(function (x) {
+      const k = x.speciesId || '_x';
+      if (!map[k]) { map[k] = []; keys.push(k); }
+      map[k].push(x);
+    });
+    const groups = keys.map(function (k) { return { speciesId: k, items: map[k] }; });
+    groups.sort(function (a, b) {
+      const ra = (window.Game.speciesById(a.speciesId) || {}).rarity || 1;
+      const rb = (window.Game.speciesById(b.speciesId) || {}).rarity || 1;
+      if (rb !== ra) return rb - ra;
+      return b.items.length - a.items.length;
+    });
+    return groups;
+  }
+  function stackIsOpen(kind, spId) {
+    return !!(stackOpen && stackOpen.kind === kind && stackOpen.sp === spId);
+  }
+
+  /* 一个格子 = 一个物种，右上角 ×N */
+  function stackCellHtml(g, kind) {
+    const sp = window.Game.speciesById(g.speciesId) || {};
+    const n = g.items.length;
+    const open = stackIsOpen(kind, g.speciesId);
+    return '<button class="stack-cell rar' + (sp.rarity || 1) + (open ? ' open' : '') +
+      '" data-act="stack-toggle" data-kind="' + kind + '" data-sp="' + esc(g.speciesId) +
+      '" title="' + esc(sp.name || '') + ' ×' + n + '">' +
+      '<span class="sc-art">' + spArt(sp, 'sc-img') + '</span>' +
+      (n > 1 ? '<span class="sc-n">×' + n + '</span>' : '') +
+      '<span class="sc-name">' + esc(sp.name || '未知') + '</span>' +
+      '</button>';
+  }
+
+  /* 摊开的那一层：这一格里每个成员一行 */
+  function stackSheetHtml(g, kind) {
+    const sp = window.Game.speciesById(g.speciesId) || {};
+    let h = '<div class="stack-sheet">' +
+      '<div class="ss-head"><span class="ss-t">' + (sp.emoji || '') + ' ' + esc(sp.name || '未知') + '</span>' +
+      '<span class="ss-n">这一格 ' + g.items.length + ' 个</span>' +
+      '<span class="spacer"></span>' +
+      '<button class="btn btn-sm btn-ghost" data-act="stack-toggle" data-kind="' + kind +
+      '" data-sp="' + esc(g.speciesId) + '">收起</button></div>';
+
+    if (kind === 'cap') {
+      const u = window.Game.usedSlots();
+      const room = Math.max(0, u.cap - u.used);
+      h += '<div class="ss-tip">' + (room > 0
+        ? '孵化仓还有 ' + room + ' 个空托位（' + u.used + '/' + u.cap + '）'
+        : '托位满了（' + u.used + '/' + u.cap + '），先回孵化仓扩一个') + '</div>';
+      h += '<div class="ss-list">';
+      g.items.forEach(function (c) {
+        h += '<div class="ss-row">' + spArt(sp, 'ss-art') +
+          '<span class="ss-txt">' + esc(sp.name || '') +
+          '<span class="ss-sub"> · 孵化要 ' + c.hatchMinutes + ' 分钟</span></span>' +
+          '<button class="btn btn-sm btn-primary" data-act="place" data-id="' + c.id + '"' +
+          (room > 0 ? '' : ' disabled') + '>放入孵化仓</button></div>';
+      });
+      h += '</div>';
+      if (g.items.length > 1 && room > 0) {
+        h += '<div class="ss-foot"><button class="btn btn-sm btn-gold" data-act="place-batch" data-sp="' +
+          esc(g.speciesId) + '">一次全放（最多 ' + Math.min(room, g.items.length) + ' 个）</button></div>';
+      }
+    } else {
+      h += '<div class="ss-list">';
+      g.items.forEach(function (p) {
+        const st = window.Game.stageOf(p);
+        h += '<div class="ss-row">' + spArt(sp, 'ss-art') +
+          '<span class="ss-txt ss-link" data-act="pet-open" data-id="' + p.id + '">' +
+          '<b>' + esc(p.name) + '</b><span class="ss-sub"> · ' + st.emoji + ' ' + st.name +
+          ' · 成长 ' + Math.round(p.growth) + ' · 被照顾 ' + p.careCount + ' 次</span></span>' +
+          '<button class="btn btn-sm" data-act="unstore-pet" data-id="' + p.id + '">取出</button>' +
+          '<button class="btn btn-sm btn-ghost" data-act="adopt-pet" data-id="' + p.id + '">🤝 送养</button></div>';
+      });
+      h += '</div>';
+    }
+    return h + '</div>';
+  }
+
+  function stackGridHtml(groups, kind) {
+    let h = '<div class="stack-grid">';
+    groups.forEach(function (g) {
+      h += stackCellHtml(g, kind);
+      if (stackIsOpen(kind, g.speciesId)) h += stackSheetHtml(g, kind);
+    });
+    return h + '</div>';
+  }
+
   /* 保管室面板内容（可原地刷新）：待安置胶囊 + 存放的小生物 + 旅行收藏品 */
   function storageBoardHtml() {
     const stored = S.pets.filter(function (p) { return p.stored; });
     const cols = window.Game.collectionsOwned();
     const loose = S.capsules.filter(function (c) { return !c.place; });
-    let h = '<div class="bx-lv">📦 保管室 ' + stored.length + ' 只　·　🥚 待安置胶囊 ' + loose.length +
-      ' 颗　·　🧭 收藏品 ' + cols.length + '/' + (D.COLLECTIONS || []).length + '</div>';
+    const capG = stackGroups(loose);
+    const petG = stackGroups(stored);
+    let h = '<div class="bx-lv">📦 保管室 ' + stored.length + ' 只（' + petG.length + ' 格）　·　🥚 待安置胶囊 ' +
+      loose.length + ' 颗（' + capG.length + ' 格）　·　🧭 收藏品 ' + cols.length +
+      '/' + (D.COLLECTIONS || []).length + '</div>';
 
-    /* 待安置胶囊（v1.21：从孵化仓挪到保管室统一管理） */
+    /* 待安置胶囊（v1.21：从孵化仓挪到保管室统一管理 · v1.23 改格子堆叠） */
     h += '<div class="panel-head" style="margin-top:6px"><h2>🥚 待安置胶囊</h2>' +
-      '<span class="hint">放进孵化仓才会开始孵化</span></div>';
-    if (loose.length) {
-      h += '<div class="pet-list">';
-      loose.forEach(function (c) {
-        const sp = window.Game.speciesById(c.speciesId);
-        h += '<div class="caps">' +
-          '<div class="caps-ico">' + spArt(sp, 'caps-ico') + '</div>' +
-          '<div style="flex:1;min-width:0">' +
-            '<div class="caps-name">' + esc(sp.name) + ' <span class="badge-rar rar-' + sp.rarity + '">' + rarityName(sp.rarity) + '</span></div>' +
-            '<div class="caps-meta">出处：' + esc(sp.home || '云南') + '</div>' +
-          '</div>' +
-          '<div class="caps-acts"><button class="btn btn-sm btn-primary" data-act="place" data-id="' + c.id + '">放入孵化仓</button></div>' +
-          '</div>';
-      });
-      h += '</div>';
-    } else {
-      h += '<div class="empty">没有待安置的胶囊——都已经在孵化仓里开始孵化了。</div>';
-    }
+      '<span class="hint">同种堆一格 · 点格子摊开</span></div>';
+    h += loose.length ? stackGridHtml(capG, 'cap')
+      : '<div class="empty">没有待安置的胶囊——都已经在孵化仓里开始孵化了。</div>';
 
     /* 存放的小生物 */
     h += '<div class="panel-head" style="margin-top:16px"><h2>📦 存放的小生物</h2>' +
       '<span class="hint">谁都能存 · 状态静止</span></div>';
-    if (stored.length) {
-      h += '<div class="pet-list">';
-      stored.forEach(function (p) {
-        const sp = window.Game.speciesById(p.speciesId);
-        const st = window.Game.stageOf(p);
-        h += '<div class="pet-card pod-card">' +
-          '<div class="pc-face' + (sp.img ? '' : ' pet-emoji') + '">' +
-          (sp.img ? '<img class="pc-img" src="' + sp.img + '" alt="">' : sp.emoji) + '</div>' +
-          '<div class="pc-body" data-act="pet-open" data-id="' + p.id + '">' +
-          '<div class="pc-name">' + esc(p.name) + '</div>' +
-          '<div class="pc-sub">' + esc(sp.name) + ' · ' + st.emoji + ' ' + st.name + ' · 📦 静止中</div></div>' +
-          '<button class="btn btn-sm btn-primary pod-take" data-act="unstore-pet" data-id="' + p.id + '">取出</button>' +
-          '</div>';
-      });
-      h += '</div>';
-    } else {
-      h += '<div class="empty">保管室空着。任何阶段的小生物都能从它的状态面板放进这里，状态完全静止。</div>';
-    }
+    h += stored.length ? stackGridHtml(petG, 'pet')
+      : '<div class="empty">保管室空着。任何阶段的小生物都能从它的状态面板放进这里，状态完全静止。</div>';
 
     /* 旅行收藏品 */
     h += '<div class="panel-head" style="margin-top:16px"><h2>🧭 旅行收藏品</h2>' +
@@ -1938,6 +2005,13 @@
       body += '<div class="pet-acts" style="margin-top:10px"><button class="btn btn-ghost" id="cm-store">📦 放进保管室（幼体也能存）</button></div>';
     }
 
+    /* 送养（v1.23）：不要的小生物托付给别的乐园，换回可可豆。
+       写在最下面、样式最轻，不跟照顾按钮抢视线——它是个出口，不是主要玩法。 */
+    body += '<div class="pet-acts pet-acts-sub" style="margin-top:10px">' +
+      '<button class="btn btn-ghost" id="cm-adopt">🤝 送养（回赠 🌰 ' + window.Game.adoptValue(p) + '）</button></div>';
+    body += '<div class="hint" style="margin-top:8px">送养＝把它交给别的乐园照顾，人家回赠你一袋可可豆。' +
+      '送走就回不来了，所以点之前会让你再确认一次。</div>';
+
     body += '<div class="hint" style="margin-top:10px">出生 ' + fmtWhen(p.bornAt) + ' · 陪伴你 ' + fmtHM(mins) +
       ' · 被照顾 ' + p.careCount + ' 次 · 出身 ' + esc(sp.home) + '</div>';
 
@@ -1966,6 +2040,8 @@
           if (!r.ok) { toast('❌ ' + r.msg, 'err'); return; }
           closeModal(); render(); toast('📭 ' + esc(p.name) + ' 回到了场地。', 'ok');
         };
+        const adoptBtn = $('#cm-adopt', m);
+        if (adoptBtn) adoptBtn.onclick = function () { openAdoptModal(p.id); };
         $$('.act[data-care]', m).forEach(function (el) {
           el.onclick = function () {
             const act = el.dataset.care;
@@ -1987,6 +2063,59 @@
             }, 820);
           };
         });
+      }
+    });
+  }
+
+  /* ---------------- 送养（v1.23） ----------------
+     为什么不叫「卖掉」：这些小家伙是玩家一口一口喂大的，明码标价地卖会让人不舒服。
+     送养是同一件事，但听起来像「给它找了个新家」，而不是「把它处理掉」。
+     代价不藏：按钮上就写着送走回不来，点之前还要再确认一次。 */
+  function openAdoptModal(petId) {
+    const p = S.pets.filter(function (x) { return x.id === petId; })[0];
+    if (!p) { toast('❌ 找不到这只小生物', 'err'); return; }
+    if (p.illness) { toast('❌ ' + p.name + ' 还在生病，先治好它再送养吧。', 'err'); return; }
+    const sp = window.Game.speciesById(p.speciesId);
+    const st = window.Game.stageOf(p);
+    const beans = window.Game.adoptValue(p);
+    const mins = Math.round((Date.now() - p.bornAt) / 60000);
+    /* 在建筑里上班的，得先说清楚：送走它，那个岗位会空出来 */
+    const jobs = [];
+    Object.keys((S.build && S.build.staff) || {}).forEach(function (k) {
+      if ((S.build.staff[k] || []).indexOf(p.id) >= 0) {
+        const b = (D.BUILDINGS || []).filter(function (x) { return x.id === k; })[0];
+        jobs.push(b ? b.name : k);
+      }
+    });
+
+    const body =
+      '<div class="adopt-card">' +
+        '<span class="adopt-face">' + spArt(sp, 'adopt-img') + '</span>' +
+        '<div style="min-width:0"><div class="adopt-name">' + esc(p.name) + '</div>' +
+        '<div class="adopt-sub">' + esc(sp.name) + ' · ' + st.emoji + ' ' + st.name +
+        ' · 陪伴你 ' + fmtHM(mins) + '</div></div>' +
+      '</div>' +
+      '<div class="okbox" style="margin-top:10px">🤝 远处有个乐园正缺一只' + esc(sp.name) +
+      '。把它送过去，那边会回赠你一袋可可豆 <b>🌰 ' + beans + '</b>。</div>' +
+      (jobs.length ? '<div class="warnbox" style="margin-top:8px">👜 它现在在' + esc(jobs.join('、')) +
+        '上班，送养之后那个岗位会空出来，记得再安排一只。</div>' : '') +
+      '<div class="warnbox" style="margin-top:8px">⚠️ 送养之后就找不回来了——它的名字、成长、' +
+      '你照顾它的那些记录都跟着它一起走。想留着就点「再想想」。</div>';
+
+    openModal({
+      title: '🤝 送养 ' + esc(p.name),
+      body: body,
+      foot: '<button class="btn btn-ghost" id="ad-no">再想想</button>' +
+        '<button class="btn btn-primary" id="ad-yes">送它去新家（🌰 +' + beans + '）</button>',
+      onMount: function (m) {
+        $('#ad-no', m).onclick = function () { openCreatureModal(p.id); };
+        $('#ad-yes', m).onclick = function () {
+          const r = window.Game.adoptPet(p.id);
+          if (!r.ok) { toast('❌ ' + r.msg, 'err'); return; }
+          closeModal();
+          render();
+          toast(r.msg, 'ok', 6000);
+        };
       }
     });
   }
@@ -2187,6 +2316,33 @@
       });
       h += '</div></div>';
     });
+
+    /* 挑战赛（v1.23）：全游戏唯一一个「主动给自己找题做」的入口。
+       放商店页最下面，因为它是挣钱的那个，不是花钱的那个。 */
+    const cs = window.Game.chalStatus();
+    const chalLeft = cs.left;
+    const chalGo = chalLeft > 0 && cs.bank > 0;
+    h += '<div class="panel chal-panel">' +
+      '<div class="panel-head"><h2>🏆 挑战赛</h2>' +
+      '<span class="hint">今日剩余 ' + (chalLeft > 90 ? '不限' : chalLeft + ' / ' + cs.limit + ' 局') + '</span></div>' +
+      '<div class="chal-rules">' +
+        '<span class="chal-chip">📕 错题 ' + cs.count + ' 道</span>' +
+        '<span class="chal-chip">⏱️ 限时 ' + cs.minutes + ' 分钟</span>' +
+        '<span class="chal-chip">🎯 正确率 ' + Math.round(cs.passRate * 100) + '% 达标</span>' +
+        '<span class="chal-chip chal-win">🌰 赢 ' + cs.beansPass + ' 可可豆' +
+          (cs.beansPerfect ? '（满分再 +' + cs.beansPerfect + '）' : '') + '</span>' +
+      '</div>' +
+      '<div class="chal-note">从错题库里随机抽 ' + cs.count + ' 道（优先出你还没答对的），答对 ' +
+        Math.ceil(cs.count * cs.passRate) + ' 道就结算可可豆。答错不扣东西，错题当场给解析——' +
+        '冲豆是借口，多练一遍才是真的。</div>' +
+      '<div class="chal-foot">' +
+        '<span class="chal-meta">打过 ' + cs.plays + ' 局 · 赢 ' + cs.wins + ' 局 · 最好 ' + cs.best +
+          '% · 累计 🌰 ' + cs.beans +
+          (cs.bank < cs.count && cs.bank > 0 ? '　·　题库只有 ' + cs.bank + ' 题，按实际题数出卷' : '') + '</span>' +
+        '<button class="btn btn-primary" data-act="chal-start"' + (chalGo ? '' : ' disabled') + '>' +
+          (cs.bank <= 0 ? '题库还是空的' : (chalLeft > 0 ? '🏆 开始挑战（' + cs.count + ' 题）' : '今天的额度用完了，明天再来')) +
+        '</button>' +
+      '</div></div>';
     return h;
   }
 
@@ -2865,6 +3021,22 @@
       return render();
     }
     if (act === 'me-edit') return openProfileModal();
+    if (act === 'stack-toggle') {
+      /* 点同一个格子＝收起，点别的＝换成那一格（收放都就地做，不换弹窗） */
+      stackOpen = stackIsOpen(ds.kind, ds.sp) ? null : { kind: ds.kind, sp: ds.sp };
+      return refreshStorageModal();
+    }
+    if (act === 'place-batch') {
+      const loose = S.capsules.filter(function (c) { return !c.place && c.speciesId === ds.sp; });
+      let n = 0;
+      loose.forEach(function (c) { if (window.Game.placeCapsule(c.id).ok) n++; });
+      toast(n ? '🌱 ' + n + ' 颗都放进孵化仓了，开始孵化。' : '❌ 托位满了，先去孵化仓扩一个。', n ? 'ok' : 'err');
+      render();
+      if (document.getElementById('storage-board')) refreshStorageModal();
+      return refreshIncModal();
+    }
+    if (act === 'adopt-pet') return openAdoptModal(ds.id);
+    if (act === 'chal-start') return openChallenge();
     if (act === 'place') {
       const r = window.Game.placeCapsule(ds.id);
       toast((r.ok ? '🌱 已经放进孵化仓，开始孵化。' : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
@@ -3183,6 +3355,227 @@
       el.onclick = function () {
         if (el.dataset.wz === 'again') { closeModal(); openWrongQuiz(); }
         else closeModal();
+      };
+    });
+  }
+
+  /* =========================================================
+   * 挑战赛（商店页入口，v1.23）
+   * 跟破壳测验共用同一个题库，但它是「你想练就练」，不是关卡：
+   * 10 题 / 5 分钟 / 正确率 80% 才结算可可豆，每天 3 局。
+   * 这里保留倒计时——但这是玩家自己进来找的紧张感，
+   * 跟「被倒计时盯着做任务」是两回事。（破壳测验那边依然不限时。）
+   * ========================================================= */
+  let chz = null;
+  /* 挑战赛的达标题数自己算：QBank.passLine 用的是破壳测验那套 70%，
+     两个玩法及格线不一样，不能混用（10 题 70% = 7 题，80% = 8 题）。 */
+  function chalLine(total) {
+    const rate = window.Game.chalCfg().passRate;
+    return Math.max(1, Math.ceil((total || 0) * rate));
+  }
+  function openChallenge() {
+    const gate = window.Game.chalOpen();
+    if (!gate.ok) {
+      toast((gate.why === 'empty' ? '📕 ' : '🌙 ') + gate.msg, gate.why === 'empty' ? 'warn' : 'ok', 4500);
+      return;
+    }
+    const n = gate.count;
+    /* 优先抽还没掌握的（那才是要练的）；不够 10 题就放开，会了也别闲着 */
+    let paper = window.QBank.makePaper(n, {});
+    if (paper.length < n) paper = window.QBank.makePaper(n, { mastered: false });
+    if (!paper.length) { toast('题库还是空的', 'warn'); return; }
+
+    chz = {
+      paper: paper,
+      answers: paper.map(function () { return []; }),
+      idx: 0,
+      endsAt: gate.minutes > 0 ? (Date.now() + gate.minutes * 60000) : 0,
+      timer: null,
+      done: false,
+      result: null,
+      reward: null
+    };
+
+    openModal({
+      title: '🏆 挑战赛 · ' + paper.length + ' 题',
+      wide: true,
+      body: '<div id="chz-body"></div>',
+      foot: '<div class="qz-foot" id="chz-foot"></div>',
+      onClose: function () {
+        if (chz && chz.timer) clearInterval(chz.timer);
+        chz = null;   /* 中途关掉＝不打了：不扣次数、不计成绩，回来重开一局 */
+      },
+      onMount: function (mask) {
+        renderChal(mask);
+        if (chz && chz.endsAt > 0) chz.timer = setInterval(function () { tickChal(mask); }, 1000);
+      }
+    });
+  }
+
+  function renderChal(mask) {
+    if (!chz || !mask) return;
+    if (chz.done) return renderChalResult(mask);
+    const body = $('#chz-body', mask), foot = $('#chz-foot', mask);
+    if (!body || !foot) return;
+    const cfg = window.Game.chalCfg();
+    const p = chz.paper[chz.idx];
+    const left = chz.endsAt > 0 ? Math.max(0, Math.round((chz.endsAt - Date.now()) / 1000)) : -1;
+    const answered = chz.answers.filter(function (a) { return Array.isArray(a) && a.length > 0; }).length;
+    const line = chalLine(chz.paper.length);
+
+    let h = '<div class="qz-bar">' +
+      (left >= 0
+        ? '<span class="qz-clock' + (left <= 60 ? ' urgent' : '') + '" id="chz-clock">⏱️ ' + fmtClock(left) + '</span>'
+        : '<span class="qz-clock" id="chz-clock">🍃 不限时</span>') +
+      '<span class="qz-pill">第 ' + (chz.idx + 1) + ' / ' + chz.paper.length + ' 题</span>' +
+      '<span class="qz-pill">已答 ' + answered + '</span>' +
+      '<span class="qz-pill">答对 ' + line + ' 题赢 🌰 ' + cfg.beansPass + '</span>' +
+      (p.multi ? '<span class="qz-pill qz-multi">多选</span>' : '') +
+      '</div>';
+    h += '<div class="qz-progress"><i style="width:' + ((chz.idx + 1) / chz.paper.length * 100) + '%"></i></div>';
+    h += '<div class="qz-stem">' + esc(p.stem) + '</div>';
+
+    h += '<div class="qz-opts">';
+    const selected = chz.answers[chz.idx] || [];
+    p.options.forEach(function (o, i) {
+      const on = p.multi ? (selected.indexOf(i) >= 0) : (selected.length === 1 && selected[0] === i);
+      h += '<button class="qz-opt' + (on ? ' on' : '') + '" data-chz="pick" data-i="' + i + '">' +
+        '<b>' + 'ABCDEFGH'.charAt(i) + '</b><span>' + esc(o) + '</span></button>';
+    });
+    h += '</div>';
+
+    h += '<div class="qz-sheet"><span class="qz-sheet-k">答题卡</span>' +
+      chz.paper.map(function (_, i) {
+        const cur = i === chz.idx ? ' cur' : '';
+        const on = (chz.answers[i] && chz.answers[i].length > 0) ? ' on' : '';
+        return '<button class="qz-dot' + on + cur + '" data-chz="jump" data-i="' + i + '">' + (i + 1) + '</button>';
+      }).join('') +
+      '<span class="qz-sheet-h">点题号可以跳过去</span></div>';
+
+    body.innerHTML = h;
+    foot.innerHTML =
+      '<button class="btn btn-ghost" data-chz="prev"' + (chz.idx === 0 ? ' disabled' : '') + '>上一题</button>' +
+      (chz.idx < chz.paper.length - 1
+        ? '<button class="btn" data-chz="next">下一题</button>'
+        : '<button class="btn" disabled>最后一题</button>') +
+      '<button class="btn btn-primary" data-chz="submit">交卷</button>';
+
+    $$('[data-chz]', mask).forEach(function (el) {
+      el.onclick = function () { onChalAct(el.dataset.chz, parseInt(el.dataset.i, 10)); };
+    });
+  }
+
+  function onChalAct(act, i) {
+    if (!chz || chz.done) return;
+    const mask = activeMask();
+    if (act === 'pick') {
+      const p = chz.paper[chz.idx];
+      const arr = chz.answers[chz.idx] || [];
+      if (p.multi) {
+        const pos = arr.indexOf(i);
+        if (pos >= 0) arr.splice(pos, 1); else arr.push(i);
+        chz.answers[chz.idx] = arr;
+      } else {
+        chz.answers[chz.idx] = [i];
+      }
+      return renderChal(mask);
+    }
+    if (act === 'jump') { chz.idx = Math.max(0, Math.min(chz.paper.length - 1, i)); return renderChal(mask); }
+    if (act === 'prev') { chz.idx = Math.max(0, chz.idx - 1); return renderChal(mask); }
+    if (act === 'next') { chz.idx = Math.min(chz.paper.length - 1, chz.idx + 1); return renderChal(mask); }
+    if (act === 'submit') return submitChal(mask, false);
+  }
+
+  /* 每秒只改时钟那一小段文字，不重绘整张卷子 */
+  function tickChal(mask) {
+    if (!chz || chz.done || chz.endsAt <= 0) return;
+    const left = Math.max(0, Math.round((chz.endsAt - Date.now()) / 1000));
+    const el = $('#chz-clock', mask);
+    if (el) {
+      el.textContent = '⏱️ ' + fmtClock(left);
+      el.className = 'qz-clock' + (left <= 60 ? ' urgent' : '');
+    }
+    if (left <= 0) submitChal(mask, true);
+  }
+
+  function submitChal(mask, timeout) {
+    if (!chz || chz.done) return;
+    if (chz.timer) { clearInterval(chz.timer); chz.timer = null; }
+    const res = window.QBank.grade(chz.paper, chz.answers);
+    res.timeout = !!timeout;
+    chz.done = true;
+    chz.result = res;
+    chz.reward = window.Game.chalFinish(res, chz.paper);
+    if (chz.reward.passed) {
+      confetti(chz.reward.perfect ? 70 : 40);
+      render();
+    } else if (timeout) {
+      toast('⏰ 时间到，已自动交卷。', 'warn');
+    }
+    renderChalResult(mask);
+  }
+
+  function renderChalResult(mask) {
+    if (!chz || !mask) return;
+    const body = $('#chz-body', mask), foot = $('#chz-foot', mask);
+    if (!body || !foot) return;
+    const cfg = window.Game.chalCfg();
+    const r = chz.result, rw = chz.reward;
+    const pct = Math.round(r.rate * 100);
+    const line = chalLine(r.total);
+
+    function letterArr(arr) {
+      return (arr || []).map(function (i) { return 'ABCDEFGH'.charAt(i); }).join('');
+    }
+
+    let h = '<div class="qz-score ' + (rw.passed ? 'ok' : 'no') + '">' +
+      '<div class="qz-score-num">' + r.correct + '<span>/' + r.total + '</span></div>' +
+      '<div class="qz-score-sub">正确率 ' + pct + '%　达标线 ' + Math.round(cfg.passRate * 100) + '%（' + line + ' 题）' +
+      (r.timeout ? '　⏰ 时间到，已自动交卷' : '') + '</div>' +
+      '<div class="qz-score-line">' +
+      (rw.passed
+        ? '🎉 赢了 <b>🌰 ' + rw.beans + ' 可可豆</b>' + (rw.perfect ? '（满分再加 🌰 ' + cfg.beansPerfect + '）' : '')
+        : '差 ' + (line - r.correct) + ' 题。再来一局就有了——错题本来就该多练几遍。') +
+      '</div></div>';
+
+    h += '<div class="chal-stat">' +
+      '<span>今日剩余 <b>' + (rw.left > 90 ? '不限' : rw.left + ' 局') + '</b></span>' +
+      '<span>历史最好 <b>' + rw.best + '%</b></span>' +
+      '</div>';
+
+    /* 错题回顾：挑战赛最值钱的东西其实在这儿，不在那几十颗豆 */
+    const wrong = r.detail.filter(function (d) { return !d.ok; });
+    if (wrong.length) {
+      h += '<div class="qz-review"><div class="qz-review-h">📝 这 ' + wrong.length + ' 题再看一眼（不看下一局还是错）</div>';
+      wrong.forEach(function (d) {
+        const p = chz.paper[d.i];
+        const pickedLetters = letterArr(d.picked);
+        const answerLetters = letterArr(d.answer);
+        const pickedText = pickedLetters ? pickedLetters + ' · ' + d.picked.map(function (i) { return esc(p.options[i]); }).join(' / ') : '没答';
+        const answerText = answerLetters + ' · ' + d.answer.map(function (i) { return esc(p.options[i]); }).join(' / ');
+        h += '<div class="qz-rv">' +
+          '<div class="qz-rv-q">' + (d.i + 1) + '. ' + esc(p.stem) + (p.multi ? ' <span class="badge">多选</span>' : '') + '</div>' +
+          '<div class="qz-rv-a">你选了：<b class="no">' + pickedText + '</b></div>' +
+          '<div class="qz-rv-a">正确答案：<b class="ok">' + answerText + '</b></div>' +
+          (p.explain ? '<div class="qz-rv-e">💡 ' + esc(p.explain) + '</div>' : '') +
+          '</div>';
+      });
+      h += '</div>';
+    } else {
+      h += '<div class="okbox" style="margin-top:12px">这一局没有错题。题库里这批题你已经稳了。</div>';
+    }
+
+    body.innerHTML = h;
+    foot.innerHTML = (rw.left > 0
+      ? '<button class="btn btn-primary" data-chz="again">再来一局</button>'
+      : '<button class="btn" data-chz="later">今天到这儿，明天再来</button>') +
+      '<button class="btn btn-ghost" data-chz="close">先歇会儿</button>';
+
+    $$('[data-chz]', mask).forEach(function (el) {
+      el.onclick = function () {
+        const a = el.dataset.chz;
+        if (a === 'again') { closeModal(); return openChallenge(); }
+        if (a === 'close' || a === 'later') return closeModal();
       };
     });
   }

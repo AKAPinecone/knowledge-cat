@@ -220,6 +220,106 @@ window.Game = (function () {
      加了破壳测验之后它就是个「绕过闸门」的后门，已经删掉了。
      到点的胶囊只会被标记为 c.ready = true，破壳必须玩家自己来点。 */
 
+  /* ---------------- 挑战赛（商店页 · 用错题换可可豆，v1.23） ----------------
+     跟破壳测验共用同一个题库，但它不是关卡，是「你想练就练」：
+     一局 10 题 / 5 分钟，正确率 80% 以上才结算可可豆。
+     每天 3 局封顶 —— 不是限制学习，是不想让刷题变成刷豆，那会把别的玩法全饿死。
+     答错不扣东西、不中断，只是没钱拿；练到就是赚到。 */
+  function chalCfg() {
+    return window.GAME_DATA.CHALLENGE ||
+      { count: 10, minutes: 5, passRate: 0.8, dailyLimit: 3, beansPass: 50, beansPerfect: 50 };
+  }
+  /* 取今天的挑战赛记账（跨天自动清零） */
+  function chalDay() {
+    if (!S.challenge || typeof S.challenge !== 'object') S.challenge = {};
+    const c = S.challenge;
+    if (c.date !== todayKey()) {
+      c.date = todayKey();
+      c.used = 0;
+    }
+    if (typeof c.used !== 'number') c.used = 0;
+    if (typeof c.plays !== 'number') c.plays = 0;
+    if (typeof c.wins !== 'number') c.wins = 0;
+    if (typeof c.best !== 'number') c.best = 0;
+    if (typeof c.beans !== 'number') c.beans = 0;
+    return c;
+  }
+  /* 今天还能打几局（dailyLimit 设 0 就是不限） */
+  function chalLeft() {
+    const cfg = chalCfg();
+    if (!cfg.dailyLimit) return 99;
+    return Math.max(0, cfg.dailyLimit - chalDay().used);
+  }
+  /* 商店页那块牌子要的全都在这儿（纯读，不改存档） */
+  function chalStatus() {
+    const cfg = chalCfg();
+    const c = chalDay();
+    return {
+      left: chalLeft(),
+      limit: cfg.dailyLimit || 0,
+      plays: c.plays,
+      wins: c.wins,
+      best: Math.round(c.best * 100),
+      beans: c.beans,
+      count: cfg.count,
+      minutes: cfg.minutes,
+      passRate: cfg.passRate,
+      beansPass: cfg.beansPass,
+      beansPerfect: cfg.beansPerfect,
+      bank: (window.QBank ? window.QBank.count() : 0)
+    };
+  }
+  /* 开局前检查：题库够不够、今天还有没有额度 */
+  function chalOpen() {
+    const cfg = chalCfg();
+    const n = window.QBank ? window.QBank.count() : 0;
+    if (!n) return { ok: false, why: 'empty', msg: '题库还是空的，先去「我的 → 破壳题库」粘贴错题' };
+    if (!chalLeft()) {
+      return { ok: false, why: 'limit', msg: '今天的 ' + (cfg.dailyLimit) + ' 局打完了，明天再来' };
+    }
+    const want = Math.min(cfg.count, n);
+    return { ok: true, count: want, minutes: cfg.minutes, passRate: cfg.passRate };
+  }
+  /* 结算：算豆、记账、写日志。res 来自 QBank.grade()，paper 是那一局的卷子 */
+  function chalFinish(res, paper) {
+    const cfg = chalCfg();
+    const c = chalDay();
+    const perfect = res.total > 0 && res.correct === res.total;
+    const passed = res.total > 0 && res.correct / res.total >= cfg.passRate - 1e-9;
+    let beans = 0;
+    if (passed) {
+      beans = cfg.beansPass + (perfect ? cfg.beansPerfect : 0);
+      S.cur.beans += beans;
+    }
+    c.used += 1;
+    c.plays += 1;
+    if (passed) c.wins += 1;
+    if (res.rate > c.best) c.best = res.rate;
+    c.beans += beans;
+
+    /* 学习量照样进统计 —— 挑战赛刷的题也是真刷的 */
+    S.stats.quizAttempts = (S.stats.quizAttempts || 0) + 1;
+    S.stats.quizAnswered = (S.stats.quizAnswered || 0) + res.total;
+    S.stats.quizCorrect = (S.stats.quizCorrect || 0) + res.correct;
+    if (passed) S.stats.quizPassed = (S.stats.quizPassed || 0) + 1;
+
+    /* 答错的题「取消掌握」：之前蒙对过、这次又错了，就该让它回到卷子里 */
+    if (window.QBank && window.QBank.unmarkMastered && Array.isArray(paper)) {
+      res.detail.forEach(function (d) {
+        if (!d.ok && paper[d.i]) window.QBank.unmarkMastered(paper[d.i].qid);
+      });
+    }
+    window.Store.pushLog('🏆 挑战赛 ' + res.correct + '/' + res.total +
+      '（' + Math.round(res.rate * 100) + '%）' +
+      (passed ? '，赢下 ' + beans + ' 可可豆。' : '，没到 ' + Math.round(cfg.passRate * 100) + '%，这次没有奖励。'));
+    window.Store.save(true);
+    checkAchievements();
+    return {
+      passed: passed, perfect: perfect, beans: beans,
+      left: chalLeft(), best: Math.round(c.best * 100)
+    };
+  }
+
   /* ---------------- 护理 ---------------- */
   function stageOf(pet) {
     let st = D.STAGES[0];
@@ -333,6 +433,49 @@ window.Game = (function () {
     window.Store.save(true);
     window.Store.pushLog('📭 ' + pet.name + ' 从保管室回到了场地。');
     return { ok: true, pet: pet };
+  }
+
+  /* ---------------- 送养（把不要的小生物托付出去，换回可可豆） ----------------
+     为什么不叫「卖掉」：这些小家伙是玩家一口一口喂大的，明码标价地卖会让人不舒服，
+     送养是同一件事，但心里顺得多——「它去了别的乐园，人家回一份谢礼」。
+     代价照旧：送走就再也回不来，所以界面必须二次确认。
+     谢礼 = 稀有度基数 × 阶段系数 + 成长值，越用心养大的越值钱。 */
+  const ADOPT_BASE = { 1: 18, 2: 45, 3: 110 };
+  const ADOPT_STAGE_MUL = { baby: 0.5, teen: 0.8, adult: 1.2, elite: 1.8 };
+  function adoptValue(pet) {
+    if (!pet) return 0;
+    const sp = speciesById(pet.speciesId) || {};
+    const base = ADOPT_BASE[sp.rarity] || ADOPT_BASE[1];
+    const st = stageOf(pet);
+    const mul = ADOPT_STAGE_MUL[st.key] || 1;
+    return Math.max(5, Math.round(base * mul + (pet.growth || 0) * 0.12));
+  }
+  function adoptPet(petId) {
+    const pet = petById(petId);
+    if (!pet) return { ok: false, msg: '找不到这只小生物' };
+    if (pet.illness) {
+      return { ok: false, msg: pet.name + '还在生病，先治好它再送养吧——到了新家也没人管它' };
+    }
+    const sp = speciesById(pet.speciesId);
+    const beans = adoptValue(pet);
+    const name = pet.name;
+    /* 把它从各处摘干净：先下工，再出货。留在岗位上的幽灵 id 会让建筑面板打不开。 */
+    ensureBuild();
+    Object.keys(S.build.staff || {}).forEach(function (k) {
+      const arr = S.build.staff[k] || [];
+      const j = arr.indexOf(petId);
+      if (j >= 0) arr.splice(j, 1);
+    });
+    const i = S.pets.indexOf(pet);
+    if (i >= 0) S.pets.splice(i, 1);
+    S.cur.beans += beans;
+    window.Store.pushLog('🤝 ' + name + ' 被送养到了别的乐园，对方回赠 ' + beans + ' 可可豆。');
+    window.Store.save(true);
+    checkAchievements();
+    return {
+      ok: true, beans: beans, name: name, species: sp,
+      msg: '🤝 ' + name + ' 有了新家，回赠你 ' + beans + ' 可可豆。'
+    };
   }
 
   /* ---------------- 生病与治疗 ---------------- */
@@ -910,6 +1053,13 @@ window.Game = (function () {
     canStore: canStore,
     storePet: storePet,
     unstorePet: unstorePet,
+    adoptValue: adoptValue,
+    adoptPet: adoptPet,
+    chalCfg: chalCfg,
+    chalLeft: chalLeft,
+    chalStatus: chalStatus,
+    chalOpen: chalOpen,
+    chalFinish: chalFinish,
     rollIllness: rollIllness,
     heal: heal,
     buy: buy,

@@ -6,7 +6,7 @@
  * - 版本号 CACHE 升一位即全量换新缓存（发新版记得 bump）
  * - 只拦本站 GET；云端 API 是跨域请求，天然不受影响，联网失败自动降级本地模式
  * ========================================================= */
-var CACHE = 'knowledge-cat-v29';
+var CACHE = 'knowledge-cat-v30';
 var ASSETS = [
   './',
   './index.html',

@@ -279,6 +279,21 @@ window.GAME_DATA = (function () {
   /* 两次都没过：关闭弹窗后可重新打开再考，不限总次数、不扣东西。
      这一关的目的是「让你真去练」，不是罚你。 */
 
+  /* ---------- 挑战赛（商店页，v1.23） ----------
+     跟破壳测验共用同一个题库，但它考的是「你答对了几成」，赢了发可可豆。
+     10 题 / 5 分钟 / 正确率 80% 才结算——这是全游戏唯一一处「主动给自己找题做」
+     的地方，所以奖励给得比食堂开饭大方：一次通关约等于两天的基础护理开销。
+     每天 3 张卷子封顶：不是怕你学太多，是不想让刷题变成「刷豆」，
+     那会把别的玩法全饿死。想放开就把 dailyLimit 调大或设成 0（不限）。 */
+  const CHALLENGE = {
+    count: 10,          /* 每局 10 道题（题库不足时按实际题数来） */
+    minutes: 5,         /* 限时 5 分钟，到点自动交卷 */
+    passRate: 0.8,      /* 正确率 80% 以上才赢 */
+    dailyLimit: 3,      /* 每天最多打 3 局 */
+    beansPass: 50,      /* 达标的奖励 🌰 */
+    beansPerfect: 50    /* 满分再额外加这么多 🌰 */
+  };
+
   /* ---------- 题库（这就是那个「端口」） ----------
      往里加题有两种方式，效果一样：
        A. 直接写在这个数组里（改代码，题会跟着版本走）；
@@ -906,7 +921,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.22',
+    VERSION: 'v1.23',
     WORLD: WORLD,
     ZONES: ZONES,
     MACHINES: MACHINES,
@@ -933,6 +948,7 @@ window.GAME_DATA = (function () {
     LEVELS: LEVELS,
     GACHA: GACHA,
     HATCH_QUIZ: HATCH_QUIZ,
+    CHALLENGE: CHALLENGE,
     QUESTION_BANK: QUESTION_BANK,
     BOOKS: BOOKS,
     QUESTION_TEXT_SAMPLE: QUESTION_TEXT_SAMPLE,

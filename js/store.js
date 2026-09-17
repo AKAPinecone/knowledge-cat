@@ -61,6 +61,8 @@ window.Store = (function () {
       saves: [],                   /* 存档槽：每项是一枚可带走的快照（含存档码） */
       save: { lastAt: 0, sinceTake: 0, lastTakeAt: 0, autoCount: 0 },  /* 存档统计 + 唠叨计数 */
       masteredQuestions: {},  /* 破壳测验里已答对的题 id -> timestamp；不再重复出现 */
+      /* 挑战赛（v1.23）：date 变了就当天清零；best 是历史最高正确率（0~1） */
+      challenge: { date: '', used: 0, plays: 0, wins: 0, best: 0, beans: 0 },
       study: {
         tasksDate: '',
         taskVer: 0,         /* 任务库版本；升级后强制重算今日任务 */
@@ -210,6 +212,15 @@ window.Store = (function () {
     if (Array.isArray(s.capsules)) {
       s.capsules.forEach(function (c) { if (c && c.place) c.place = 'pod'; });
     }
+    /* v1.23：挑战赛的当日额度 */
+    if (!s.challenge || typeof s.challenge !== 'object') s.challenge = {};
+    const ch = s.challenge;
+    if (typeof ch.date !== 'string') ch.date = '';
+    if (typeof ch.used !== 'number') ch.used = 0;
+    if (typeof ch.plays !== 'number') ch.plays = 0;
+    if (typeof ch.wins !== 'number') ch.wins = 0;
+    if (typeof ch.best !== 'number') ch.best = 0;
+    if (typeof ch.beans !== 'number') ch.beans = 0;
   }
 
   /* localStorage 只有 5MB 上下，而证据库里每条凭证都带一张 base64 缩略图。
