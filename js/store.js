@@ -54,6 +54,8 @@ window.Store = (function () {
         stock: {},         /* 物资：{ canteen:{water,food} } */
         day: {},           /* 当天已做过的事：{ 'canteen:work':'2026-09-14' } */
         lv: {},            /* 建筑等级：{ canteen:1 } */
+        ops: {},           /* v1.27 运营中：{ canteen:{startAt,finishAt,guests,crew,cost,lv} } */
+        logs: {},          /* v1.27 建筑小日志：{ canteen:[rec,...] }，每栋留最近 12 条 */
         trips: [],         /* 出游记录 */
         collection: []     /* 旅行带回来的收藏品 */
       },
@@ -188,6 +190,8 @@ window.Store = (function () {
     if (typeof s.cur.exp !== 'number') s.cur.exp = 0;
     if (typeof s.cur.level !== 'number') s.cur.level = 1;
     /* 老存档补小生物：第四状态条「娱乐」与保存舱标记 */
+    /* v1.27：性格写进 pet.trait；老存档没有这个字段，由 data.js 的 traitOf()
+       按 pet.id 稳定地推一个出来（同一只永远是同一个），所以这里不用硬补。 */
     if (Array.isArray(s.pets)) s.pets.forEach(function (p) {
       if (!p.stats) p.stats = {};
       if (typeof p.stats.fun !== 'number') p.stats.fun = 72;
@@ -207,7 +211,7 @@ window.Store = (function () {
        built/story/assign/staff/stock/day/lv 是对象，trips/collection 是数组。 */
     if (!s.build || typeof s.build !== 'object') s.build = {};
     [['built', 'o'], ['under', 'o'], ['story', 'o'], ['assign', 'o'], ['staff', 'o'],
-     ['stock', 'o'], ['day', 'o'], ['lv', 'o'],
+     ['stock', 'o'], ['day', 'o'], ['lv', 'o'], ['ops', 'o'], ['logs', 'o'],
      ['trips', 'a'], ['collection', 'a']].forEach(function (pair) {
       const k = pair[0], t = pair[1];
       if (s.build[k] === undefined || s.build[k] === null) s.build[k] = (t === 'a') ? [] : {};
@@ -583,7 +587,7 @@ window.Store = (function () {
     let minutes = (now - last) / 60000;
     if (minutes < 0) minutes = 0;
     if (minutes > 60 * 24 * 30) minutes = 60 * 24 * 30; /* 上限 30 天 */
-    const report = { minutes: Math.round(minutes), grown: [], hatched: [], sick: [], recovered: [], built: [] };
+    const report = { minutes: Math.round(minutes), grown: [], hatched: [], sick: [], recovered: [], built: [], ops: [] };
 
     /* 1. 孵化推进 —— 每次都要算（与界面上的进度条保持一致），不受"不足 1 分钟"影响 */
     state.capsules.forEach(function (c) {
@@ -614,6 +618,14 @@ window.Store = (function () {
       }
     }
 
+    /* 1.6 离线期间 / 在线轮询到期的「营业」（食堂 / 澡堂 / 图书馆，v1.27）
+          必须放在下面的 `minutes < 1` 早退之前——否则在线时倒计时归零也不结算，
+          只能等下一次跨分钟，看着像"倒计时走完了却什么都没发生"。 */
+    if (state.build && state.build.ops && window.Game && window.Game.finishOfflineOps) {
+      const fin = window.Game.finishOfflineOps(now);
+      if (fin && fin.length) report.ops = (report.ops || []).concat(fin);
+    }
+
     if (minutes < 1) { state.lastTick = now; return report; }
 
     /* 2. 生物状态衰减（保存舱里的不衰减、不生病，状态静止）
@@ -622,6 +634,9 @@ window.Store = (function () {
     state.pets.forEach(function (p) {
       if (p.stored) return;
       const aqua = (typeof D.isWaterDweller === 'function') ? D.isWaterDweller(p.speciesId) : false;
+      /* v1.27：性格决定掉得多快——慵懒的省心得多（0.72×），活泼的掉得快（1.15×） */
+      const tr = (typeof D.traitOf === 'function') ? D.traitOf(p) : null;
+      const decayMul = (tr && typeof tr.decay === 'number') ? tr.decay : 1;
       let illnessHappened = false;
       ['water', 'nutri', 'clean', 'fun'].forEach(function (k) {
         if (k === 'water' && aqua) {
@@ -630,7 +645,7 @@ window.Store = (function () {
           return;
         }
         const before = p.stats[k];
-        p.stats[k] = Math.max(0, before - D.DECAY_PER_MIN * minutes);
+        p.stats[k] = Math.max(0, before - D.DECAY_PER_MIN * minutes * decayMul);
         if (p.stats[k] <= 0) {
           p.neglect[k] = (p.neglect[k] || 0) + minutes;
         } else {

@@ -457,6 +457,13 @@
       if (r.built && r.built.length) {
         r.built.forEach(function (f) { toast('🏗️ ' + f.msg, 'ok', 6000); });
       }
+      /* v1.27：营业到点收工（离线回来 / 在线等着都一样结算） */
+      if (r.ops && r.ops.length) {
+        r.ops.forEach(function (o) { toast('✅ ' + o.msg, 'ok', 7000); });
+        if (bxPaint) bxPaint();
+        if (curTab === 'garden' && !activeMask()) renderView();
+        renderTop();
+      }
       renderTop();
       /* 乐园页含可拖动的地图：正在拖、或开着弹窗时不重绘，免得把手指下的地图抽走；
          内容指纹没变也不重绘，省得每 8 秒抖一下。 */
@@ -1179,7 +1186,6 @@
 
   function viewGarden() {
     window.Game.ensureBuild();
-    const loose = S.capsules.filter(function (c) { return !c.place; });
     let h = '';
     h += '<div class="world-wrap">';
     h += worldMapHtml();
@@ -1190,18 +1196,6 @@
 
     h += sitePanel();
     h += podPanel();
-
-    h += '<div class="panel">';
-    h += '<div class="panel-head"><h2>🥚 待安置的胶囊</h2>' +
-      '<span class="hint">点「孵化仓」放进去孵化</span></div>';
-    if (!loose.length) {
-      h += '<div class="empty">没有待安置的胶囊。去扭蛋机抽一颗吧。</div>';
-    } else {
-      h += '<div class="pet-list">';
-      loose.forEach(function (c) { h += capsuleCard(c); });
-      h += '</div>';
-    }
-    h += '</div>';
     return h;
   }
 
@@ -1696,19 +1690,11 @@
           return '<option value="' + p.id + '">' + esc(p.name) + '（' + esc(sp.name) + ' · ' + st.name + '）</option>';
         }).join('') + '</select></div>';
     }
-    if (id === 'canteen') {
-      const stk = (S.build.stock && S.build.stock[id]) || {};
-      h += '<div class="stock-row">' +
-        '<span class="stock-ico">💧 清水 ' + (stk.water || 0) + '</span>' +
-        '<span class="stock-ico">🍖 饲料 ' + (stk.food || 0) + '</span>' +
-        '<button class="btn btn-sm" data-act="bx-stock" data-id="' + id + '" data-item="water">投清水</button>' +
-        '<button class="btn btn-sm" data-act="bx-stock" data-id="' + id + '" data-item="food">投饲料</button>' +
-        '</div>';
+    /* v1.27：运营建筑（食堂 / 澡堂 / 图书馆）走倒计时制 */
+    if (typeof window.Game.opCfg === 'function' && window.Game.opCfg(id)) {
+      h += opBoxHtml(id);
     }
     const ACTS = {
-      canteen: { k: 'canteen', label: '🍲 开饭', tip: '按人头消耗清水 + 饲料，食堂上交可可豆' },
-      bath: { k: 'bath', label: '🛁 烧水洗澡', tip: '全员洗澡，清洁值回升，收到营养液' },
-      library: { k: 'library', label: '📚 一起看书', tip: '全员娱乐值回升，不用买逗猫棒' },
       travel: { k: 'travel', label: '🧭 出团', tip: '第 1 只当导游，带同伴出游，回来带土特产和收藏品' },
       museum: { k: 'museum', label: '🏛️ 查看陈列', tip: '看旅行收藏品和成就奖杯' }
     };
@@ -1722,6 +1708,77 @@
       h += '<div class="bx-tip">' + a.tip + '</div>';
     }
     h += '<button class="btn btn-sm btn-block" data-act="bx-up" data-id="' + id + '">🔨 扩建（更大容量 · 更多产出）</button>';
+    return h;
+  }
+
+  /* ---- 运营建筑：倒计时框 + 小日志（v1.27） ---- */
+  function opBoxHtml(id) {
+    const cfg = window.Game.opCfg(id);
+    const stt = window.Game.opStatus(id);
+    const capN = window.Game.opGuestCap(id);
+    let h = '<div class="op-box' + (stt.on ? ' running' : '') + '">';
+    /* 这一轮要花什么 */
+    const costBits = [];
+    Object.keys(cfg.costPerGuest || {}).forEach(function (k) {
+      const it = D.ITEM_MAP[k];
+      const per = cfg.costPerGuest[k] || 0;
+      costBits.push((it ? it.emoji : '') + (it ? it.name : k) + ' ×' + per + '/位');
+    });
+    h += '<div class="op-meta">' +
+      '<span>⏱️ 一轮 ' + cfg.minutes + ' 分钟</span>' +
+      '<span>👥 接待 ' + capN + ' 位</span>' +
+      (costBits.length ? '<span>🧺 ' + costBits.join('、') + '</span>' : '<span>🧺 不耗物资</span>') +
+      '<span>💪 劳力：' + (cfg.labor || 1) + ' 只在岗出力（需求 -' + (cfg.laborNeed || 6) + '）</span>' +
+      '</div>';
+    if (stt.on) {
+      h += '<div class="bar bar-lg" style="margin:10px 0 6px"><i style="width:' +
+        Math.round(stt.p * 100) + '%;background:linear-gradient(90deg,#F0C36D,#E9A13B)"></i></div>';
+      h += '<div class="op-run">营业中 · 还剩约 ' + stt.minutes + ' 分钟（' + stt.guests + ' 位客人在里面）</div>';
+      const names = (stt.st.guests || []).map(function (pid) {
+        const p = window.Game.petById(pid);
+        return p ? p.name : '';
+      }).filter(Boolean);
+      if (names.length) h += '<div class="op-guests">' + esc(names.join('、')) + '</div>';
+    } else {
+      h += '<button class="btn btn-primary btn-block" data-act="op-start" data-id="' + id + '">' +
+        cfg.emoji + ' ' + cfg.label + '</button>';
+      h += '<div class="bx-tip">开工要物资 + 在岗小生物的劳力；收工时给来光顾的小生物' +
+        esc(cfg.verb === '吃了顿热乎的' ? '管饱' : (cfg.verb === '泡了个热水澡' ? '洗干净' : '补心情')) +
+        '，并记进下面的小日志。</div>';
+    }
+    h += '</div>';
+
+    /* 小日志 */
+    const logs = window.Game.opLogs(id);
+    h += '<div class="panel-head" style="margin-top:14px"><h2>📔 ' + esc((window.Game.buildingById(id) || {}).name || '') + ' 的小日志</h2>' +
+      '<span class="hint">最近 ' + logs.length + ' 条</span></div>';
+    if (!logs.length) {
+      h += '<div class="empty">还没有开过张。安排小生物来上班，点上面的按钮开工。</div>';
+    } else {
+      h += '<div class="op-logs">';
+      logs.forEach(function (rec) {
+        h += '<div class="op-log">' +
+          '<div class="opl-head"><span>' + rec.emoji + ' ' + esc(rec.label) + '</span>' +
+          '<span class="spacer"></span><span class="opl-time">' + esc(fmtWhen(rec.at)) + '</span></div>';
+        rec.guests.forEach(function (g) {
+          const dtx = g.delta.map(function (d2) {
+            if (d2.stat === 'grow') return '成长 +' + d2.v;
+            const si = D.STAT_INFO[d2.stat] || { label: d2.stat, emoji: '' };
+            return si.emoji + si.label + (d2.v >= 0 ? ' +' : ' ') + d2.v;
+          }).join('　');
+          h += '<div class="opl-row">' +
+            '<span class="opl-who">' + g.emoji + ' <b>' + esc(g.name) + '</b>' +
+              '<i class="opl-trait">' + g.traitEmoji + esc(g.traitName) + '</i></span>' +
+            '<span class="opl-act">' + esc(g.act) + '</span>' +
+            (g.accident ? '<span class="opl-acc">💥 ' + esc(g.accident.name) + '：' + esc(g.accident.text) + '</span>' : '') +
+            '<span class="opl-delta">' + esc(dtx) + '</span>' +
+            '</div>';
+        });
+        h += '<div class="opl-out">产出：' + esc(rec.out) +
+          (rec.crew && rec.crew.length ? '　·　出力：' + esc(rec.crew.join('、')) : '') + '</div>';
+      });
+      h += '</div>';
+    }
     return h;
   }
 
@@ -2010,17 +2067,52 @@
       '<div class="bar bar-thin" style="flex:1"><i style="width:' + growPct + '%;background:linear-gradient(90deg,#9FDCAE,#4CA96B)"></i></div>' +
       '<span style="color:#8AA394">' + Math.round(p.growth) + (nextStage ? ' / ' + nextStage.min : '') + '</span></div>';
 
+    /* v1.27 性格：一句话人设 + 它真实带来的三条影响（说人话，别只给个词） */
+    const tr = (typeof D.traitOf === 'function') ? D.traitOf(p) : null;
+    if (tr) {
+      const dTxt = tr.decay < 0.85 ? '状态掉得慢，省心' : (tr.decay > 1.1 ? '状态掉得快，要多看看' : '状态掉得中不溜');
+      const gTxt = (tr.grow >= 1.1 ? '成长快' : (tr.grow < 0.95 ? '成长慢一点' : '成长正常'));
+      const mTxt = (tr.mischief >= 1.5 ? '爱闯祸' : (tr.mischief < 0.7 ? '几乎不惹事' : '偶尔闯点小祸'));
+      const fav = Object.keys(tr.like || {}).sort(function (a, b) { return (tr.like[b] || 0) - (tr.like[a] || 0); })[0];
+      const favName = fav ? ((D.BUILDINGS || []).filter(function (b) { return b.id === fav; })[0] || {}).name : '';
+      body += '<div class="trait-card" style="margin-top:10px">' +
+        '<span class="trait-chip" style="background:' + tr.color + '1A;border-color:' + tr.color + '55;color:#3E5A47">' +
+          tr.emoji + ' ' + esc(tr.name) + '</span>' +
+        '<span class="trait-one">' + esc(tr.one) + '</span>' +
+        '<div class="trait-fx">' +
+          '<span>' + dTxt + '</span><span>' + gTxt + '</span><span>' + mTxt + '</span>' +
+          (favName ? '<span>最爱去：' + esc(favName) + '</span>' : '') +
+        '</div></div>';
+    }
+
+    /* v1.27：基础道具与高级道具分成两个按钮。
+       以前两者混在一个数字里、由系统挑一件消耗，玩家买了高级货却看不出它到底用了没有——
+       现在基础按钮用基础货，✨ 按钮明确用高级货，用完在提示里点名是哪一件。 */
     body += '<div class="pet-acts" style="margin-top:12px">';
     acts.forEach(function (a) {
       const act = D.CARE[a];
       const si = D.STAT_INFO[act.stat];
-      const tiers = D.CARE_TIERS[act.stat] || [act.item];
-      let own = 0; tiers.forEach(function (t) { own += (S.bag[t] || 0); });
-      const disabled = (own <= 0 || p.illness || p.stored);
-      body += '<button class="act" data-care="' + a + '"' + (disabled ? ' disabled' : '') +
-        ' title="' + si.label + '道具还剩 ' + own + ' 个">' +
-        '<span class="act-badge' + (own <= 0 ? ' empty' : '') + '">' + own + '</span>' +
-        act.emoji + ' ' + act.label + (own <= 0 ? '（缺货）' : '') + '</button>';
+      const opt = (typeof window.Game.careOptionsFor === 'function')
+        ? window.Game.careOptionsFor(p, a) : null;
+      const base = opt ? opt.base : [];
+      const adv = opt ? opt.adv : [];
+      let baseOwn = 0; base.forEach(function (x) { baseOwn += x.own; });
+      let advOwn = 0; adv.forEach(function (x) { advOwn += x.own; });
+      const off = p.illness || p.stored;
+      body += '<button class="act' + (baseOwn <= 0 ? ' act-out' : '') + '" data-care="' + a + '" data-prefer="base"' +
+        (baseOwn <= 0 || off ? ' disabled' : '') +
+        ' title="' + si.label + '：基础道具还剩 ' + baseOwn + ' 个">' +
+        '<span class="act-badge' + (baseOwn <= 0 ? ' empty' : '') + '">' + baseOwn + '</span>' +
+        act.emoji + ' ' + act.label + (baseOwn <= 0 ? '（缺货）' : '') + '</button>';
+      if (adv.length) {
+        const it = adv[0];
+        body += '<button class="act act-adv' + (advOwn <= 0 ? ' act-out' : '') + '" data-care="' + a + '" data-prefer="adv"' +
+          (advOwn <= 0 || off ? ' disabled' : '') +
+          ' title="用「' + esc(it.name) + '」（高级道具）：' + si.label + ' +' + (it.boost ? it.boost.amount : 0) +
+            '，还剩 ' + advOwn + ' 个">' +
+          '<span class="act-badge adv-badge' + (advOwn <= 0 ? ' empty' : '') + '">' + advOwn + '</span>' +
+          '✨ ' + it.emoji + esc(it.name) + (advOwn <= 0 ? '（缺货）' : '') + '</button>';
+      }
     });
     body += '</div>';
 
@@ -2071,13 +2163,18 @@
         $$('.act[data-care]', m).forEach(function (el) {
           el.onclick = function () {
             const act = el.dataset.care;
-            const r = window.Game.care(p.id, act);
+            const prefer = el.dataset.prefer || 'base';
+            const r = window.Game.care(p.id, act, { prefer: prefer });
             if (!r.ok) { toast('❌ ' + r.msg, 'err'); return; }
             /* 先把动作演完：音效 + 头像上的小动画；这时状态其实已经结算好了 */
             $$('.act[data-care]', m).forEach(function (b) { b.disabled = true; });
             playSfx(act);
             careFx(act, $('#cm-face', m));
-            toast(r.msg, 'ok');
+            /* 明确反馈：点名用了哪一件道具（高级道具尤其要说清楚，不然像没生效） */
+            toast(r.msg + (r.traitLine ? '　' + r.traitLine : ''), 'ok');
+            if (r.isAdv) {
+              window.Store.pushLog('✨ 用掉了高级道具「' + r.itemName + '」照顾 ' + p.name + '。');
+            }
             render();                     /* 乐园场景里的状态气泡跟着变 */
             /* 动画放完，原位刷新这张状态面板。
                守卫：期间用户要是关了窗或点开了别的弹窗，就什么都不做——
@@ -2318,6 +2415,8 @@
       h += '<div class="shop-grid">';
       D.ITEMS.filter(function (i) { return i.kind === g.k; }).forEach(function (it) {
         const locked = it.reqLevel && S.cur.level < it.reqLevel;
+        /* v1.27：光写「🔒 Lv.3」太干了——顺手告诉你还差多少经验，别让人以为永远买不到 */
+        const gap = locked && D.itemUnlockGap ? D.itemUnlockGap(it.id, S.cur.exp, S.cur.level) : 0;
         const q = shopQty[it.id] || 1;
         const own = (it.kind === 'facility')
           ? (it.id === 'hourglass' ? (S.bag.hourglass || 0) : window.Game.podCap())
@@ -2325,7 +2424,7 @@
         const ownLabel = it.kind === 'facility'
           ? (it.id === 'hourglass' ? '持有 ' + own + ' 个' : '当前 ' + own + ' 个托位')
           : '持有 ' + own + ' 个';
-        const ownShow = locked ? ('🔒 需 Lv.' + it.reqLevel + ' 解锁') : ownLabel;
+        const ownShow = locked ? ('🔒 Lv.' + it.reqLevel + ' 解锁' + (gap > 0 ? '（还差 ' + gap + ' 经验）' : '')) : ownLabel;
         h += '<div class="shop-item' + (locked ? ' locked' : '') + '">' +
           '<div class="si-top"><span class="si-ico">' + it.emoji + '</span>' +
             '<div><div class="si-name">' + it.name + (locked ? ' <span class="lock-mini">🔒</span>' : '') + '</div><div class="si-own">' + ownShow + '</div></div></div>' +
@@ -2333,7 +2432,7 @@
           '<div class="si-bottom">' +
             '<span class="price">' + it.price + '</span>' +
             (locked
-              ? '<span class="lock-tag">🔒 Lv.' + it.reqLevel + '</span>'
+              ? '<span class="lock-tag">🔒 Lv.' + it.reqLevel + (gap > 0 ? ' · 还差 ' + gap + ' 经验' : '') + '</span>'
               : '<button class="qty-btn" data-act="qty" data-id="' + it.id + '" data-d="-1">−</button>' +
                 '<span class="qty-val" id="qty-' + it.id + '">' + q + '</span>' +
                 '<button class="qty-btn" data-act="qty" data-id="' + it.id + '" data-d="1">＋</button>' +
@@ -3014,28 +3113,25 @@
       renderTop();
       return;
     }
-    if (act === 'bx-stock') {
-      const r = window.Game.canteenStock(ds.id, ds.item);
-      toast((r.ok ? '🥣 ' + r.msg : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
+    /* v1.27：食堂 / 澡堂 / 图书馆改为倒计时运营，开工走这里 */
+    if (act === 'op-start') {
+      const r = window.Game.opStart(ds.id);
+      toast((r.ok ? '✅ ' : '❌ ') + r.msg, r.ok ? 'ok' : 'warn', 6500);
+      if (r.ok && r.guestNames && r.guestNames.length) {
+        toast('👋 来光顾的是：' + esc(r.guestNames.join('、')), 'ok', 6000);
+      }
       if (bxPaint) bxPaint(); else render();
+      renderTop();
       return;
     }
     if (act === 'bx-do') {
       const k = ds.kind;
       if (k === 'museum') return openMuseumModal();
       let r = null;
-      if (k === 'canteen') r = window.Game.canteenRun(ds.id);
-      else if (k === 'bath') r = window.Game.bathRun(ds.id);
-      else if (k === 'library') r = window.Game.libraryRun(ds.id);
-      else if (k === 'travel') r = window.Game.travelRun(ds.id);
+      if (k === 'travel') r = window.Game.travelRun(ds.id);
       if (!r) return;
       toast((r.ok ? '✅ ' : '❌ ') + r.msg, r.ok ? 'ok' : 'warn', 6500);
-      if (r.ok) {
-        if (k === 'canteen') playSfx('food');
-        else if (k === 'bath') playSfx('bath');
-        else if (k === 'library') playSfx('music');
-        else if (k === 'travel') playCheer();
-      }
+      if (r.ok && k === 'travel') playCheer();
       if (bxPaint) bxPaint(); else render();
       renderTop();
       return;

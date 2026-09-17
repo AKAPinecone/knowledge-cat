@@ -271,13 +271,74 @@ window.GAME_DATA = (function () {
   };
 
   /* 每个状态维度可选的道具 tier（从基础到高级，越往后越强）。
-     护理时优先消耗玩家已拥有的最高 tier 道具。 */
+     护理时优先消耗玩家已拥有的最高 tier 道具。
+     注意：这是「全量视图」，只用于兼容老代码与统计；真正决定消耗哪一件的是
+     下面的 CARE_TIERS_BY_KIND —— 见 v1.27 的说明。 */
   const CARE_TIERS = {
     water: ['water'],
     nutri: ['fert', 'food', 'fert2', 'food2'],
     clean: ['pest', 'soap'],
     fun:   ['music', 'teaser', 'music2', 'teaser2']
   };
+
+  /* 【v1.27】按「小生物类别」分组的 tier：先基础、后高级，且只取**同类**道具。
+     为什么要分家：旧表把温室货和孵化仓货混在一个数组里，于是
+       ① 给植物「施肥」会消耗掉「营养大餐」（那是给动物吃的）；
+       ② 给动物「逗玩」会消耗掉「环绕音响」（那是温室用品）。
+     玩家买了高级道具却看着它被莫名其妙地用在不对的地方，就成了「高级道具用不了」。
+     分家之后：植物只吃温室货，动物只吃孵化仓货，谁也不动谁的库存。 */
+  const CARE_TIERS_BY_KIND = {
+    plantish: {            /* 植物 / 真菌 / 藻类 */
+      water: ['water'],
+      nutri: ['fert', 'fert2'],
+      clean: ['pest'],
+      fun:   ['music', 'music2']
+    },
+    animal: {
+      water: ['water'],
+      nutri: ['food', 'food2'],
+      clean: ['soap'],
+      fun:   ['teaser', 'teaser2']
+    }
+  };
+
+  /* 某只小生物在某个状态维度上可选的道具（同类、先基础后高级） */
+  function careTiersFor(kind, stat) {
+    const g = CARE_TIERS_BY_KIND[kind === 'animal' ? 'animal' : 'plantish'];
+    const t = (g && g[stat]) || CARE_TIERS[stat] || [];
+    return t.slice();
+  }
+  /* 拆成「基础 / 高级」两组，给界面分出两个按钮：
+     基础按钮用基础货，✨ 按钮明确用高级货——玩家自己决定这一下要用哪件。 */
+  function careTierSplit(kind, stat) {
+    const all = careTiersFor(kind, stat);
+    const base = [], adv = [];
+    all.forEach(function (id) {
+      const it = ITEM_MAP[id];
+      if (it && it.reqLevel) adv.push(id); else base.push(id);
+    });
+    return { base: base, adv: adv, all: all };
+  }
+  /* 这件道具在当前照顾等级下解锁了吗（高级道具带 reqLevel） */
+  function itemUnlocked(itemId, level) {
+    const it = ITEM_MAP[itemId];
+    if (!it || !it.reqLevel) return true;
+    return (level || 1) >= it.reqLevel;
+  }
+  /* 还差多少经验解锁：已解锁返回 0 */
+  function itemUnlockGap(itemId, exp, level) {
+    const it = ITEM_MAP[itemId];
+    if (!it || !it.reqLevel) return 0;
+    const lv = level || levelOfExp(exp || 0);
+    if (lv >= it.reqLevel) return 0;
+    const needExp = LEVELS[it.reqLevel - 1] || 0;
+    return Math.max(0, needExp - (exp || 0));
+  }
+  function levelOfExp(exp) {
+    let lv = 1;
+    for (let i = 0; i < LEVELS.length; i++) { if (exp >= LEVELS[i]) lv = i + 1; }
+    return lv;
+  }
 
   /* 状态条定义 */
   const STAT_INFO = {
@@ -311,6 +372,103 @@ window.GAME_DATA = (function () {
      升级解锁更高级的照顾道具（见 ITEMS 的 reqLevel），并给里程碑奖励（豆 + 券）。
      LEVELS[i] = 升到 Lv.(i+1) 需要的累计经验。 */
   const LEVELS = [0, 60, 160, 320, 560, 920, 1400, 2050, 2900, 4000, 5400];
+
+  /* ---------- 性格（v1.27） ----------
+     每只小生物孵化时随机获得一个性格，写进 pet.trait，之后一直不变。
+     性格不是装饰，它真的改五件事：
+       decay    状态衰减倍率（慵懒省心得多，活泼掉得快）
+       grow     护理给的成长倍率
+       exp      护理给的经验倍率
+       mischief 在运营建筑里惹出意外的概率倍率
+       like     对各建筑的"想去程度"权重（决定它会不会来光顾）
+     lines 是它的说话方式：进建筑干的事、出意外时的反应、被照顾后的回应。 */
+  const PERSONALITIES = [
+    {
+      id: 'lively', name: '活泼', emoji: '🤸', color: '#E9A13B',
+      one: '一天不跑三圈浑身难受',
+      decay: 1.15, grow: 1.0, exp: 1.05, mischief: 1.2, visitMul: 1.15,
+      like: { canteen: 1.0, bath: 1.6, library: 0.55, travel: 1.35 },
+      lines: {
+        canteen: ['一路小跑冲进来，占了个靠窗的位置。', '边吃边晃腿，汤勺敲得叮当响。'],
+        bath: ['第一个跳进池子，溅了大家一身水。', '泡着泡着开始扑腾，把泡沫全推给了隔壁。'],
+        library: ['坐了三分钟就开始转笔。', '把书倒过来举着看，说这样更清楚。'],
+        accident: ['玩得太嗨，把这儿弄得一团糟。'],
+        care: '围着你蹦了两圈，尾巴甩成螺旋桨。'
+      }
+    },
+    {
+      id: 'lazy', name: '慵懒', emoji: '😴', color: '#7FB069',
+      one: '能躺着绝不坐着',
+      decay: 0.72, grow: 0.92, exp: 1.0, mischief: 0.6, visitMul: 0.9,
+      like: { canteen: 1.5, bath: 1.25, library: 1.0, travel: 0.45 },
+      lines: {
+        canteen: ['挪了十分钟才挪到座位上，然后吃了两份。', '把碗端起来直接喝，省得抬头。'],
+        bath: ['泡到水凉了还不想起来。', '整个人摊在池边，让泡沫自己流过来。'],
+        library: ['挑了本最厚的垫在头下，睡得很好。', '翻了三页，书签还停在第一页。'],
+        accident: ['懒得躲，于是结结实实地吃了点小亏。'],
+        care: '翻了个身，示意你也可以歇会儿。'
+      }
+    },
+    {
+      id: 'curious', name: '好奇', emoji: '🔍', color: '#4EA8DE',
+      one: '什么都要先闻一闻',
+      decay: 1.05, grow: 1.18, exp: 1.12, mischief: 1.9, visitMul: 1.25,
+      like: { canteen: 1.0, bath: 0.9, library: 1.7, travel: 1.75 },
+      lines: {
+        canteen: ['先把每道菜都闻了一遍才动筷子。', '问厨师这汤是怎么熬的，问到第三遍。'],
+        bath: ['认真研究排水口是怎么工作的。', '把肥皂推到水面上，看它漂到哪儿去。'],
+        library: ['从第一排抽到最后一排，抱了七本回来。', '翻到一页云南地图，看了整整一小时。'],
+        accident: ['想看看接下来会发生什么，于是伸手了。'],
+        care: '盯着你手里的东西看了很久，眼睛亮晶晶的。'
+      }
+    },
+    {
+      id: 'timid', name: '胆小', emoji: '🐚', color: '#C77DFF',
+      one: '一有动静就先躲起来',
+      decay: 0.92, grow: 1.0, exp: 1.0, mischief: 0.4, visitMul: 0.72,
+      like: { canteen: 0.85, bath: 0.7, library: 1.5, travel: 0.35 },
+      lines: {
+        canteen: ['在门口站了半天，才敢进来坐下。', '小口小口地吃，生怕打扰到谁。'],
+        bath: ['先伸一只脚试水温，试了五次。', '缩在池子最角落，水波一动就抬头。'],
+        library: ['挑了最里面那个位置，谁也看不见。', '翻书翻得极轻，怕吵到旁边的人。'],
+        accident: ['被吓了一跳，躲到桌子底下去了。'],
+        care: '轻轻碰了碰你的手，很快就缩回去了。'
+      }
+    },
+    {
+      id: 'foodie', name: '嘴馋', emoji: '🤤', color: '#C4708E',
+      one: '闻到香味就走不动路',
+      decay: 1.1, grow: 1.05, exp: 1.0, mischief: 1.1, visitMul: 1.1,
+      like: { canteen: 2.0, bath: 0.6, library: 0.5, travel: 0.95 },
+      lines: {
+        canteen: ['闻着味儿来的，还没开门就在门口等着。', '吃完了，还眼巴巴地看着锅。'],
+        bath: ['洗到一半问：洗澡水能不能加盐？', '全程惦记着食堂今天做什么菜。'],
+        library: ['把书签夹在美食那一页。', '看了一会儿就溜去食堂门口转悠。'],
+        accident: ['偷吃了一口不该吃的，当场被发现。'],
+        care: '吃完了，还眼巴巴看着你的口袋。'
+      }
+    }
+  ];
+  const PERSONALITY_MAP = {};
+  PERSONALITIES.forEach(function (t) { PERSONALITY_MAP[t.id] = t; });
+  /* 取性格：老存档没有 trait 就按 id 稳定地挑一个（同一只永远是同一个） */
+  function traitOf(pet) {
+    const t = pet && pet.trait ? PERSONALITY_MAP[pet.trait] : null;
+    if (t) return t;
+    let h = 0;
+    const s = String((pet && (pet.id || pet.name)) || 'x');
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return PERSONALITIES[h % PERSONALITIES.length];
+  }
+  /* 孵化时随机分配一个性格 */
+  function rollTrait() { return PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)].id; }
+  /* 性格的一句话台词 */
+  function traitLine(pet, kind) {
+    const t = traitOf(pet);
+    const arr = t.lines && t.lines[kind];
+    if (!arr || !arr.length) return '';
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
 
   /* ---------- 扭蛋 ---------- */
   const GACHA = {
@@ -900,6 +1058,69 @@ window.GAME_DATA = (function () {
     upgradeFactor: 3      /* 连续建设升级：需要的人数 = 1 + 已用次数 * 这个系数的阶梯 */
   };
 
+  /* ---------- 运营建筑：倒计时制（v1.27） ----------
+     食堂 / 澡堂 / 图书馆不再是「点一下当天就没了」，改成一次真正的营业：
+       ① 开工：消耗指定物品（按人头上算）+ 在岗小生物的劳力（需求值下降）
+       ② 倒计时：这段时间内建筑「营业中」，谁也开不了第二次
+       ③ 收工：产出照旧，并且**给前来光顾的小生物提供对应服务**
+                （食堂管饱、澡堂管干净、图书馆管心情），顺带留一份小日志
+     日志里记：谁来了、在这儿干了什么、状态因此变了多少；还有小概率意外会出负效果。
+     谁来光顾由性格决定（见 PERSONALITIES.like）：嘴馋的闻着味就来，胆小的十次才来一次。 */
+  const OPS = {
+    canteen: {
+      id: 'canteen', label: '开饭', emoji: '🍲',
+      minutes: 30,
+      labor: 1,                                   /* 至少几位在岗小生物出力 */
+      laborNeed: 6,                               /* 每位出力者四项需求各降这么多 */
+      costPerGuest: { water: 1, food: 1 },        /* 每位客人消耗的物资 */
+      guestsBase: 2, guestsPerLv: 1,              /* 可接待人数 = base + 等级 */
+      want: 'nutri',                              /* 哪一维状态越低越想来 */
+      serve: { nutri: 26, water: 22, fun: 8 },
+      verb: '吃了顿热乎的',
+      gain: 'beans',
+      accident: {
+        chance: 0.12, name: '吃撑了',
+        stat: { nutri: -12, fun: -6 },
+        text: '一不留神吃撑了，蹲在门槛上不想动。'
+      }
+    },
+    bath: {
+      id: 'bath', label: '烧水洗澡', emoji: '🛁',
+      minutes: 25,
+      labor: 1,
+      laborNeed: 6,
+      costPerGuest: { water: 1 },                 /* 烧热水要水 */
+      guestsBase: 2, guestsPerLv: 1,
+      want: 'clean',
+      serve: { clean: 28, fun: 6 },
+      verb: '泡了个热水澡',
+      gain: 'fert',
+      accident: {
+        chance: 0.1, name: '滑了一跤',
+        stat: { clean: -10, fun: -8 },
+        text: '踩到肥皂滑了一跤，委屈地甩了甩毛。'
+      }
+    },
+    library: {
+      id: 'library', label: '开门看书', emoji: '📚',
+      minutes: 40,
+      labor: 1,
+      laborNeed: 4,
+      costPerGuest: {},
+      guestsBase: 2, guestsPerLv: 1,
+      want: 'fun',
+      serve: { fun: 30 }, grow: 6,                /* 图书馆额外给点成长值 */
+      verb: '安静看了一下午书',
+      gain: 'none',
+      accident: {
+        chance: 0.08, name: '啃坏了书角',
+        stat: { fun: -6, clean: -4 },
+        text: '看着看着把书角啃了个缺口，心虚地装睡。'
+      }
+    }
+  };
+  const OP_IDS = Object.keys(OPS);
+
   /* 旅行社带回来的收藏品（陈列在博物馆里）。rarity: 1 普通 / 2 稀有 / 3 传说 */
   const COLLECTIONS = [
     { id: 'col_tie', name: '扎染方巾', emoji: '🧣', rarity: 1, from: '周城' },
@@ -1005,13 +1226,25 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.26',
+    VERSION: 'v1.27',
     WORLD: WORLD,
     ZONES: ZONES,
     MACHINES: MACHINES,
     BUILDINGS: BUILDINGS,
     BUILD_RULE: BUILD_RULE,
+    OPS: OPS,
+    OP_IDS: OP_IDS,
+    PERSONALITIES: PERSONALITIES,
+    PERSONALITY_MAP: PERSONALITY_MAP,
+    traitOf: traitOf,
+    rollTrait: rollTrait,
+    traitLine: traitLine,
+    careTiersFor: careTiersFor,
+    careTierSplit: careTierSplit,
+    itemUnlocked: itemUnlocked,
+    itemUnlockGap: itemUnlockGap,
     STORY: STORY,
+    CARE_TIERS_BY_KIND: CARE_TIERS_BY_KIND,
     COLLECTIONS: COLLECTIONS,
     EXAM_DATE: EXAM_DATE,
     PHASES: PHASES,
