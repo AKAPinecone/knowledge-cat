@@ -10,8 +10,16 @@ window.Study = (function () {
   const D = window.GAME_DATA;
   let S = null;
 
+  /* 读书进度统一走 data 层（store 在 study 下层，不能反调，所以规则放在 data 层） */
+  function bookProgressOf(bookId) {
+    if (typeof D.bookProgressOf === 'function') return D.bookProgressOf(bookId);
+    const days = (S.bookProgress[bookId] | 0);                 /* 兜底：老逻辑的退化版 */
+    const plan = Math.max(D.BOOK_DAYS_MIN || 6, days);
+    return { days: days, plan: plan, pct: Math.min(1, days / plan), done: days >= plan };
+  }
+
   /* 任务库版本：升级后强制重算当天任务，避免老存档里的旧任务结构残留 */
-  const TASK_VER = 8;  /* v8：面试问答训练 → 综合问答训练（标题/标签改名）；v7：面试问答与导游词改为「练习台」模式；导游词不再限定每日具体篇目；面试问答不再登记题量，而是在练习台练够 10 道即完成 */
+  const TASK_VER = 9;  /* v9：读书进度改为「实际读了几天 / 计划几天」；v8：面试问答训练 → 综合问答训练（标题/标签改名）；v7：面试问答与导游词改为「练习台」模式；导游词不再限定每日具体篇目；面试问答不再登记题量，而是在练习台练够 10 道即完成 */
 
   /* 前端回调，由 app.js 挂载 */
   const hooks = {
@@ -51,12 +59,15 @@ window.Study = (function () {
     return best || D.SCRIPTS[0];
   }
 
+  /* 「今天读哪本」的推荐（v1.26 改）
+     旧算法直接跳过已完成的书，于是"读完了"就等于"这本再也读不了"——想二刷只能手动点。
+     现在改成按完成度挑最落后的那本推荐：已完成的书完成度 100%，天然排在最后，
+     等于"还有没读完的先推没读完的，都读完了就轮着二刷"。 */
   function nextBook() {
-    let best = null, bestDay = 999;
+    let best = null, bestPct = 2;
     D.SUBJECTS.forEach(function (sub) {
-      if (S.bookProgress['done_' + sub.id]) return;
-      const day = S.bookProgress[sub.id] || 0;
-      if (day < bestDay) { bestDay = day; best = sub; }
+      const p = bookProgressOf(sub.id);
+      if (p.pct < bestPct) { bestPct = p.pct; best = sub; }
     });
     return best || D.SUBJECTS[0];
   }
@@ -500,6 +511,7 @@ window.Study = (function () {
     /* 精读登记：把「读了哪本 / 读了什么 / 笔记」也留一份进证据库 */
     if (task.verify.type === 'reading' && proof.reading) {
       const lines = ['读了：《' + (task.ctx.bookName || '课本') + '》' + String(proof.reading.read || '').trim()];
+      if (proof.reading.whole) lines.push('（今天一整天都在读这本）');
       if (proof.reading.note) lines.push('笔记：' + String(proof.reading.note).trim());
       window.Store.addEvidence({
         type: 'note', taskId: uid,
@@ -534,19 +546,17 @@ window.Study = (function () {
     task.at = Date.now();
     S.study.kolbToday[task.kolb] = (S.study.kolbToday[task.kolb] || 0) + 1;
 
-    /* 课本精读进度 */
+    /* 课本精读进度（v1.26：按「实际读的天数 / 计划天数」算，不再数打卡次数）
+       计划天数 = max(下限, 已读天数)，所以读得快的人第 6 天就能标读完，不必凑满 8 次。 */
     if (task.libId === 'p1_read') {
       const bid = task.ctx.bookId;
       S.bookProgress[bid] = (S.bookProgress[bid] || 0) + 1;
-      const need = D.BOOK_DAYS || 8;
-      if (S.bookProgress[bid] >= need) {
-        S.bookProgress[bid] = need;
-        if (!S.bookProgress['done_' + bid]) {
-          S.bookProgress['done_' + bid] = 1;
-          const n = D.SUBJECTS.filter(function (x) { return S.bookProgress['done_' + x.id]; }).length;
-          S.stats.booksDone = n;
-          window.Store.pushLog('📚 《' + task.ctx.bookName + '》读完一遍（累计 ' + n + '/4 本）');
-        }
+      const bp = bookProgressOf(bid);
+      if (bp.done && !S.bookProgress['done_' + bid]) {
+        S.bookProgress['done_' + bid] = 1;
+        const n = D.SUBJECTS.filter(function (x) { return S.bookProgress['done_' + x.id]; }).length;
+        S.stats.booksDone = n;
+        window.Store.pushLog('📚 《' + task.ctx.bookName + '》读完了（实际 ' + bp.days + ' 天 / 计划 ' + bp.plan + ' 天，累计 ' + n + '/4 本）');
       }
     }
     /* 导游词核心任务通过练习台完成，进度已在 finish 上方 practice 块中标记 */
@@ -667,6 +677,7 @@ window.Study = (function () {
     quizProgress: quizProgress, addUserTask: addUserTask, removeUserTask: removeUserTask,
     evidenceFor: evidenceFor,
     finishScriptCore: finishScriptCore,
-    scriptPracticeToday: scriptPracticeToday
+    scriptPracticeToday: scriptPracticeToday,
+    bookProgressOf: bookProgressOf
   };
 })();

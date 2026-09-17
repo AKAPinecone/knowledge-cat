@@ -91,7 +91,9 @@ window.Store = (function () {
       },
       achievements: {},
       qbank: [],            /* 自己粘贴导入的破壳测验题（内置题库在 data.js 的 QUESTION_BANK） */
-      bookProgress: { /* subjectId -> 已读天数 */ },
+      bookProgress: { /* subjectId -> 已读天数（纯数字）。计划天数是算出来的，不存盘——
+                        见 data.js 的 bookProgressOf()：计划 = max(下限, 已读天数)。
+                        v1.25 及更早的存档里就是纯数字，所以不需要迁移。 */ },
       scripts: {},          /* scriptId -> {read, recite, mastered, lastAt} */
       feynman: [],          /* 费曼卡 */
       evidence: [],         /* 证据索引 */

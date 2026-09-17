@@ -813,6 +813,16 @@
     if (v.type === 'reading') needTag.push('📎 笔记 / 照片选填');
     else if (t.pick === 'book' && t.ctx && t.ctx.bookName) needTag.push('📚 归属：《' + esc(t.ctx.bookName) + '》');
 
+    /* 读书任务在卡面上就把「读到第几天 / 计划几天」亮出来——不用点进弹窗才看得到。
+       进度实时算：今天选了哪本，这块标签就跟着显示哪本（在下方 onMount 里局部刷新）。 */
+    let readProgTag = null;
+    if (v.type === 'reading') {
+      const bp = window.Study.bookProgressOf(t.ctx.bookId || '');
+      readProgTag = '<span class="tag tag-bookprog' + (bp.done ? ' tag-ok' : '') + '" data-readprog="' + esc(t.uid) + '">' +
+        '📖 ' + esc(t.ctx.bookName || '未选') + '：' + (bp.done ? '✅ 读完' : '已读 ' + bp.days + ' 天') +
+        ' / 计划 ' + bp.plan + ' 天</span>';
+    }
+
     let sc = null;
     if (t.ctx && t.ctx.scriptId) sc = D.SCRIPTS.filter(function (x) { return x.id === t.ctx.scriptId; })[0];
 
@@ -844,6 +854,7 @@
           '<span class="tag tag-kolb" style="background:' + k.color + '">' + k.emoji + ' ' + k.name + '</span>' +
           '<span class="tag tag-verify">' + verifyTag + '</span>' +
           needTag.map(function (x) { return '<span class="tag">' + x + '</span>'; }).join('') +
+          (readProgTag || '') +
           '<span class="tag tag-reward">🎟️ +' + t.reward.tickets + '　🌰 +' + t.reward.beans + '</span>' +
         '</div>' +
       '</div>' +
@@ -2397,7 +2408,7 @@
     const rate = S.stats.questions ? Math.round(S.stats.correct / S.stats.questions * 100) : 0;
     const achN = Object.keys(S.achievements).length;
     const achAll = D.ACHIEVEMENTS.length;
-    const booksDone = D.SUBJECTS.filter(function (x) { return S.bookProgress['done_' + x.id]; }).length;
+    const bOverview = D.booksOverview();
 
     let h = '';
 
@@ -2445,7 +2456,7 @@
     h += meStat('🌰', S.cur.beans, '可可豆');
     h += meStat('🐾', S.pets.length, '小生物');
     h += meStat('🏅', achN + ' / ' + achAll, '成就');
-    h += meStat('📚', booksDone + ' / 4', '读完的课本');
+    h += meStat('📚', bOverview.days + ' / ' + bOverview.plan, '读书天数（读完了 ' + bOverview.done + ' / ' + bOverview.total + ' 本）');
     h += meStat('🎤', S.stats.scriptsMastered + ' / 12', '拿下的导游词');
     h += meStat('✍️', S.stats.questions, '刷过的题');
     h += meStat('🎯', rate + '%', '总正确率');
@@ -2843,7 +2854,7 @@
     h += '<h3>四、每天喂哪 7 样：投喂单 + 加餐</h3>';
     h += '<p>学习页最上面是<b>「今日投喂单」</b>——每天固定 7 样，进度条只数这 7 件：</p>';
     h += '<table class="mini"><tr><th>#</th><th>喂什么</th><th>怎么算喂到</th></tr>' +
-      '<tr><td>1</td><td>📖 读书</td><td>精读任务登记一次（哪一本你定，一本 8 天）</td></tr>' +
+      '<tr><td>1</td><td>📖 读书</td><td>精读任务登记一次（哪一本你定，计划 8 天一本）</td></tr>' +
       '<tr><td>2–5</td><td>✍️ 四科刷题</td><td>法规 / 业务 / 全导 / 地导，每科 30 道，各算一笔</td></tr>' +
       '<tr><td>6</td><td>🎤 导游词</td><td>在「练习台」里任选一篇：前 12 天通读，第 13 天起默讲</td></tr>' +
       '<tr><td>7</td><td>🗣️ 综合问答</td><td>在「练习台」里看参考答案，练够 10 道问答题</td></tr>' +
@@ -2856,7 +2867,14 @@
     h += '<div class="step"><b>1</b><div><b>选了哪一本</b>（必答）。四选一，顺序完全由你定，不想先读法规就先读别的。</div></div>';
     h += '<div class="step"><b>2</b><div><b>今天读了什么</b>（必答）。章节、页数、范围都行，比如「第三章 3.2 节，P78–P96」。要写满几个字，光填个数字不算。</div></div>';
     h += '<div class="step"><b>3</b><div><b>笔记 / 感想</b>（选填）。愿意写就写两句，也可以拍一张手写笔记的照片。空着照样结算。</div></div>';
-    h += '<p>登记的内容会连同时间戳存进<b>证据库</b>，日后能回头看"这本书我是哪天读到哪儿的"。一本书攒够 8 次，就算读完一遍。</p>';
+    h += '<p>登记的内容会连同时间戳存进<b>证据库</b>，日后能回头看"这本书我是哪天读到哪儿的"。</p>';
+    h += '<p><b>进度怎么算：读到的天数 / 计划的天数。</b>计划不是写死的 8 天——它是<b>你实际用掉的天数</b>（下限 6 天，免得翻两页就被算成"读完"）：</p>';
+    h += '<table class="mini"><tr><th>你登记到</th><th>进度显示</th><th>意思</th></tr>' +
+      '<tr><td>第 3 天</td><td>已读 3 天 / 计划 6 天</td><td>刚起步，离 6 天还有 3 天</td></tr>' +
+      '<tr><td>第 6 天</td><td><b>✅ 读完</b> · 已读 6 天</td><td>这本收工了 —— 6 天读完就是 6/6，不必硬凑到 8 天</td></tr>' +
+      '<tr><td>第 7 天</td><td>✅ 读完 · 已读 7 天</td><td>计划跟着变成 7 天，照样是 100%；再读就是二刷</td></tr>' +
+      '</table>';
+    h += '<div class="hintbox">🍬 读得快是好事，不是欠账。四本各按自己的节奏走，「我的」页那格「读书天数」把四本加起来看总盘子。</div>';
 
     h += '<h3>六、学习验证链路：做了就是做了</h3>';
     h += '<p>这里<b>没有任何倒计时</b>，也不攒什么碎片——<b>做了就是做了，没做就是没做</b>：做完当场登记，奖励足额马上发，今天的格子立刻亮一个。</p>';
@@ -4082,6 +4100,35 @@
     }
   }
 
+  /* 读书进度标签的文案（弹窗里的选书按钮、任务卡面共用一套说法） */
+  function readProgText(bp, long) {
+    bp = bp || { days: 0, plan: 6, done: false };
+    if (bp.done) return long ? '✅ 已读完 · 已读 ' + bp.days + ' 天' : '✅ 读完';
+    return long ? '已读 ' + bp.days + ' 天 / 计划 ' + bp.plan + ' 天' : '已读 ' + bp.days + ' 天';
+  }
+
+  /* 在弹窗里换了课本 → 同步刷新任务卡面上的读书进度标签（不用重开弹窗） */
+  function refreshReadProgBadge(bookId, bpEl, task) {
+    const bp = window.Study.bookProgressOf(bookId);
+    const sub = D.SUBJECTS.filter(function (x) { return x.id === bookId; })[0];
+    if (bpEl) {
+      bpEl.textContent = readProgText(bp, true);
+      bpEl.classList.toggle('bp-done', !!bp.done);
+    }
+    const hint = $('#vf-bp-hint');
+    if (hint) {
+      hint.textContent = bp.done
+        ? '这本已经读完了（' + bp.days + ' 天）。今天再读算二刷，进度保持 100%。'
+        : '计划天数 = 你实际用掉的天数（少于 6 天不急着算完）。读得快，6 天读完就是 6/6，不用硬凑到 8 天。';
+    }
+    /* 同一本书连着读第 2 天起，进度不会变——每天照常登记，奖励照常发，不扣也不减 */
+    const badge = task ? $('[data-readprog="' + task.uid + '"]') : null;
+    if (badge && sub) {
+      badge.textContent = '📖 ' + sub.name + '：' + readProgText(bp, false) + ' / 计划 ' + bp.plan + ' 天';
+      badge.classList.toggle('tag-ok', !!bp.done);
+    }
+  }
+
   function openVerifyModal(task) {
     if (!task) return;
     const v = task.verify, need = task.need || {};
@@ -4124,15 +4171,22 @@
         '</label>' +
         '<div class="bookpick">' +
         D.SUBJECTS.map(function (s) {
-          const d = S.bookProgress[s.id] || 0;
-          const dn = S.bookProgress['done_' + s.id];
-          const total = D.BOOK_DAYS || 8;
+          const bp = window.Study.bookProgressOf(s.id);
           return '<button class="bpick" data-bid="' + s.id + '">' +
             '<span class="bp-emoji">' + s.emoji + '</span>' +
             '<span class="bp-name">' + esc(s.name) + '</span>' +
-            '<span class="bp-prog">' + (dn ? '✅ 已读完一遍' : '进度 ' + d + ' / ' + total + ' 天') + '</span>' +
+            '<span class="bp-prog' + (bp.done ? ' bp-done' : '') + '" data-bp="' + s.id + '">' +
+            readProgText(bp, true) +
+            '</span>' +
             '</button>';
-        }).join('') + '</div></div>';
+        }).join('') + '</div>';
+      /* 计划天数不是死的：今天选这本，计划就跟着这本的天数走（进度会实时刷新） */
+      body += '<div class="fh" id="vf-bp-hint">' +
+        '计划天数 = 你实际用掉的天数（少于 6 天不急着算完）。读得快，6 天读完就是 6/6，不用硬凑到 8 天。' +
+        '</div>' +
+        '<label class="chk-line"><input type="checkbox" id="vf-whole"> ' +
+        '<span>今天一整天都在读这本（读完才收工）</span></label>' +
+        '</div>';
     }
 
     /* 精读第二步：今天读了什么（必答） */
@@ -4348,6 +4402,8 @@
             b.onclick = function () {
               vf.bookId = b.dataset.bid;
               $$('.bpick', m).forEach(function (x) { x.classList.toggle('on', x === b); });
+              /* 选了哪本，卡面上的「已读 N 天 / 计划 M 天」就跟着切到哪本 */
+              refreshReadProgBadge(b.dataset.bid, b.querySelector('.bp-prog'), task);
             };
           });
         }
@@ -4470,6 +4526,7 @@
     if (v.type === 'reading') {
       reading = {
         bookId: vf.bookId,
+        whole: !!($('#vf-whole', mask) || {}).checked,
         read: String((($('#vf-read', mask) || {}).value) || '').trim(),
         note: String((($('#vf-note', mask) || {}).value) || '').trim()
       };
@@ -4582,6 +4639,7 @@
       const bk = D.SUBJECTS.filter(function (x) { return x.id === reading.bookId })[0];
       if (bk) {
         summary.push('精读《' + bk.name + '》');
+        if (reading.whole) summary.push('今天一整天都在读这本');
         if (reading.read) summary.push('读了：' + reading.read);
         if (reading.note) summary.push('写了笔记');
       }

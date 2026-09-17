@@ -276,6 +276,12 @@ h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:.2px;}
 .tag-verify{background:#EAF4FB;border-color:#CFE3F2;color:#2F7BA8;}
 .tag-core{background:#EAF7EE;border-color:#CFE7D6;color:var(--green-deep);font-weight:600;}
 .tag-extra{background:#F3F1FA;border-color:#E2DDF4;color:#6B5FA8;}
+/* v1.26 读书进度：卡面上直接亮出「已读 N 天 / 计划 M 天」 */
+.tag-bookprog{background:#F1F8FF;border-color:#D6E8F7;color:#2F7BA8;font-weight:600;}
+.tag-bookprog.tag-ok{background:#EAF7EE;border-color:#CFE7D6;color:var(--green-deep);}
+.bpick .bp-prog.bp-done{color:var(--green-deep);font-weight:600;}
+.chk-line{display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12.5px;color:var(--ink-2);cursor:pointer;}
+.chk-line input{width:16px;height:16px;flex:0 0 auto;accent-color:var(--green);}
 .req{font-size:10.5px;color:#fff;background:#E8846F;border-radius:99px;padding:1.5px 7px;margin-left:6px;font-weight:600;vertical-align:1px;}
 .fh-i{font-size:11.5px;color:var(--ink-3);font-weight:400;margin-left:8px;}
 .task-side{display:flex;flex-direction:column;gap:7px;justify-content:center;align-items:stretch;min-width:112px;}

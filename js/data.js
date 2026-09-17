@@ -27,8 +27,41 @@ window.GAME_DATA = (function () {
     }
   ];
 
-  /* 每本课本的计划天数（四本 × 8 天 = 32 天，装得进 35 天的阶段一） */
-  const BOOK_DAYS = 8;
+  /* ---------- 课本精读：进度按「实际读了几天 / 计划几天」算（v1.26） ----------
+     旧算法是「打卡满 8 次就算读完一遍」——这只数你有没有翻开书，不数你到底读了多少。
+     计划 8 天、6 天就读完了，进度条还卡在 6/8，反而像欠了两天。
+
+     新算法：计划天数不是一个死数，而是「你实际用掉的天数」（带一个下限）。
+       · 第 1 天登记  → 计划 6 天，进度 1/6，还早
+       · 第 6 天登记  → 计划仍是 6 天，进度 6/6 → 这本读完了 ✅（提前完工，不用补到 8 天）
+       · 第 7 天登记  → 计划跟着变成 7 天，进度 7/7 → 依然是读完
+       · 第 9 天登记  → 计划 9 天，进度 9/9
+     所以：只要你还在这本书上投入天数，它就一直显示 100%（读完）；
+     天数涨了、百分比掉下来，只说明这本要读的比预想的多，不是"退步了"。
+     四本仍然各按自己的节奏推进，占比取平均。 */
+  const BOOK_DAYS = 8;        /* 参考值：封面/文案上说的"计划 8 天" */
+  const BOOK_DAYS_MIN = 6;    /* 计划天数的下限：少于 6 天登记，就不急着标"读完" */
+
+  /* 这本书当前认定的计划天数 = max(下限, 已读天数) */
+  function bookPlanOf(days) {
+    return Math.max(BOOK_DAYS_MIN, Number(days) || 0);
+  }
+  /* 读书进度（唯一的计算入口，UI / 结算 / 推荐都从这里读）
+     老存档里 bookProgress[bookId] 就是纯数字（已读天数），所以不用迁移，直接兼容。 */
+  function bookProgressOf(bookId) {
+    const days = (window.Store.state.bookProgress[bookId] | 0);   /* |0 兼容 undefined / 字符串 */
+    const plan = bookPlanOf(days);
+    return { days: days, plan: plan, pct: Math.min(1, days / plan), done: days >= plan };
+  }
+  /* 四本合计：用于「我的」页那格「读完的课本」 */
+  function booksOverview() {
+    let days = 0, plan = 0, doneN = 0;
+    SUBJECTS.forEach(function (s) {
+      const p = bookProgressOf(s.id);
+      days += p.days; plan += p.plan; if (p.done) doneN++;
+    });
+    return { days: days, plan: plan, done: doneN, total: SUBJECTS.length };
+  }
 
   const SUBJECTS = [
     { id: 'law',  name: '政策与法律法规', short: '法规', book: '科目一', emoji: '⚖️', color: '#7FB069' },
@@ -972,7 +1005,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.25',
+    VERSION: 'v1.26',
     WORLD: WORLD,
     ZONES: ZONES,
     MACHINES: MACHINES,
@@ -983,6 +1016,10 @@ window.GAME_DATA = (function () {
     EXAM_DATE: EXAM_DATE,
     PHASES: PHASES,
     BOOK_DAYS: BOOK_DAYS,
+    BOOK_DAYS_MIN: BOOK_DAYS_MIN,
+    bookPlanOf: bookPlanOf,
+    bookProgressOf: bookProgressOf,
+    booksOverview: booksOverview,
     SUBJECTS: SUBJECTS,
     SCRIPTS: SCRIPTS,
     INTERVIEW_QA: INTERVIEW_QA,
