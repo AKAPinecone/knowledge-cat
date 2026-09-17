@@ -165,6 +165,19 @@ window.GAME_DATA = (function () {
   const SPECIES_ACTIVE = SPECIES;
   const SPECIES_ALL = SPECIES.concat(SPECIES_LEGACY);
 
+  /* id → 物种，O(1) 查表。store.js 在 game.js 下层，不能反过来调 Game.speciesById，
+     所以判定「谁住在池塘」这件事必须留在 data 层，两边共用。 */
+  const SPECIES_MAP = {};
+  SPECIES_ALL.forEach(function (s) { SPECIES_MAP[s.id] = s; });
+
+  /* 水栖生物（water:true 或藻类）自动住在池塘里。
+     v1.25：它们泡在水里，**永远不会缺水** —— 水位恒满、不计"欠照顾"时长、
+     也不会因为渴而生病。判定与 game.js 的 zoneIdOf() 同源，改规则只改这里。 */
+  function isWaterDweller(speciesId) {
+    const sp = SPECIES_MAP[speciesId];
+    return !!sp && (sp.water === true || sp.kind === 'algae');
+  }
+
   /* ---------- 商店 ----------
      每个照顾道具都带 boost：{stat, amount, grow, exp}，护理时按"最优已拥有 tier"消耗。
      高级道具带 reqLevel —— 等级不够在商店里是锁着的，升到对应等级才解锁。
@@ -959,7 +972,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.24',
+    VERSION: 'v1.25',
     WORLD: WORLD,
     ZONES: ZONES,
     MACHINES: MACHINES,
@@ -976,6 +989,8 @@ window.GAME_DATA = (function () {
     PRACTICE: PRACTICE,
     SPECIES: SPECIES_ALL,
     SPECIES_ACTIVE: SPECIES_ACTIVE,
+    SPECIES_MAP: SPECIES_MAP,
+    isWaterDweller: isWaterDweller,
     ITEMS: ITEMS,
     ITEM_MAP: ITEM_MAP,
     CARE: CARE,

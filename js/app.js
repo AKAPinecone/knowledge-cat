@@ -880,7 +880,10 @@
       ? { water: '💧', nutri: '🍖', clean: '🧼', fun: '🎈' }
       : { water: '💧', nutri: '🌰', clean: '🐛', fun: '🎈' };
     let worst = null;
+    /* 池塘里的水栖生物不会缺水，别给它冒"缺水"的泡（水位恒满，本来也选不中，这里是双保险） */
+    const aqua = (typeof window.Game.isAqua === 'function') && window.Game.isAqua(p);
     ['water', 'nutri', 'clean', 'fun'].forEach(function (k) {
+      if (k === 'water' && aqua) return;
       const v = p.stats[k];
       if (v < 45 && (!worst || v < worst.v)) worst = { k: k, v: v };
     });
@@ -1974,16 +1977,23 @@
       body += '<div class="warnbox" style="margin-top:10px">😴 生病超过 24 小时进入了休眠：成长暂停、不会消失，治好就醒。</div>';
     }
 
+    /* v1.25：住在池塘里的水栖生物不缺水，水位恒满（给个水色条 + 一句说明，
+       免得玩家以为状态条坏了、一直想给它浇水） */
+    const aqua = (typeof window.Game.isAqua === 'function') && window.Game.isAqua(p);
     body += '<div class="pet-stats" style="margin-top:12px">';
     ['water', 'nutri', 'clean', 'fun'].forEach(function (k) {
       const si = D.STAT_INFO[k];
       const v = Math.round(p.stats[k]);
-      const color = v < 20 ? '#D9534F' : (v < 45 ? '#E3A33C' : si.color);
+      const free = (k === 'water' && aqua);
+      const color = free ? '#5BB4D6' : (v < 20 ? '#D9534F' : (v < 45 ? '#E3A33C' : si.color));
       body += '<div class="srow"><span class="sname">' + si.emoji + ' ' + si.label + '</span>' +
         '<div class="bar bar-thin"><i style="width:' + v + '%;background:' + color + '"></i></div>' +
         '<span class="sval">' + v + '</span></div>';
     });
     body += '</div>';
+    if (aqua) {
+      body += '<div class="okbox" style="margin-top:8px">🌊 它住在池塘里，池水常满：<b>永远不会缺水</b>，也不会因为渴而生病。营养 / 清洁 / 娱乐照常照顾。</div>';
+    }
 
     body += '<div class="grow-row"><span>成长</span>' +
       '<div class="bar bar-thin" style="flex:1"><i style="width:' + growPct + '%;background:linear-gradient(90deg,#9FDCAE,#4CA96B)"></i></div>' +
@@ -2826,7 +2836,7 @@
     h += '<h3>三、养一只小生物的全流程</h3>';
     h += '<div class="step"><b>1</b><div>扭蛋拿到<b>胶囊</b>。胶囊里是植物 / 真菌 / 藻类，就去<b>温室</b>；是动物，就去<b>孵化仓</b>。放错地方不孵化。</div></div>';
     h += '<div class="step"><b>2</b><div>等孵化进度走完（普通 15 分钟 / 稀有 40 分钟 / 传说 80 分钟），点<b>破壳</b>。离线也会继续孵化。<br><span style="color:#B8791C">⚠️ 破壳前要先过「破壳测验」：<b>答对 1 道题</b>就能出生（答错可再答一次，并看解析）——见第七节。</span></div></div>';
-    h += '<div class="step"><b>3</b><div>破壳后开始照顾：<b>水分、营养、清洁</b>三条状态会随时间下滑。植物用浇水/施肥/除虫，动物用喂水/喂食/洗澡。</div></div>';
+    h += '<div class="step"><b>3</b><div>破壳后开始照顾：<b>水分、营养、清洁</b>三条状态会随时间下滑。植物用浇水/施肥/除虫，动物用喂水/喂食/洗澡。<br><span style="color:#2E7D9A">🌊 例外：住在<b>池塘</b>里的水栖生物（海菜花 / 红瘰疣螈 / 云南闭壳龟 / 藻类）<b>永远不会缺水</b>——水位常满，也绝不会渴到生病，你只需照顾它的营养、清洁、娱乐。</span></div></div>';
     h += '<div class="step"><b>4</b><div>某项状态归零超过 2 小时，它就可能<b>生病</b>。要买对症的药水（买错了不生效），病超过 24 小时会进入休眠。</div></div>';
     h += '<div class="step"><b>5</b><div>成长值到 100 / 300 / 700 会进阶：幼体 → 成长 → 成熟 → 圆满，每次进阶都有额外可可豆。</div></div>';
 

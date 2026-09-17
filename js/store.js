@@ -190,7 +190,17 @@ window.Store = (function () {
       if (!p.stats) p.stats = {};
       if (typeof p.stats.fun !== 'number') p.stats.fun = 72;
       if (typeof p.stored !== 'boolean') p.stored = false;
+      if (!p.neglect || typeof p.neglect !== 'object') p.neglect = { water: 0, nutri: 0, clean: 0 };
     });
+    /* v1.25：池塘里的水栖生物永远不缺水 —— 打开存档就把它补满，
+       不然要等下一次 tick（8 秒后）才回正，那几秒状态条会显示它在渴着。 */
+    if (Array.isArray(s.pets) && window.GAME_DATA && typeof window.GAME_DATA.isWaterDweller === 'function') {
+      s.pets.forEach(function (p) {
+        if (!window.GAME_DATA.isWaterDweller(p.speciesId)) return;
+        p.stats.water = 100;
+        p.neglect.water = 0;
+      });
+    }
     /* 老存档补大世界建筑系统（v1.18）。
        built/story/assign/staff/stock/day/lv 是对象，trips/collection 是数组。 */
     if (!s.build || typeof s.build !== 'object') s.build = {};
@@ -604,11 +614,19 @@ window.Store = (function () {
 
     if (minutes < 1) { state.lastTick = now; return report; }
 
-    /* 2. 生物状态衰减（保存舱里的不衰减、不生病，状态静止） */
+    /* 2. 生物状态衰减（保存舱里的不衰减、不生病，状态静止）
+          水栖生物（海菜花 / 红瘰疣螈 / 云南闭壳龟 / 藻类）住在池塘里，
+          v1.25 起永不缺水：水位恒满、不累积"欠照顾"时长，也就不会渴到生病。 */
     state.pets.forEach(function (p) {
       if (p.stored) return;
+      const aqua = (typeof D.isWaterDweller === 'function') ? D.isWaterDweller(p.speciesId) : false;
       let illnessHappened = false;
       ['water', 'nutri', 'clean', 'fun'].forEach(function (k) {
+        if (k === 'water' && aqua) {
+          p.stats.water = 100;
+          p.neglect.water = 0;
+          return;
+        }
         const before = p.stats[k];
         p.stats[k] = Math.max(0, before - D.DECAY_PER_MIN * minutes);
         if (p.stats[k] <= 0) {

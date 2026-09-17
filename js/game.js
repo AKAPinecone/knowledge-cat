@@ -609,10 +609,15 @@ window.Game = (function () {
 
   /* 小生物该待在哪片区域：
      species.water === true 的一律下水（海菜花 / 红瘰疣螈 / 云南闭壳龟 / 藻类），
-     其余按 kind：动物→草地，真菌→温室，植物→苗圃。 */
+     其余按 kind：动物→草地，真菌→温室，植物→苗圃。
+     判定统一走 D.isWaterDweller（定义在 data 层），store.js 的衰减也用同一个函数 ——
+     免得"住在池塘"和"不会缺水"哪天走岔了。 */
+  function isAqua(pet) {
+    return (typeof D.isWaterDweller === 'function') && D.isWaterDweller(pet.speciesId);
+  }
   function zoneIdOf(pet) {
     const sp = speciesById(pet.speciesId);
-    if (sp.water === true || sp.kind === 'algae') return 'pond';
+    if (isAqua(pet)) return 'pond';
     if (sp.kind === 'animal') return 'meadow';
     if (sp.kind === 'fungus') return 'greenhouse';
     return 'nursery';
@@ -781,10 +786,12 @@ window.Game = (function () {
     const cost = buildCost(id);
     if (cost.beans && S.cur.beans < cost.beans) return { ok: false, msg: '可可豆不够（需要 ' + cost.beans + '）' };
     if (cost.beans) S.cur.beans -= cost.beans;
-    /* 三位参与者出工：需求值下降 */
+    /* 三位参与者出工：需求值下降（池塘里干活的，缺水的账不算在它头上） */
     Object.keys(crew).forEach(function (k) {
       const p = crew[k];
+      const aqua = isAqua(p);
       ['water', 'nutri', 'clean', 'fun'].forEach(function (s) {
+        if (s === 'water' && aqua) return;
         p.stats[s] = Math.max(0, p.stats[s] - cost.need);
       });
     });
@@ -958,9 +965,11 @@ window.Game = (function () {
     const party = staff.slice(1).map(petById).filter(Boolean);
     if (!guide) return { ok: false, msg: '导游不见了' };
     const lv = buildLv(id);
-    /* 出团消耗：走一天，需求值下降 */
+    /* 出团消耗：走一天，需求值下降（池塘里泡着的不会渴） */
     [guide].concat(party).forEach(function (p) {
+      const aqua = isAqua(p);
       ['water', 'nutri', 'clean', 'fun'].forEach(function (s) {
+        if (s === 'water' && aqua) return;
         p.stats[s] = Math.max(0, p.stats[s] - 14);
       });
     });
@@ -1012,6 +1021,7 @@ window.Game = (function () {
     init: init,
     ensureBuild: ensureBuild,
     zoneIdOf: zoneIdOf,
+    isAqua: isAqua,
     zoneById: zoneById,
     petsInZone: petsInZone,
     buildingById: buildingById,
