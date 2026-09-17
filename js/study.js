@@ -91,7 +91,8 @@ window.Study = (function () {
       title: tpl.title || (ICON[type] + ' 我的任务'),
       desc: tpl.desc || '你自己建的任务，做完登记一下就有奖励。',
       kolb: 'CE', icon: ICON[type] || '🧩',
-      reward: { tickets: tpl.tickets != null ? tpl.tickets : 1, beans: tpl.beans != null ? tpl.beans : 15 },
+      /* 自建加餐的默认奖励（v1.24：15 → 22 豆，跟投喂单的涨幅对齐） */
+      reward: { tickets: tpl.tickets != null ? tpl.tickets : 1, beans: tpl.beans != null ? tpl.beans : 22 },
       core: false, coreLabel: '',
       split: '', pick: type === 'reading' ? 'book' : '',
       verify: verify, need: type === 'opinion' ? { photo: true } : {},
@@ -555,13 +556,15 @@ window.Study = (function () {
       S.bookProgress[sid] = (S.bookProgress[sid] || 0) + 1;
     }
 
-    /* 库伯四象限全齐加成 */
+    /* 库伯四象限全齐加成（系数在 D.ECONOMY.kolb，v1.24 起集中管理） */
+    const eco = D.ECONOMY || {};
     const k = S.study.kolbToday;
     if (k.CE && k.RO && k.AC && k.AE && !S.study.kolbBonusDate) {
       S.study.kolbBonusDate = window.Store.today();
       S.stats.kolbFullDays++;
-      S.cur.tickets += 1; S.cur.beans += 30;
-      extra.push('🎯 今日库伯学习圈四象限集齐：+1 券 / +30 豆');
+      const kb = (eco.kolb && eco.kolb.bonus) != null ? eco.kolb.bonus : 30;
+      S.cur.tickets += 1; S.cur.beans += kb;
+      extra.push('🎯 今日库伯学习圈四象限集齐：+1 券 / +' + kb + ' 豆');
       window.Store.pushLog('🎯 学习圈闭合：具体经验→反思观察→抽象概念化→主动实验，今天你走完了一整圈。');
     }
 
@@ -572,9 +575,10 @@ window.Study = (function () {
     if (coreTasks.length && coreDone >= coreTasks.length && S.study.feedBonusDate !== window.Store.today()) {
       S.study.feedBonusDate = window.Store.today();
       S.stats.fullFeedDays = (S.stats.fullFeedDays || 0) + 1;
-      S.cur.tickets += 2; S.cur.beans += 50;
+      const fb = (eco.feed && eco.feed.fullBonus) != null ? eco.feed.fullBonus : 50;
+      S.cur.tickets += 2; S.cur.beans += fb;
       feedBonusGiven = true;
-      extra.push('🍽️ 今天的投喂单喂满了（' + coreTasks.length + ' 件）：+2 券 / +50 豆');
+      extra.push('🍽️ 今天的投喂单喂满了（' + coreTasks.length + ' 件）：+2 券 / +' + fb + ' 豆');
       window.Store.pushLog('🍽️ 投喂单清空：今天 ' + coreTasks.length + ' 件全喂满了。');
     }
 
@@ -629,9 +633,9 @@ window.Study = (function () {
       title: String(tpl.title || '').trim() || '我的任务',
       desc: String(tpl.desc || '').trim(),
       target: parseInt(tpl.target, 10) || 0,
-      /* 自建任务奖励统一：1 个券配 15 个可可豆（不再让玩家填） */
+      /* 自建任务奖励统一：1 个券配 22 个可可豆（不再让玩家填；v1.24：15 → 22） */
       tickets: 1,
-      beans: 15,
+      beans: 22,
       createdAt: Date.now()
     };
     S.study.userTasks.push(t);

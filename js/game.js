@@ -223,7 +223,7 @@ window.Game = (function () {
   /* ---------------- 挑战赛（商店页 · 用错题换可可豆，v1.23） ----------------
      跟破壳测验共用同一个题库，但它不是关卡，是「你想练就练」：
      一局 10 题 / 5 分钟，正确率 80% 以上才结算可可豆。
-     每天 3 局封顶 —— 不是限制学习，是不想让刷题变成刷豆，那会把别的玩法全饿死。
+     每天 4 局封顶 —— 不是限制学习，是不想让刷题变成刷豆，那会把别的玩法全饿死。
      答错不扣东西、不中断，只是没钱拿；练到就是赚到。 */
   function chalCfg() {
     return window.GAME_DATA.CHALLENGE ||
@@ -341,9 +341,11 @@ window.Game = (function () {
     }
     return lv;
   }
-  /* 升级里程碑奖励：少量可可比 + 券，维持商店经济（照顾本身不再掉豆） */
+  /* 升级里程碑奖励：少量可可比 + 券，维持商店经济（照顾本身不再掉豆）
+     系数在 D.ECONOMY.level（v1.24 起集中管理，改平衡只动 data.js 那一张表）。 */
   function levelReward(lv) {
-    return { beans: 15 + lv * 5, tickets: 1 + Math.floor(lv / 3) };
+    const c = (D.ECONOMY && D.ECONOMY.level) || { base: 15, perLv: 5 };
+    return { beans: c.base + lv * c.perLv, tickets: 1 + Math.floor(lv / 3) };
   }
 
   function care(petId, actionId) {
@@ -439,15 +441,19 @@ window.Game = (function () {
      为什么不叫「卖掉」：这些小家伙是玩家一口一口喂大的，明码标价地卖会让人不舒服，
      送养是同一件事，但心里顺得多——「它去了别的乐园，人家回一份谢礼」。
      代价照旧：送走就再也回不来，所以界面必须二次确认。
-     谢礼 = 稀有度基数 × 阶段系数 + 成长值，越用心养大的越值钱。 */
-  const ADOPT_BASE = { 1: 18, 2: 45, 3: 110 };
+     谢礼 = 稀有度基数 × 阶段系数 + 成长值，越用心养大的越值钱。
+     基数与阶段系数在 D.ECONOMY.adopt / adoptStageMul（v1.24 起集中管理）。 */
+  const ADOPT_BASE = { 1: 18, 2: 45, 3: 110 };          /* 兜底：万一 ECONOMY 缺失 */
   const ADOPT_STAGE_MUL = { baby: 0.5, teen: 0.8, adult: 1.2, elite: 1.8 };
   function adoptValue(pet) {
     if (!pet) return 0;
+    const eco = D.ECONOMY || {};
+    const baseMap = eco.adopt || ADOPT_BASE;
+    const mulMap = eco.adoptStageMul || ADOPT_STAGE_MUL;
     const sp = speciesById(pet.speciesId) || {};
-    const base = ADOPT_BASE[sp.rarity] || ADOPT_BASE[1];
+    const base = baseMap[sp.rarity] || baseMap[1] || ADOPT_BASE[1];
     const st = stageOf(pet);
-    const mul = ADOPT_STAGE_MUL[st.key] || 1;
+    const mul = mulMap[st.key] || 1;
     return Math.max(5, Math.round(base * mul + (pet.growth || 0) * 0.12));
   }
   function adoptPet(petId) {
@@ -858,7 +864,11 @@ window.Game = (function () {
   function markDone(key) { S.build.day[key] = todayKey(); }
   function petById(id) { return S.pets.filter(function (p) { return p.id === id; })[0] || null; }
 
-  /* ---- 食堂：投清水 + 饲料 → 开饭，产可可豆 ---- */
+  /* ---- 食堂：投清水 + 饲料 → 开饭，产可可豆 ----
+     v1.24：产出从「5 + 3×等级」提到「9 + 4×等级」。一份饭的原料（1 清水 + 1 饲料）
+     成本 6 豆，所以老公式下一顿饭净赚 2 豆，基本只是顺手；现在净赚 7 豆起，
+     食堂才算真正「因为修了它、派了人，所以每天多一份进项」。
+     系数在 D.ECONOMY.canteen。 */
   function canteenStock(id, item) {
     ensureBuild();
     const label = item === 'water' ? '清水' : '饲料';
@@ -879,6 +889,8 @@ window.Game = (function () {
     if (meals <= 0) return { ok: false, msg: '清水和饲料得各投几份才开得了饭' };
     st.water -= meals;
     st.food -= meals;
+    const eco = (D.ECONOMY && D.ECONOMY.canteen) || { base: 5, perLv: 3 };
+    const perMeal = eco.base + buildLv(id) * eco.perLv;
     let beans = 0;
     staff.slice(0, meals).forEach(function (pid) {
       const p = petById(pid);
@@ -886,7 +898,7 @@ window.Game = (function () {
       p.stats.nutri = Math.min(100, p.stats.nutri + 26);
       p.stats.water = Math.min(100, p.stats.water + 22);
       p.stats.fun = Math.min(100, p.stats.fun + 8);
-      beans += 5 + buildLv(id) * 3;
+      beans += perMeal;
     });
     S.cur.beans += beans;
     markDone('canteen:' + id);
@@ -953,7 +965,11 @@ window.Game = (function () {
       });
     });
     const got = [];
-    const beans = 12 + lv * 8 + Math.floor(Math.random() * 10);
+    /* v1.24：出团收益从 12+8×等级 提到 20+12×等级（随机跨度也放大到 14）。
+       出团要搭上一整天 4 项状态的 14 点衰减，是乐园侧最贵的一次行动，
+       收益太低就没人愿意去；系数在 D.ECONOMY.travel。 */
+    const eco = (D.ECONOMY && D.ECONOMY.travel) || { base: 12, perLv: 8, rand: 10 };
+    const beans = eco.base + lv * eco.perLv + Math.floor(Math.random() * eco.rand);
     S.cur.beans += beans;
     got.push('🌰 可可豆 ×' + beans);
     /* 物件掉落 */

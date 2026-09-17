@@ -167,21 +167,33 @@ window.GAME_DATA = (function () {
 
   /* ---------- 商店 ----------
      每个照顾道具都带 boost：{stat, amount, grow, exp}，护理时按"最优已拥有 tier"消耗。
-     高级道具带 reqLevel —— 等级不够在商店里是锁着的，升到对应等级才解锁。 */
+     高级道具带 reqLevel —— 等级不够在商店里是锁着的，升到对应等级才解锁。
+
+     【v1.24 定价规则：高级道具按「等效率」定价，不是按「更贵」定价】
+     基础道具每豆能换到的状态点数（越高越划算）：
+       清水 35/2=17.5 · 营养液 42/6=7.0 · 饲料 42/4=10.5 · 除虫剂 32/7=4.6 · 泡沫 38/5=7.6 · 音乐盒 30/5=6.0
+     高级道具原来是「翻倍价、只强三成」：环绕音响 48/14=3.4、高蛋白营养液 55/16=3.4 ——
+     每豆效率只有基础道具的一半。偏偏 game.js 护理时是「优先消耗已拥有的最高 tier」，
+     于是玩家一升级、一买高级货，每天护理开销直接翻倍，豆就永远不够用（这就是 v1.23 之前
+     「越升级越穷」的根因：等级越高、越讲究，反而越养不起）。
+     v1.24 把高级道具的单价压回「与同族里最划算那件持平」：
+       · 营养类：饲料 42/4 → 高蛋白营养液 55/5（11.0 ≥ 10.5）
+       · 娱乐类：音乐盒 30/5 → 环绕音响 48/8（6.0 ≥ 6.0）
+     解锁高级道具换来的是「少点几下 + 成长值更多」，而不是「变相涨价」。 */
   const ITEMS = [
     /* 温室用品（植物 / 真菌 / 藻类） */
     { id: 'water',   name: '清水',       kind: 'greenhouse', price: 2,  emoji: '💧', desc: '浇一次水，缓解干渴。', boost: { stat: 'water', amount: 35, grow: 6, exp: 5 } },
     { id: 'fert',    name: '营养液',     kind: 'greenhouse', price: 6,  emoji: '🧪', desc: '施肥一次，明显促进生长。', boost: { stat: 'nutri', amount: 42, grow: 14, exp: 6 } },
     { id: 'pest',    name: '除虫剂',     kind: 'greenhouse', price: 7,  emoji: '🧴', desc: '喷洒一次，赶走叶片上的小家伙。', boost: { stat: 'clean', amount: 32, grow: 8, exp: 5 } },
     { id: 'music',   name: '音乐盒',     kind: 'greenhouse', price: 5,  emoji: '🎵', desc: '给植物放段音乐，它心情大好、娱乐值上涨。', boost: { stat: 'fun', amount: 30, grow: 5, exp: 4 } },
-    { id: 'music2',  name: '环绕音响',   kind: 'greenhouse', price: 14, emoji: '🔊', reqLevel: 2, desc: 'Lv.2 解锁：高级音响，娱乐值涨得更多、还带动成长。', boost: { stat: 'fun', amount: 48, grow: 12, exp:7 } },
-    { id: 'fert2',   name: '高蛋白营养液', kind: 'greenhouse', price: 16, emoji: '🧫', reqLevel: 3, desc: 'Lv.3 解锁：浓缩营养，营养值与成长一次顶俩。', boost: { stat: 'nutri', amount: 55, grow: 20, exp: 8 } },
+    { id: 'music2',  name: '环绕音响',   kind: 'greenhouse', price: 8,  emoji: '🔊', reqLevel: 2, desc: 'Lv.2 解锁：高级音响，娱乐值涨得更多、还带动成长。', boost: { stat: 'fun', amount: 48, grow: 12, exp:7 } },
+    { id: 'fert2',   name: '高蛋白营养液', kind: 'greenhouse', price: 5, emoji: '🧫', reqLevel: 3, desc: 'Lv.3 解锁：浓缩营养，营养值与成长一次顶俩。', boost: { stat: 'nutri', amount: 55, grow: 20, exp: 8 } },
     /* 孵化仓用品（动物） */
     { id: 'food',    name: '饲料',       kind: 'hatchery',   price: 4,  emoji: '🥣', desc: '喂一次食，填饱肚子。', boost: { stat: 'nutri', amount: 42, grow: 8, exp: 5 } },
     { id: 'soap',    name: '洗澡泡沫',   kind: 'hatchery',   price: 5,  emoji: '🧼', desc: '洗一次澡，动物精神一整天。', boost: { stat: 'clean', amount: 38, grow: 6, exp: 5 } },
     { id: 'teaser',  name: '逗猫棒',     kind: 'hatchery',   price: 5,  emoji: '🎀', desc: '用逗猫棒陪动物玩一会儿，娱乐值上涨。', boost: { stat: 'fun', amount: 30, grow: 5, exp: 4 } },
-    { id: 'teaser2', name: '豪华猫爬架', kind: 'hatchery',   price: 14, emoji: '🪜', reqLevel: 2, desc: 'Lv.2 解锁：猫爬架让动物玩到嗨，娱乐值涨更多、带动成长。', boost: { stat: 'fun', amount: 48, grow: 12, exp: 7 } },
-    { id: 'food2',   name: '营养大餐',   kind: 'hatchery',   price: 16, emoji: '🍖', reqLevel: 3, desc: 'Lv.3 解锁：丰盛大餐，营养值与成长一次顶俩。', boost: { stat: 'nutri', amount: 55, grow: 20, exp: 8 } },
+    { id: 'teaser2', name: '豪华猫爬架', kind: 'hatchery',   price: 8,  emoji: '🪜', reqLevel: 2, desc: 'Lv.2 解锁：猫爬架让动物玩到嗨，娱乐值涨更多、带动成长。', boost: { stat: 'fun', amount: 48, grow: 12, exp: 7 } },
+    { id: 'food2',   name: '营养大餐',   kind: 'hatchery',   price: 5,  emoji: '🍖', reqLevel: 3, desc: 'Lv.3 解锁：丰盛大餐，营养值与成长一次顶俩。', boost: { stat: 'nutri', amount: 55, grow: 20, exp: 8 } },
     /* 药水 */
     { id: 'med_powder', name: '白粉病灵', kind: 'medicine', price: 14, emoji: '🩹', desc: '专治叶面白粉病。' },
     { id: 'med_fungus', name: '菌斑净',   kind: 'medicine', price: 14, emoji: '🩹', desc: '专治菌伞斑点。' },
@@ -279,19 +291,45 @@ window.GAME_DATA = (function () {
   /* 两次都没过：关闭弹窗后可重新打开再考，不限总次数、不扣东西。
      这一关的目的是「让你真去练」，不是罚你。 */
 
-  /* ---------- 挑战赛（商店页，v1.23） ----------
+  /* ---------- 挑战赛（商店页，v1.23 起；v1.24 提额） ----------
      跟破壳测验共用同一个题库，但它考的是「你答对了几成」，赢了发可可豆。
      10 题 / 5 分钟 / 正确率 80% 才结算——这是全游戏唯一一处「主动给自己找题做」
-     的地方，所以奖励给得比食堂开饭大方：一次通关约等于两天的基础护理开销。
-     每天 3 张卷子封顶：不是怕你学太多，是不想让刷题变成「刷豆」，
+     的地方，所以奖励给得比食堂开饭大方。
+     每天 4 张卷子封顶：不是怕你学太多，是不想让刷题变成「刷豆」，
      那会把别的玩法全饿死。想放开就把 dailyLimit 调大或设成 0（不限）。 */
   const CHALLENGE = {
     count: 10,          /* 每局 10 道题（题库不足时按实际题数来） */
     minutes: 5,         /* 限时 5 分钟，到点自动交卷 */
     passRate: 0.8,      /* 正确率 80% 以上才赢 */
-    dailyLimit: 3,      /* 每天最多打 3 局 */
-    beansPass: 50,      /* 达标的奖励 🌰 */
-    beansPerfect: 50    /* 满分再额外加这么多 🌰 */
+    dailyLimit: 4,      /* 每天最多打 4 局（v1.24：3 → 4，略微放宽产豆频率） */
+    beansPass: 60,      /* 达标的奖励 🌰（v1.24：50 → 60） */
+    beansPerfect: 60    /* 满分再额外加这么多 🌰（v1.24：50 → 60） */
+  };
+
+  /* ---------- 经济参数总表（v1.24） ----------
+     跟可可豆有关的系数全部集中在这里，改平衡只动这一块。
+     dev/economy-audit.js 直接读这张表算「每日收支」，数字只此一份，不用两头对。
+
+     为什么要调（诊断见 dev/economy-audit.js 的输出）：
+     胶囊券的收入是「每天固定 8 张左右」，于是宠物数量会一路涨；而可可豆收入原来是
+     「每天一口固定量」，不随乐园规模变化。结果宠物越多越穷——12 只的日常护理约
+     480 豆/天，而当天收入只有约 333 豆/天，缺口就是玩家体感到的「豆不够用」。
+
+     所以 v1.24 做的是「让收入跟着乐园规模走」，不是无脑发钱：
+       · 学习侧：投喂单核心奖励 + 全清加成 + 四象限加成一起提 —— 学得稳，收入才稳；
+       · 乐园侧：食堂/旅行社产出与建筑等级、干活人数挂钩 —— 修得越勤赚得越多；
+       · 兜底侧：送养谢礼提高 —— 宠物养不动时可以体面地送走换成豆。
+
+     刻意没动的（守住平衡）：状态衰减速度、护理道具价格、修建与托位价格、
+     破壳/挑战赛及格率、券的产出。豆和券仍是两套互不串味的货币。 */
+  const ECONOMY = {
+    level:   { base: 18, perLv: 7 },            /* 照顾等级升级奖励 = base + perLv × 新等级 */
+    feed:    { fullBonus: 75 },                 /* 投喂单 7 件全清，一次给 🌰 */
+    kolb:    { bonus: 35 },                     /* 库伯四象限当日集齐给 🌰 */
+    canteen: { base: 9,  perLv: 4 },            /* 食堂每份饭 = base + perLv × 食堂等级 */
+    travel:  { base: 20, perLv: 12, rand: 14 }, /* 旅行社每次出团 = base + perLv × 等级 + [0,rand) 随机 */
+    adopt:   { 1: 22, 2: 55, 3: 130 },          /* 送养谢礼基数（稀有度 1/2/3） */
+    adoptStageMul: { baby: 0.5, teen: 0.8, adult: 1.2, elite: 1.8 } /* 送养阶段系数 */
   };
 
   /* ---------- 题库（这就是那个「端口」） ----------
@@ -512,7 +550,7 @@ window.GAME_DATA = (function () {
       id: 'p1_read', phase: [1], title: '课本精读（读哪本你定）', core: true, coreLabel: '读书',
       kolb: 'CE', icon: '📖',
       desc: '每天登记一次：今天读了哪一本、读到哪里（章节 / 页数）。笔记和感想选填，愿意写就写两句。一本书计划 8 天。别抄书，边读边问自己"如果我要讲给一个外国人听，我会怎么讲"。',
-      reward: { tickets: 2, beans: 40 },
+      reward: { tickets: 2, beans: 52 },
       verify: { type: 'reading', minChars: 6, optionalPhoto: true }
     },
     {
@@ -520,7 +558,7 @@ window.GAME_DATA = (function () {
       kolb: 'CE', icon: '✍️',
       split: 'subject',
       desc: '每科单独算一笔，30 道就够。做完回来登记题量和正确率，拍一张准题库的结果页。哪一科留着没做，一眼就看得到。',
-      reward: { tickets: 1, beans: 12 },
+      reward: { tickets: 1, beans: 20 },
       verify: { type: 'quiz', minQuestions: 30 },
       need: { photo: true }
     },
@@ -528,14 +566,14 @@ window.GAME_DATA = (function () {
       id: 'p_script', phase: [1, 2, 3], title: '{scriptMode}：任意一篇', core: true, coreLabel: '导游词',
       kolb: 'CE', icon: '🎤',
       desc: '在练习台里挑一篇导游词，通读（读顺）或合上稿子默讲。前 12 天以通读为主，第 13 天起每天背一篇。哪一篇完全由你定，不必是系统推荐的那一篇。',
-      reward: { tickets: 1, beans: 30 },
+      reward: { tickets: 1, beans: 42 },
       verify: { type: 'practice' }
     },
     {
       id: 'p_interview', phase: [1, 2, 3], title: '综合问答训练', core: true, coreLabel: '综合',
       kolb: 'AE', icon: '🗣️',
       desc: '科目五面试：每天练一练综合知识问答。题库会越来越多（你慢慢传，不用一次传齐）。完成方式很简单——回到「投喂单」点「综合 → 去提交」，交一个凭证（录音 / 截图 / 文件 任一）就算今天练过了，不必一题一题点。',
-      reward: { tickets: 1, beans: 15 },
+      reward: { tickets: 1, beans: 24 },
       verify: { type: 'evidence' }
     },
 
@@ -544,13 +582,13 @@ window.GAME_DATA = (function () {
       id: 'p1_exercise', phase: [1], title: '课后练习 · 今日章节配套习题', kolb: 'AE', icon: '📝',
       pick: 'book',
       desc: '课本每章后面那套课后习题，趁热做掉。登记题量和正确率就行，不用截图。做完当场对答案——趁你还记得当时是怎么想的，错了才看得出卡在哪。',
-      reward: { tickets: 1, beans: 18 },
+      reward: { tickets: 1, beans: 24 },
       verify: { type: 'quiz', minQuestions: 10 }
     },
     {
       id: 'p1_frame', phase: [1], title: '章节框架图 · 今天这一章', kolb: 'AC', icon: '🕸️',
       desc: '合上书，把今天读的这一章画成一张骨架图（章节 → 考点 → 易错点）。画得丑没关系，重点是"合上书还画得出来"。写完拍一张留档。',
-      reward: { tickets: 1, beans: 22 },
+      reward: { tickets: 1, beans: 30 },
       verify: {
         type: 'note', minChars: 24,
         prompts: ['这一章的骨架是……', '最容易考的一点 / 我最容易错的一点是……']
@@ -560,14 +598,14 @@ window.GAME_DATA = (function () {
     {
       id: 'p1_selfcheck', phase: [1, 2], title: '合书自测 10 题', kolb: 'AE', icon: '🎯',
       desc: '合上书，自己给自己出 10 道题再自己答。出题比答题更接近考试——出题的时候你必须先判断"哪里重要"。登记题量和自测正确率。',
-      reward: { tickets: 0, beans: 14 },
+      reward: { tickets: 0, beans: 20 },
       verify: { type: 'quiz', minQuestions: 10 }
     },
 
     {
       id: 'p1_reflect', phase: [1, 2, 3], title: '昨日回照 · 两句话', kolb: 'RO', icon: '🔍',
       desc: '翻回昨天学过的一节，写两句话：一句是"我现在能讲清楚的"，一句是"我还是模糊的"。不抄题、不整理，就两句话。模糊的那句，明天你会自然想去补它。',
-      reward: { tickets: 1, beans: 25 },
+      reward: { tickets: 1, beans: 32 },
       verify: {
         type: 'note', minChars: 20,
         prompts: ['我现在能讲清楚的一点是……', '我还是有点模糊的一点是……']
@@ -576,7 +614,7 @@ window.GAME_DATA = (function () {
     {
       id: 'p1_feynman', phase: [1, 2, 3], title: '费曼工作坊：讲给{pet}听', kolb: 'AC', icon: '🗣️',
       desc: '选一个今天学到的概念，用"小学生都能听懂"的话讲一遍。写不下去的地方，就是你真正的漏洞。',
-      reward: { tickets: 1, beans: 30 },
+      reward: { tickets: 1, beans: 40 },
       verify: { type: 'feynman', minCards: 1, minChars: 40 }
     },
 
@@ -585,7 +623,7 @@ window.GAME_DATA = (function () {
       id: 'p2_course', phase: [2], title: '网课磨耳朵 · 两段笔记', core: true, coreLabel: '网课',
       kolb: 'CE', icon: '🎬',
       desc: '开准题库网课。听一段回来登记一句"刚才老师讲了什么"，做完登记截图就行。不用一口气听完，磨耳朵本来就该一段一段来。',
-      reward: { tickets: 1, beans: 35 },
+      reward: { tickets: 1, beans: 50 },
       verify: {
         type: 'note', minChars: 24,
         prompts: ['这段网课我记住的关键词是……', '老师反复强调的一点是……']
@@ -595,7 +633,7 @@ window.GAME_DATA = (function () {
     {
       id: 'p2_deep', phase: [2], title: '单科深挖：{subject}', kolb: 'AC', icon: '🔬',
       desc: '今天只研究这一科。合上书，自己画一张知识框架（章节—考点—易错点），再写一张费曼卡把它讲出来。框架比背原文值钱。',
-      reward: { tickets: 2, beans: 45 },
+      reward: { tickets: 2, beans: 58 },
       verify: {
         type: 'note', minChars: 24,
         prompts: ['这一科我先搭的框架是……', '合上书，我能复述出来的是……']
@@ -606,7 +644,7 @@ window.GAME_DATA = (function () {
       id: 'p2_mock', phase: [2], title: '模考一次（每 3 天）', kolb: 'AE', icon: '📝',
       repeat: { every: 3 },
       desc: '完整做一套模考，对答案、登记分数，然后回看失分集中在哪个知识点。模考的价值在考后那 30 分钟。',
-      reward: { tickets: 3, beans: 80 },
+      reward: { tickets: 3, beans: 105 },
       verify: { type: 'quiz', minQuestions: 100, needScore: true },
       need: { photo: true }
     },
@@ -615,7 +653,7 @@ window.GAME_DATA = (function () {
       kolb: 'CE', icon: '✍️',
       split: 'subject',
       desc: '不用多，每科 15 道，但每天不断。重点是别让手感凉掉。',
-      reward: { tickets: 0, beans: 9 },
+      reward: { tickets: 0, beans: 16 },
       verify: { type: 'quiz', minQuestions: 15 },
       need: { photo: false }
     },
@@ -625,14 +663,14 @@ window.GAME_DATA = (function () {
       id: 'p3_mock', phase: [3], title: '冲刺套题 / 模考', core: true, coreLabel: '套题',
       kolb: 'AE', icon: '📝',
       desc: '按考试时间完整刷一套。不查资料、不暂停，逼出真实水平。',
-      reward: { tickets: 3, beans: 70 },
+      reward: { tickets: 3, beans: 95 },
       verify: { type: 'quiz', minQuestions: 100, needScore: true },
       need: { photo: true }
     },
     {
       id: 'p3_law', phase: [3], title: '法规与时政速记', kolb: 'AC', icon: '⚖️',
       desc: '法规条文用"数字+关键词"记（时限、金额、比例）。今天重点记 3 条，用费曼卡复述一遍。',
-      reward: { tickets: 1, beans: 35 },
+      reward: { tickets: 1, beans: 45 },
       verify: {
         type: 'note', minChars: 24,
         prompts: ['今天记住的数字 / 关键词是……', '这一条我用自己的话说是……']
@@ -643,7 +681,7 @@ window.GAME_DATA = (function () {
 
   /* ---------- 自建加餐任务可选的任务模型 ----------
      松果想自己加一条加餐任务时，从这里挑一种「已有的模型」，而不是凭空造一个新玩法：
-     每种模型都对应现成的验证方式与结算流程（reward 默认 1 券 / 15 豆，可改）。
+     每种模型都对应现成的验证方式与结算流程（reward 默认 1 券 / 22 豆，可改）。
      target 的含义随类型不同：quiz 题数 / record 分钟 / opinion 看法字数 / feynman 卡片数 / note 字数；
      reading 不需要 target（选书 + 写读了什么）。 */
   const TASK_MODELS = [
@@ -921,7 +959,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.23',
+    VERSION: 'v1.24',
     WORLD: WORLD,
     ZONES: ZONES,
     MACHINES: MACHINES,
@@ -949,6 +987,7 @@ window.GAME_DATA = (function () {
     GACHA: GACHA,
     HATCH_QUIZ: HATCH_QUIZ,
     CHALLENGE: CHALLENGE,
+    ECONOMY: ECONOMY,
     QUESTION_BANK: QUESTION_BANK,
     BOOKS: BOOKS,
     QUESTION_TEXT_SAMPLE: QUESTION_TEXT_SAMPLE,
