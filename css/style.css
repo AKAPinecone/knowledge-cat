@@ -1244,9 +1244,9 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
   width:44px;height:13px;border-radius:50%;background:#8a5a34;
   box-shadow:inset 0 2px 3px rgba(60,32,12,.45), inset 0 -2px 3px rgba(255,220,180,.25);}
 /* 遛弯的小动物 */
-.walker{transition:left 4.4s linear, top 4.4s linear;}
+.walker{transition:left 8.8s linear, top 8.8s linear;}   /* v1.31：步子放慢一半 */
 .walker .pp-body{position:absolute;left:50%;top:50%;transform:translate(-50%,-72%);z-index:2;transition:transform .5s;}
-.walker .pp-emoji{font-size:47px;animation:waddle 1.7s ease-in-out infinite;}
+.walker .pp-emoji{font-size:47px;animation:waddle 2.8s ease-in-out infinite;}
 .walker.flip .pp-body{transform:translate(-50%,-72%) scaleX(-1);}
 /* 池塘里的藻类 */
 .pond-pet{width:68px;height:68px;z-index:5;}
@@ -1634,15 +1634,20 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 .world-map{position:absolute;top:0;left:0;will-change:transform;
   transition:transform .2s ease-out;}
 .world-viewport.dragging .world-map{transition:none;}
-/* v1.29 调色：新底图偏黄、曝光过强 —— 压饱和、降亮度、微冷色移，
-   再叠一层 soft-light 冷色柔光，整体走清新马卡龙调 */
+/* v1.31 调色：底图黄味重——压红通道（黄转绿）、整体降饱和、提一点亮度，
+   草地走清新低饱和绿，画面保持明亮治愈 */
 .world-img{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none;-webkit-user-drag:none;
-  filter:saturate(.74) brightness(.955) contrast(.95) hue-rotate(-5deg);}
+  filter:saturate(.62) brightness(1.06) contrast(.94) hue-rotate(4deg);}
+/* 冷绿柔光（soft-light）：给画面统一罩一层薄荷绿的氛围 */
 .world-grade{position:absolute;inset:0;pointer-events:none;z-index:2;
-  background:linear-gradient(180deg,rgba(168,208,232,.30),rgba(214,236,246,.16) 42%,rgba(178,216,226,.22));
+  background:linear-gradient(180deg,rgba(168,224,200,.32),rgba(206,240,222,.14) 45%,rgba(160,218,196,.24));
   mix-blend-mode:soft-light;}
+/* 压红通道（multiply）：黄(255,255,0)→(198,255,0)，黄的占比肉眼可见地下降 */
+.world-cool{position:absolute;inset:0;pointer-events:none;z-index:2;
+  background:linear-gradient(180deg,rgba(190,255,242,.85),rgba(198,254,244,.8));
+  mix-blend-mode:multiply;}
 .world-grade::after{content:'';position:absolute;inset:0;
-  background:radial-gradient(120% 90% at 50% 40%,transparent 62%,rgba(90,120,140,.14));
+  background:radial-gradient(120% 90% at 50% 40%,transparent 62%,rgba(70,120,100,.12));
   mix-blend-mode:multiply;}
 
 /* 区域：一个覆盖整张底图的定位层 */
@@ -1656,22 +1661,24 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 .wzone-tag-plantfield{left:18.3%;top:5.5%;transform:translateX(-50%);}
 .wzone-tag-pond{left:58.9%;top:56.5%;transform:translateX(-50%);}
 
-/* 真菌田 · 永夜氛围：暗紫罩层（压暗）+ 缓浮光点（魔法孢子） */
-.wzone-night{position:absolute;z-index:7;pointer-events:none;border-radius:26px;overflow:hidden;
-  background:radial-gradient(85% 70% at 45% 45%,rgba(36,38,88,.40),rgba(14,16,46,.62));
-  mix-blend-mode:multiply;}
-.night-mote{position:absolute;border-radius:50%;opacity:0;
-  background:radial-gradient(circle,rgba(198,224,255,.95),rgba(150,190,255,.30) 58%,transparent 72%);
-  box-shadow:0 0 7px 2px rgba(160,195,255,.42);
-  animation:motefloat linear infinite;}
-@keyframes motefloat{
-  0%{transform:translateY(9px) scale(.82);opacity:0;}
-  16%{opacity:.92;}
-  72%{opacity:.6;}
-  100%{transform:translateY(-38px) scale(1.06);opacity:0;}
+/* 真菌田 · 永夜氛围（v1.31）：不再叠黑色遮罩——改用萤火虫粒子，
+   暖黄/青绿两色微光在夜色里缓浮、明暗呼吸，不遮挡地形细节 */
+.wzone-night{position:absolute;z-index:7;pointer-events:none;border-radius:26px;overflow:hidden;}
+.firefly{position:absolute;border-radius:50%;opacity:0;pointer-events:none;
+  animation:fireflyfly linear infinite;}
+.firefly.warm{background:radial-gradient(circle,#FFEDB0 0%,rgba(255,213,105,.9) 45%,rgba(255,198,80,0) 78%);
+  box-shadow:0 0 9px 3px rgba(255,206,96,.55);}
+.firefly.cool{background:radial-gradient(circle,#DFFFEE 0%,rgba(139,240,199,.85) 45%,rgba(118,230,188,0) 78%);
+  box-shadow:0 0 9px 3px rgba(118,230,188,.5);}
+@keyframes fireflyfly{
+  0%{transform:translate(0,0) scale(.7);opacity:0;}
+  14%{opacity:.95;}
+  42%{transform:translate(13px,-24px) scale(1.06);opacity:.28;}
+  58%{opacity:.9;}
+  100%{transform:translate(-9px,-56px) scale(.82);opacity:0;}
 }
-/* 真菌田里的小生物沾一点夜光 */
-.wzone-fungusfield .park-pet{filter:drop-shadow(0 0 7px rgba(158,190,255,.75)) drop-shadow(0 0 2px rgba(230,240,255,.6));}
+/* 真菌田里的小生物沾一点萤光 */
+.wzone-fungusfield .park-pet{filter:drop-shadow(0 0 6px rgba(255,226,140,.5)) drop-shadow(0 0 2px rgba(210,255,235,.45));}
 
 /* 固定槽位 */
 .wslot{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;
@@ -1684,7 +1691,7 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
    注意 .wzone 是 pointer-events:none，草地没有 .wslot 那样的兜底，
    动物按钮必须自己恢复 auto，否则整片草地的点击全部穿透（v1.18 踩过：点动物没反应） */
 .wzone-meadow{position:absolute;border-radius:20px;}
-.wzone-meadow .park-pet{transform:scale(.80);transition:left 4.2s linear,top 4.2s linear;
+.wzone-meadow .park-pet{transform:scale(.80);transition:left 8.4s linear,top 8.4s linear;
   pointer-events:auto;}
 .wzone-tag-meadow{left:4%;bottom:4%;}
 
@@ -1729,13 +1736,14 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 .wb-name-lv{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);white-space:nowrap;}
 .wbuilding.built:hover{transform:translate(-50%,-50%) scale(1.04);}
 .wbuilding.built:active{transform:translate(-50%,-50%) scale(.97);}
-.wbuilding.plot{aspect-ratio:1/1;border:2px dashed rgba(255,255,255,.8);border-radius:16px;
-  justify-content:center;background:repeating-linear-gradient(45deg,rgba(255,255,255,.14) 0 9px,rgba(255,255,255,.05) 9px 18px);}
-.wbuilding.plot:hover{background:repeating-linear-gradient(45deg,rgba(255,255,255,.24) 0 9px,rgba(255,255,255,.1) 9px 18px);}
+/* v1.31：占位/选中/范围提示框一律不画——建筑画在底图里，热区保持透明，
+   只留名牌与「＋」提示，避免虚线框压在画面上 */
+.wbuilding.plot{justify-content:center;border:0;background:none;}
+.wbuilding.plot:hover{background:none;}
 .wb-plus{font-size:26px;font-weight:800;color:#fff;text-shadow:0 2px 5px rgba(20,50,30,.45);line-height:1;}
-.wbuilding.plot.locked{opacity:.55;cursor:default;border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.1);}
+.wbuilding.plot.locked{opacity:.72;cursor:default;background:none;}
 .wb-lock{font-size:18px;line-height:1;}
-.wbuilding.plot.under{border-style:solid;border-color:#7BC8A0;background:linear-gradient(160deg,rgba(122,199,141,.25),rgba(122,199,141,.12));}
+.wbuilding.plot.under{background:none;}
 .wbuilding.plot.under .wb-progress{position:absolute;left:8%;bottom:18%;width:84%;height:6px;border-radius:99px;background:rgba(255,255,255,.5);overflow:hidden;}
 .wbuilding.plot.under .wb-progress > i{display:block;height:100%;background:#4CA96B;border-radius:99px;}
 .wbuilding.plot.under .wb-name{color:#2E7A4C;font-size:10px;}

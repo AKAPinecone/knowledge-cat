@@ -1017,8 +1017,9 @@
     let h = '<div class="world-viewport" id="world-vp">';
     h += '<div class="world-map" id="world-map">';
     h += '<img class="world-img" src="' + D.WORLD.img + '" alt="乐园地图" draggable="false">';
-    /* 全图调色：新底图偏黄过曝，用一层冷色柔光压回去（马卡龙色系） */
+    /* 全图调色：新底图偏黄过曝，压红转绿 + 冷绿柔光（清新低饱和马卡龙调） */
     h += '<div class="world-grade"></div>';
+    h += '<div class="world-cool"></div>';
 
     /* 固定槽位的区域：真菌田 / 植物田 / 池塘（建筑已画在底图里，只摆热区） */
     D.ZONES.forEach(function (z) {
@@ -1033,18 +1034,20 @@
       });
       h += zoneTagHtml(z, pets.length);
       h += '</div>';
-      /* 真菌田的永夜氛围：暗紫罩层 + 缓浮光点 */
+      /* 真菌田的永夜氛围（v1.31）：不再压黑遮罩，改用萤火虫粒子——
+         暖黄 / 青绿两色微光缓浮 + 明暗呼吸，夜晚感在、地形细节也不丢 */
       if (z.night) {
         const nbx = z.nightBox || [0.8, 6, 13.4, 88];
         h += '<div class="wzone-night" style="left:' + nbx[0] + '%;top:' + nbx[1] + '%;width:' + nbx[2] + '%;height:' + nbx[3] + '%">';
-        for (let i = 0; i < 14; i++) {
-          const mx = 6 + ((i * 61) % 88);                       /* 伪随机但稳定，重绘不闪 */
-          const my = 8 + ((i * 37) % 84);
-          const dur = 5 + (i % 5) * 1.7;
-          const delay = -((i * 1.3) % 8);
+        for (let i = 0; i < 18; i++) {
+          const mx = 5 + ((i * 53) % 90);                       /* 伪随机但稳定，重绘不闪 */
+          const my = 6 + ((i * 41) % 86);
+          const dur = 7 + (i % 5) * 1.9;
+          const delay = -((i * 1.7) % 11);
           const sz = 3 + (i % 3) * 2;
-          h += '<span class="night-mote" style="left:' + mx + '%;top:' + my + '%;width:' + sz + 'px;height:' + sz +
-            'px;animation-duration:' + dur.toFixed(1) + 's;animation-delay:' + delay.toFixed(1) + 's"></span>';
+          h += '<span class="firefly ' + (i % 2 ? 'cool' : 'warm') + '" style="left:' + mx + '%;top:' + my +
+            '%;width:' + sz + 'px;height:' + sz + 'px;animation-duration:' + dur.toFixed(1) +
+            's;animation-delay:' + delay.toFixed(1) + 's"></span>';
         }
         h += '</div>';
       }
@@ -1057,34 +1060,35 @@
     roamPets.forEach(function (p) { h += walkerPetHtml(p); });
     h += '</div>';
 
-    /* 三台机器：底图已画好，只放热区 + 小名牌 */
+    /* 三台机器：底图已画好，只放热区 + 小名牌（v1.31 热区带显式高度，互不重叠） */
     D.MACHINES.forEach(function (m) {
       h += '<button class="wmachine" data-act="' + m.act + '" style="left:' + m.x + '%;top:' + m.y +
-        '%;width:' + m.w + '%" title="' + esc(m.name) + '">' +
+        '%;width:' + m.w + '%;height:' + (m.h || 24) + '%" title="' + esc(m.name) + '">' +
         '<span class="wm-label">' + (m.emoji || '') + ' ' + esc(m.name) + '</span></button>';
     });
 
     /* 建筑：已建成 / 建造中 / 下一块空地 / 还没轮到（画在底图里，热区罩上去） */
     D.BUILDINGS.forEach(function (b) {
+      const box = 'left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%;height:' + (b.h || 22) + '%';
       const built = window.Game.isBuilt(b.id);
       const uc = window.Game.buildProgress(b.id);
       if (built) {
         h += '<button class="wbuilding built" data-act="build-open" data-id="' + b.id +
-          '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%" title="' + esc(b.name) + '">' +
+          '" style="' + box + '" title="' + esc(b.name) + '">' +
           '<span class="wb-name wb-name-lv">' + b.emoji + ' ' + b.name + ' Lv.' + window.Game.buildLv(b.id) + '</span></button>';
       } else if (uc.on) {
         const pct = Math.round(uc.p * 100);
         const minLeft = Math.max(1, Math.ceil(uc.remain / 60000));
         h += '<button class="wbuilding plot under" data-act="build-open" data-id="' + b.id +
-          '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%" title="' + esc(b.name) + ' 建造中">' +
+          '" style="' + box + '" title="' + esc(b.name) + ' 建造中">' +
           '<span class="wb-progress"><i style="width:' + pct + '%"></i></span>' +
           '<span class="wb-name">' + b.name + ' · ' + pct + '%（约' + minLeft + '分钟）</span></button>';
       } else if (nb && nb.id === b.id) {
         h += '<button class="wbuilding plot" data-act="build-open" data-id="' + b.id +
-          '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%" title="在这里盖' + esc(b.name) + '">' +
+          '" style="' + box + '" title="在这里盖' + esc(b.name) + '">' +
           '<span class="wb-plus">＋</span><span class="wb-name">盖 ' + b.name + '</span></button>';
       } else {
-        h += '<span class="wbuilding plot locked" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%">' +
+        h += '<span class="wbuilding plot locked" style="' + box + '">' +
           '<span class="wb-lock">🔒</span><span class="wb-name">' + b.name + '</span></span>';
       }
     });
@@ -1318,7 +1322,7 @@
       el.style.left = ((map[id].x - r[0]) / r[2] * 100) + '%';
       el.style.top = ((map[id].y - r[1]) / r[3] * 100) + '%';
     });
-    parkTimer = setInterval(parkTick, 4600);
+    parkTimer = setInterval(parkTick, 9200);   /* v1.31：目标点间隔翻倍，步子慢一半 */
   }
   function parkTick() {
     const zone = document.getElementById('wzone-meadow');

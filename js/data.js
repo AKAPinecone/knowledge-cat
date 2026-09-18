@@ -1302,7 +1302,7 @@ window.GAME_DATA = (function () {
      ★ 坐标全部来自颜色掩膜实测（dev/calib_v2.py，3 列质心 x 5 行质心）：
        真菌田 x = 3.96 / 7.08 / 10.28，y = 20.98 / 35.32 / 49.90 / 65.06 / 79.62
        植物田 x = 14.91 / 18.27 / 21.61，y = 20.43 / 35.76 / 50.92 / 66.07 / 80.98
-       池塘水面椭圆中心 (58.94, 76.9)，6 槽 = 2 行 x 3 列 */
+       池塘水面椭圆中心 (58.94, 76.9)，8 槽 = 2 行 x 4 列（v1.31 扩容，全部内缩留边） */
   const ZONES = [
     {
       id: 'fungusfield', name: '真菌田', emoji: '🍄', kinds: ['fungus'], cap: 15,
@@ -1329,11 +1329,11 @@ window.GAME_DATA = (function () {
       ]
     },
     {
-      id: 'pond', name: '池塘', emoji: '🪷', kinds: ['algae', 'water'], cap: 6,
+      id: 'pond', name: '池塘', emoji: '🪷', kinds: ['algae', 'water'], cap: 8,
       tip: '水生的泡在水里（海菜花 · 红瘰疣螈 · 云南闭壳龟 · 藻类）',
       slots: [
-        [55.4, 70.5], [58.94, 69.8], [62.5, 70.5],
-        [55.4, 82.5], [58.94, 83.4], [62.5, 82.5]
+        [54.24, 72.6], [57.37, 72.6], [60.51, 72.6], [63.64, 72.6],
+        [54.24, 81.2], [57.37, 81.2], [60.51, 81.2], [63.64, 81.2]
       ]
     },
     {
@@ -1387,41 +1387,42 @@ window.GAME_DATA = (function () {
      新底图把三台机器直接画在了上排：扭蛋机 / 孵化仓 / 保管仓。
      不再叠独立立绘，只放透明热区（x/y 为画中机器的实测中心，w 是热区宽度）。 */
   const MACHINES = [
-    { id: 'gacha', name: '扭蛋机', emoji: '🎰', x: 43.72, y: 27.0, w: 8.6, act: 'm-gacha' },
-    { id: 'incubator', name: '孵化仓', emoji: '🥚', x: 52.45, y: 26.0, w: 9.4, act: 'm-incubator' },
-    { id: 'storage', name: '保管仓', emoji: '🍄', x: 61.95, y: 25.7, w: 10.2, act: 'm-storage' }
+    { id: 'gacha', name: '扭蛋机', emoji: '🎰', x: 47.3, y: 27.3, w: 6.7, h: 26, act: 'm-gacha' },
+    { id: 'incubator', name: '孵化仓', emoji: '🥚', x: 54.9, y: 24.6, w: 8.3, h: 40, act: 'm-incubator' },
+    { id: 'storage', name: '保管仓', emoji: '🍄', x: 65.0, y: 24.2, w: 8.4, h: 28, act: 'm-storage' }
   ];
 
   /* 可按顺序修建的建筑：人（动物劳力）+ 植物（材料）+ 真菌（胶合料）
      v1.29：五栋建筑也画死在新底图上——澡堂/食堂/博物馆在上排，图书馆/旅行社在下排。
-     坐标是画中建筑的实测中心（dev/calib_v2.py 窗口质心），点击热区直接罩上去。 */
+     v1.31：坐标全部按画中建筑重新量测（dev/measure_v131.py 颜色掩膜），
+     并新增 h（热区高，相对地图高）；相邻热区间留缝，互不重叠。 */
   const BUILDINGS = [
     {
-      id: 'canteen', name: '食堂', x: 80.0, y: 26.0, w: 11.2,
+      id: 'canteen', name: '食堂', x: 82.5, y: 29.0, w: 8.2, h: 34,
       emoji: '🍲', order: 1,
       desc: '清水 + 饲料 换可可豆，小生物也能来吃饭',
       story: 'canteen'
     },
     {
-      id: 'bath', name: '澡堂', x: 70.18, y: 25.1, w: 10.4,
+      id: 'bath', name: '澡堂', x: 74.6, y: 21.8, w: 7.4, h: 20,
       emoji: '🛁', order: 2,
       desc: '洗澡涨清洁值，顺便产营养液',
       story: 'bath'
     },
     {
-      id: 'library', name: '图书馆', x: 74.27, y: 75.1, w: 13.6,
+      id: 'library', name: '图书馆', x: 76.0, y: 75.0, w: 10.8, h: 40,
       emoji: '📚', order: 3,
       desc: '待在里面涨娱乐值',
       story: 'library'
     },
     {
-      id: 'travel', name: '旅行社', x: 88.28, y: 75.7, w: 13.0,
+      id: 'travel', name: '旅行社', x: 87.1, y: 70.0, w: 8.6, h: 32,
       emoji: '🧭', order: 4,
       desc: '一只当导游带团出游，回来带土特产和收藏品',
       story: 'travel'
     },
     {
-      id: 'museum', name: '博物馆', x: 91.48, y: 24.7, w: 14.0,
+      id: 'museum', name: '博物馆', x: 93.3, y: 21.7, w: 8.6, h: 26,
       emoji: '🏛️', order: 5,
       desc: '陈列旅行收藏品和成就奖杯',
       story: 'museum'
@@ -1605,7 +1606,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.30',
+    VERSION: 'v1.31',
     WORLD: WORLD,
     ZONES: ZONES,
     ROAM_AVOID: ROAM_AVOID,
