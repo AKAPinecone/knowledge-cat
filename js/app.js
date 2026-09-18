@@ -944,8 +944,8 @@
 
   function pottedPetHtml(p, zoneId) {
     const sp = window.Game.speciesById(p.speciesId);
-    /* 苗圃（nursery）是沃土地：植物直接种地里，不套花盆；温室窗口里才用盆 */
-    const inBed = zoneId === 'nursery';
+    /* v1.29：真菌田 / 植物田都是直接种地里，不套花盆 */
+    const inBed = zoneId === 'plantfield' || zoneId === 'fungusfield';
     return '<div class="park-pet potted' + (inBed ? ' no-pot' : '') + (p.illness ? ' sick' : '') + (p.dormant ? ' dormant' : '') + artKindCls(sp) +
       '" data-act="pet-open" data-id="' + p.id + '">' +
       petFaceHtml(p) + (inBed ? '' : '<span class="pp-pot">' + potSvg() + '</span>') + '</div>';
@@ -1013,23 +1013,18 @@
   function worldMapHtml() {
     const nb = window.Game.nextBuilding();
     const meadow = window.Game.zoneById('meadow');
-    const r = (meadow && meadow.rect) || [44, 22, 30, 18];
+    const r = (meadow && meadow.rect) || [3, 10, 94, 82];
     let h = '<div class="world-viewport" id="world-vp">';
     h += '<div class="world-map" id="world-map">';
     h += '<img class="world-img" src="' + D.WORLD.img + '" alt="乐园地图" draggable="false">';
+    /* 全图调色：新底图偏黄过曝，用一层冷色柔光压回去（马卡龙色系） */
+    h += '<div class="world-grade"></div>';
 
-    /* 固定槽位的区域：苗圃 / 池塘；enter 型（温室）只画热区，点了开窗进去 */
+    /* 固定槽位的区域：真菌田 / 植物田 / 池塘（建筑已画在底图里，只摆热区） */
     D.ZONES.forEach(function (z) {
       if (z.roam) return;
       const pets = window.Game.petsInZone(z.id);
       h += '<div class="wzone wzone-' + z.id + '">';
-      if (z.enter) {
-        const d = z.door || { x: 50, y: 50, w: 16 };
-        h += '<button class="wzone-enter" data-act="z-enter" data-id="' + z.id + '" style="left:' + d.x + '%;top:' + d.y + '%;width:' + d.w + '%" title="' + esc(z.name) + ' · 点我进去">' +
-          '<span class="wze-tag">' + z.emoji + ' ' + esc(z.name) + ' ' + pets.length + '/' + z.cap + ' · 点我进去</span></button>';
-        h += '</div>';
-        return;
-      }
       z.slots.forEach(function (pos, i) {
         const p = pets[i];
         h += '<div class="wslot' + (p ? ' filled' : '') + '" style="left:' + pos[0] + '%;top:' + pos[1] + '%">' +
@@ -1038,38 +1033,50 @@
       });
       h += zoneTagHtml(z, pets.length);
       h += '</div>';
+      /* 真菌田的永夜氛围：暗紫罩层 + 缓浮光点 */
+      if (z.night) {
+        const nbx = z.nightBox || [0.8, 6, 13.4, 88];
+        h += '<div class="wzone-night" style="left:' + nbx[0] + '%;top:' + nbx[1] + '%;width:' + nbx[2] + '%;height:' + nbx[3] + '%">';
+        for (let i = 0; i < 14; i++) {
+          const mx = 6 + ((i * 61) % 88);                       /* 伪随机但稳定，重绘不闪 */
+          const my = 8 + ((i * 37) % 84);
+          const dur = 5 + (i % 5) * 1.7;
+          const delay = -((i * 1.3) % 8);
+          const sz = 3 + (i % 3) * 2;
+          h += '<span class="night-mote" style="left:' + mx + '%;top:' + my + '%;width:' + sz + 'px;height:' + sz +
+            'px;animation-duration:' + dur.toFixed(1) + 's;animation-delay:' + delay.toFixed(1) + 's"></span>';
+        }
+        h += '</div>';
+      }
     });
 
-    /* 草地：动物自由遛弯 */
+    /* 动物：自由穿行整张地图（田地与道路都能走，建筑和池塘绕开） */
     const roamPets = window.Game.petsInZone('meadow');
     h += '<div class="wzone wzone-meadow" id="wzone-meadow" style="left:' + r[0] + '%;top:' + r[1] +
       '%;width:' + r[2] + '%;height:' + r[3] + '%">';
     roamPets.forEach(function (p) { h += walkerPetHtml(p); });
-    h += zoneTagHtml(meadow, roamPets.length);
     h += '</div>';
 
-    /* 三台机器：点击开窗 */
+    /* 三台机器：底图已画好，只放热区 + 小名牌 */
     D.MACHINES.forEach(function (m) {
       h += '<button class="wmachine" data-act="' + m.act + '" style="left:' + m.x + '%;top:' + m.y +
         '%;width:' + m.w + '%" title="' + esc(m.name) + '">' +
-        '<img src="' + m.img + '" alt="' + esc(m.name) + '" draggable="false"></button>';
+        '<span class="wm-label">' + (m.emoji || '') + ' ' + esc(m.name) + '</span></button>';
     });
 
-    /* 建筑：已建成 / 建造中 / 下一块空地 / 还没轮到 */
+    /* 建筑：已建成 / 建造中 / 下一块空地 / 还没轮到（画在底图里，热区罩上去） */
     D.BUILDINGS.forEach(function (b) {
       const built = window.Game.isBuilt(b.id);
       const uc = window.Game.buildProgress(b.id);
       if (built) {
         h += '<button class="wbuilding built" data-act="build-open" data-id="' + b.id +
           '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%" title="' + esc(b.name) + '">' +
-          '<img src="' + b.img + '" alt="' + esc(b.name) + '" draggable="false">' +
-          '<span class="wb-name">' + b.emoji + ' ' + b.name + ' Lv.' + window.Game.buildLv(b.id) + '</span></button>';
+          '<span class="wb-name wb-name-lv">' + b.emoji + ' ' + b.name + ' Lv.' + window.Game.buildLv(b.id) + '</span></button>';
       } else if (uc.on) {
         const pct = Math.round(uc.p * 100);
         const minLeft = Math.max(1, Math.ceil(uc.remain / 60000));
         h += '<button class="wbuilding plot under" data-act="build-open" data-id="' + b.id +
           '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%" title="' + esc(b.name) + ' 建造中">' +
-          '<span class="wb-plus">🏗️</span>' +
           '<span class="wb-progress"><i style="width:' + pct + '%"></i></span>' +
           '<span class="wb-name">' + b.name + ' · ' + pct + '%（约' + minLeft + '分钟）</span></button>';
       } else if (nb && nb.id === b.id) {
@@ -1137,8 +1144,8 @@
     const lay = layoutWorld();
     if (!lay) return;
     if (!wpInit) {
-      /* 第一次进来：把视线落在温室 + 草地这一片 */
-      wp.x = -(lay.mw - lay.vw) * 0.42;
+      /* 第一次进来：视线落在左侧两块田（真菌田 + 植物田） */
+      wp.x = -(lay.mw - lay.vw) * 0.10;
       wpInit = true;
     }
     clampPan(lay);
@@ -1245,34 +1252,88 @@
     return h;
   }
 
-  /* ---- 乐园运行时：小动物在草地上遛弯（4.6 秒换目标点） ---- */
+  /* ---- 乐园运行时：小动物自由穿行整张地图（4.6 秒换目标点，v1.29） ----
+     坐标是相对走动区（meadow.rect）的百分比；建筑带 / 图书馆 / 旅行社 / 池塘
+     由 D.ROAM_AVOID 挡住：目标点和走过去的直线路径都要落在外面，不穿模、不卡死。 */
   let parkTimer = null;
   function stopPark() { if (parkTimer) { clearInterval(parkTimer); parkTimer = null; } }
+  function parkBounds() {
+    /* 返回的是【整张地图】的百分比范围（ROAM_AVOID 也是地图百分比，两套坐标必须一致） */
+    const z = window.Game.zoneById('meadow');
+    const r = (z && z.rect) || [3, 10, 94, 82];
+    return { x1: r[0], y1: r[1], x2: r[0] + r[2], y2: r[1] + r[3] };
+  }
+  function roamFree(x, y) {
+    const av = D.ROAM_AVOID || { rects: [], ellipses: [] };
+    for (let i = 0; i < (av.rects || []).length; i++) {
+      const q = av.rects[i];
+      if (x > q.x1 && x < q.x2 && y > q.y1 && y < q.y2) return false;
+    }
+    for (let i = 0; i < (av.ellipses || []).length; i++) {
+      const e = av.ellipses[i];
+      const dx = (x - e.cx) / e.rx, dy = (y - e.cy) / e.ry;
+      if (dx * dx + dy * dy < 1) return false;
+    }
+    return true;
+  }
+  function pathClear(x1, y1, x2, y2) {
+    for (let i = 1; i <= 11; i++) {
+      const t = i / 12;
+      if (!roamFree(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)) return false;
+    }
+    return true;
+  }
+  function parkPick(from) {
+    const b = parkBounds();
+    for (let tries = 0; tries < 10; tries++) {
+      const x = b.x1 + Math.random() * (b.x2 - b.x1);
+      const y = b.y1 + Math.random() * (b.y2 - b.y1);
+      if (!roamFree(x, y)) continue;
+      /* 从当前位置一路走过去都不能穿障碍；走不通就重抽，实在不行原地不动 */
+      if (from && !pathClear(from.x, from.y, x, y)) continue;
+      return { x: x, y: y };
+    }
+    /* 兜底：在脚下小范围挪一步，同样要落在空地且走过去不穿模；不行就原地站着 */
+    if (from && roamFree(from.x, from.y)) {
+      for (let tries = 0; tries < 8; tries++) {
+        const x = Math.max(b.x1, Math.min(b.x2, from.x + (Math.random() * 8 - 4)));
+        const y = Math.max(b.y1, Math.min(b.y2, from.y + (Math.random() * 6 - 3)));
+        if (roamFree(x, y) && pathClear(from.x, from.y, x, y)) return { x: x, y: y };
+      }
+      return { x: from.x, y: from.y };
+    }
+    return { x: 10, y: 60 };
+  }
   function startPark() {
     stopPark();
     const zone = document.getElementById('wzone-meadow');
     if (!zone) return;
+    const z = window.Game.zoneById('meadow');
+    const r = (z && z.rect) || [3, 10, 94, 82];
     $$('#wzone-meadow .walker').forEach(function (el) {
       const id = el.dataset.pet;
       const map = parkPosMap();
-      if (!map[id]) map[id] = { x: 10 + Math.random() * 74, y: 20 + Math.random() * 58 };
-      el.style.left = map[id].x + '%';
-      el.style.top = map[id].y + '%';
+      if (!map[id] || !roamFree(map[id].x, map[id].y)) map[id] = parkPick(null);
+      /* parkPosMap 存的是地图百分比；摆到 rect 内要用 rect 相对百分比 */
+      el.style.left = ((map[id].x - r[0]) / r[2] * 100) + '%';
+      el.style.top = ((map[id].y - r[1]) / r[3] * 100) + '%';
     });
     parkTimer = setInterval(parkTick, 4600);
   }
   function parkTick() {
     const zone = document.getElementById('wzone-meadow');
     if (!zone) { stopPark(); return; }
+    const z = window.Game.zoneById('meadow');
+    const r = (z && z.rect) || [3, 10, 94, 82];
     $$('#wzone-meadow .walker').forEach(function (el) {
       const id = el.dataset.pet;
-      const pos = parkPosMap()[id];
-      if (!pos) return;
-      pos.x = Math.max(8, Math.min(92, pos.x + (Math.random() * 40 - 20)));
-      pos.y = Math.max(14, Math.min(86, pos.y + (Math.random() * 26 - 13)));
-      el.style.left = pos.x + '%';
-      el.style.top = pos.y + '%';
-      if (Math.random() < 0.5) el.classList.toggle('flip');
+      const from = parkPosMap()[id];
+      if (!from) return;
+      const to = parkPick(from);
+      if (Math.abs(to.x - from.x) > 0.5) el.classList.toggle('flip', to.x < from.x);
+      from.x = to.x; from.y = to.y;
+      el.style.left = ((to.x - r[0]) / r[2] * 100) + '%';
+      el.style.top = ((to.y - r[1]) / r[3] * 100) + '%';
     });
   }
 

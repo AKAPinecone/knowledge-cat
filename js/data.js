@@ -1208,73 +1208,86 @@ window.GAME_DATA = (function () {
   const DOCS = [];
 
   /* =========================================================
-   * v1.18 大世界地图（可拖动）+ 建筑系统
-   * 底图只有地形；建筑/机器都是浮在上面的立绘（百分比定位）
+   * v1.29 大世界地图 · 全新底图（超宽条幅）
+   * 布局（底图实测，标定脚本 dev/calib_v2.py）：
+   *   最左紫色真菌田（3列x5行=15格，永夜氛围）→ 植物田（3列x5行=15格）
+   *   → 道路（y 41.5%~53.6%）分上下：上排 扭蛋机/孵化仓/保管仓/澡堂/食堂/博物馆，
+   *     下排 池塘/图书馆/旅行社。所有建筑都直接画在底图里，代码里只摆热区。
    * ========================================================= */
-  const WORLD = { img: 'assets/map/world.webp', w: 2150, h: 1024, ratio: 2150 / 1024 };
+  const WORLD = { img: 'assets/map/world2.webp', w: 3840, h: 974, ratio: 3840 / 974 };
 
-  /* 区域：小生物按 kind 归位。slots 是 [x%, y%]，相对底图
-     （坐标照着 v1.20 底图重标的：左下耕地 / 左中空玻璃房 / 中下池塘 / 右侧大片草地）
-     greenhouse 是 enter 型：地图上只画一个玻璃房，点它开窗进去，12 个槽在窗口里。
-
-     ★ 伪 3D 斜向对齐（v1.20）：
-     底图上的地面是一个斜的网格，耕地的两条边就是网格轴：
-        e1 (左角→上角) ≈ -47°，沿「跨垄」方向、垄与垄的间隔方向
-        e2 (左角→下角) ≈ +41°，沿「垄沟」方向（垄就是顺着 e2 长出来的）
-     苗圃的 12 个槽 = 4 条垄 × 每垄 3 株，站在真实垄面上（u 是垄心、v 是沿垄位置）：
-        u = 0.06 / 0.29 / 0.52 / 0.76   （实测垄心附近）
-        v = 0.20 / 0.50 / 0.80
-     池塘的 6 个槽按水面的椭圆（中心 35.1% / 75.9%，rx 158px、ry 96px）摆成 2 行 3 列。 */
+  /* 区域：小生物按 kind 归位。slots 是 [x%, y%]，相对底图。
+     ★ 坐标全部来自颜色掩膜实测（dev/calib_v2.py，3 列质心 x 5 行质心）：
+       真菌田 x = 3.96 / 7.08 / 10.28，y = 20.98 / 35.32 / 49.90 / 65.06 / 79.62
+       植物田 x = 14.91 / 18.27 / 21.61，y = 20.43 / 35.76 / 50.92 / 66.07 / 80.98
+       池塘水面椭圆中心 (58.94, 76.9)，6 槽 = 2 行 x 3 列 */
   const ZONES = [
     {
-      id: 'nursery', name: '苗圃', emoji: '🌱', kinds: ['plant'], cap: 12,
-      tip: '植物直接种在沃土里（一排排顺着垄）',
+      id: 'fungusfield', name: '真菌田', emoji: '🍄', kinds: ['fungus'], cap: 15,
+      tip: '魔法永夜里的真菌田：一格一株，直接种在菌床上',
+      night: true,
+      nightBox: [1.0, 6, 11.8, 88],      /* 永夜氛围层覆盖范围 [x, y, w, h]（%）：右缘 12.8%，不压到植物田（13.39% 起） */
       slots: [
-        /* 12 个坑位 = 底图上 3 条垄（第 1/3/5 条）× 每条 4 株，v1.20 重排。
-           坐标来自田块仿射系 p = Wc + u*e1 + v*e2（标定见 dev/ridges.py / field_range.py）：
-             6 条垄心 u = 0.052/0.228/0.423/0.607/0.801/0.972（亮度剖面实测），取 0.052/0.423/0.801；
-             沿垄 v 取土掩膜可用长度的 18%/42%/66%/90%（等距）。
-           为什么 3 垄 x 4 而不是 6 垄 x 2：相邻两垄在手机上只隔 ≈24 CSS px，立绘 31~46 px 会糊；
-             隔一条垄用（≈48 px）刚好不打架，每条垄 4 株又能把垄从头铺到尾。
-           改完务必跑 dev/lay_nursery_final.py（贴真实立绘）与 dev/map-zoom.js 肉眼核对。 */
-        [2.93, 73.76], [5.23, 77.98], [7.52, 82.2], [9.82, 86.42],     /* 垄 1 */
-        [6.07, 66.66], [8.37, 70.88], [10.67, 75.09], [12.97, 79.31],  /* 垄 2 */
-        [9.28, 59.42], [11.58, 63.64], [13.88, 67.86], [16.17, 72.07]  /* 垄 3 */
+        [3.96, 20.98], [7.08, 20.98], [10.28, 20.98],
+        [3.96, 35.32], [7.08, 35.32], [10.28, 35.32],
+        [3.96, 49.90], [7.08, 49.90], [10.28, 49.90],
+        [3.96, 65.06], [7.08, 65.06], [10.28, 65.06],
+        [3.96, 79.62], [7.08, 79.62], [10.28, 79.62]
       ]
     },
     {
-      id: 'greenhouse', name: '温室', emoji: '🍄', kinds: ['fungus'], cap: 12,
-      tip: '真菌住玻璃房（点玻璃房进去）',
-      enter: true,                       /* 点击进入型：窗口里摆 12 个槽 */
-      door: { x: 21.8, y: 40, w: 17 }    /* 玻璃房热区（中心 + 宽度） */
+      id: 'plantfield', name: '植物田', emoji: '🌱', kinds: ['plant'], cap: 15,
+      tip: '沃土垄田：一格一株，整整齐齐',
+      slots: [
+        [14.91, 20.43], [18.27, 20.43], [21.61, 20.43],
+        [14.91, 35.76], [18.27, 35.76], [21.61, 35.76],
+        [14.91, 50.92], [18.27, 50.92], [21.61, 50.92],
+        [14.91, 66.07], [18.27, 66.07], [21.61, 66.07],
+        [14.91, 80.98], [18.27, 80.98], [21.61, 80.98]
+      ]
     },
     {
       id: 'pond', name: '池塘', emoji: '🪷', kinds: ['algae', 'water'], cap: 6,
       tip: '水生的泡在水里（海菜花 · 红瘰疣螈 · 云南闭壳龟 · 藻类）',
       slots: [
-        [30.81, 73.13], [35.07, 73.13], [39.34, 73.13],
-        [30.81, 78.74], [35.07, 78.74], [39.34, 78.74]
+        [55.4, 70.5], [58.94, 69.8], [62.5, 70.5],
+        [55.4, 82.5], [58.94, 83.4], [62.5, 82.5]
       ]
     },
     {
-      id: 'meadow', name: '草地', emoji: '🌿', kinds: ['animal'], cap: 0, roam: true,
-      tip: '动物自由遛弯',
-      rect: [46, 48, 51, 48]        /* x, y, w, h（百分比）：动物遛弯范围（v1.20 收到草地上，别走进树线） */
+      id: 'meadow', name: '乐园', emoji: '🌿', kinds: ['animal'], cap: 0, roam: true,
+      tip: '动物自由穿行整张地图（田地与道路都能走）',
+      rect: [3, 10, 94, 82]        /* x, y, w, h（%）：走动范围；建筑与池塘由 ROAM_AVOID 挡开 */
     }
   ];
 
-  /* ---------- 安置区域：小生物该住哪儿 / 住满了没有（v1.28） ----------
+  /* 动物自由走动的"绕行"障碍（v1.29 底图实测）：
+     顶排建筑带 + 图书馆 + 旅行社是矩形，池塘是椭圆。
+     走动目标点与路径都要避开，防止穿模/卡在建筑里。 */
+  const ROAM_AVOID = {
+    rects: [
+      { x1: 38.5, y1: 4, x2: 98.5, y2: 46 },    /* 扭蛋机→博物馆整排 */
+      { x1: 66.5, y1: 50, x2: 81.5, y2: 99 },   /* 图书馆 */
+      { x1: 81.0, y1: 51, x2: 95.0, y2: 99 },   /* 旅行社 */
+      { x1: 0, y1: 0, x2: 100, y2: 6 }          /* 顶部树线 */
+    ],
+    ellipses: [
+      { cx: 58.94, cy: 76.9, rx: 7.6, ry: 15.5 } /* 池塘水面 */
+    ]
+  };
+
+  /* ---------- 安置区域：小生物该住哪儿 / 住满了没有（v1.29） ----------
      判定只有这一个源头（跟 v1.25 的 isWaterDweller 同理：store 在 game 下层，
      不能反调 Game.zoneIdOf，所以规则放 data 层，game / store 都来这儿读）。
-     水生的 → 池塘；动物 → 草地；真菌 → 温室；其余 → 苗圃。
-     容量：roam 区域（草地）是敞开的，返回 0 表示"不限"；其余看 cap。 */
+     水生的 → 池塘；动物 → 全图自由走动（meadow）；真菌 → 真菌田；其余 → 植物田。
+     容量：roam 区域是敞开的，返回 0 表示"不限"；其余看 cap。 */
   function zoneIdOfSpecies(speciesId) {
     if (isWaterDweller(speciesId)) return 'pond';
     const sp = SPECIES_MAP[speciesId];
-    if (!sp) return 'nursery';
+    if (!sp) return 'plantfield';
     if (sp.kind === 'animal') return 'meadow';
-    if (sp.kind === 'fungus') return 'greenhouse';
-    return 'nursery';
+    if (sp.kind === 'fungus') return 'fungusfield';
+    return 'plantfield';
   }
   function zoneMetaById(id) {
     const zs = ZONES || [];
@@ -1288,44 +1301,45 @@ window.GAME_DATA = (function () {
     return Number(z.cap) || 0;
   }
 
-  /* 点击开窗的「机器」三件。
-     v1.21：三台机器改到池塘上方、道路左侧的空地，交错成三角，不压道路/温室/池塘。 */
+  /* 点击开窗的「机器」三件（v1.29）。
+     新底图把三台机器直接画在了上排：扭蛋机 / 孵化仓 / 保管仓。
+     不再叠独立立绘，只放透明热区（x/y 为画中机器的实测中心，w 是热区宽度）。 */
   const MACHINES = [
-    { id: 'gacha', name: '扭蛋机', img: 'assets/buildings/gacha.webp', x: 30, y: 42, w: 4.5, act: 'm-gacha' },
-    { id: 'incubator', name: '孵化仓', img: 'assets/buildings/incubator.webp', x: 36, y: 48, w: 8, act: 'm-incubator' },
-    { id: 'storage', name: '保管室', img: 'assets/buildings/storage.webp', x: 26, y: 55, w: 6, act: 'm-storage' }
+    { id: 'gacha', name: '扭蛋机', emoji: '🎰', x: 43.72, y: 27.0, w: 8.6, act: 'm-gacha' },
+    { id: 'incubator', name: '孵化仓', emoji: '🥚', x: 52.45, y: 26.0, w: 9.4, act: 'm-incubator' },
+    { id: 'storage', name: '保管仓', emoji: '🍄', x: 61.95, y: 25.7, w: 10.2, act: 'm-storage' }
   ];
 
   /* 可按顺序修建的建筑：人（动物劳力）+ 植物（材料）+ 真菌（胶合料）
-     v1.21：五栋建筑与它们的预存空间全部改到道路右侧的大片草地，z 字形交错排布，
-     不排成一行也不排成一列，彼此间距足够、都能点得到。 */
+     v1.29：五栋建筑也画死在新底图上——澡堂/食堂/博物馆在上排，图书馆/旅行社在下排。
+     坐标是画中建筑的实测中心（dev/calib_v2.py 窗口质心），点击热区直接罩上去。 */
   const BUILDINGS = [
     {
-      id: 'canteen', name: '食堂', img: 'assets/buildings/canteen.webp', x: 58, y: 46, w: 8,
+      id: 'canteen', name: '食堂', x: 80.0, y: 26.0, w: 11.2,
       emoji: '🍲', order: 1,
       desc: '清水 + 饲料 换可可豆，小生物也能来吃饭',
       story: 'canteen'
     },
     {
-      id: 'bath', name: '澡堂', img: 'assets/buildings/bath.webp', x: 76, y: 52, w: 8,
+      id: 'bath', name: '澡堂', x: 70.18, y: 25.1, w: 10.4,
       emoji: '🛁', order: 2,
       desc: '洗澡涨清洁值，顺便产营养液',
       story: 'bath'
     },
     {
-      id: 'library', name: '图书馆', img: 'assets/buildings/library.webp', x: 66, y: 68, w: 8,
+      id: 'library', name: '图书馆', x: 74.27, y: 75.1, w: 13.6,
       emoji: '📚', order: 3,
       desc: '待在里面涨娱乐值',
       story: 'library'
     },
     {
-      id: 'travel', name: '旅行社', img: 'assets/buildings/travel.webp', x: 84, y: 72, w: 8,
+      id: 'travel', name: '旅行社', x: 88.28, y: 75.7, w: 13.0,
       emoji: '🧭', order: 4,
       desc: '一只当导游带团出游，回来带土特产和收藏品',
       story: 'travel'
     },
     {
-      id: 'museum', name: '博物馆', img: 'assets/buildings/museum.webp', x: 72, y: 82, w: 8,
+      id: 'museum', name: '博物馆', x: 91.48, y: 24.7, w: 14.0,
       emoji: '🏛️', order: 5,
       desc: '陈列旅行收藏品和成就奖杯',
       story: 'museum'
@@ -1509,9 +1523,10 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.28',
+    VERSION: 'v1.29',
     WORLD: WORLD,
     ZONES: ZONES,
+    ROAM_AVOID: ROAM_AVOID,
     MACHINES: MACHINES,
     BUILDINGS: BUILDINGS,
     BUILD_RULE: BUILD_RULE,

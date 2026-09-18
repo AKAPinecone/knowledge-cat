@@ -1634,7 +1634,16 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 .world-map{position:absolute;top:0;left:0;will-change:transform;
   transition:transform .2s ease-out;}
 .world-viewport.dragging .world-map{transition:none;}
-.world-img{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none;-webkit-user-drag:none;}
+/* v1.29 调色：新底图偏黄、曝光过强 —— 压饱和、降亮度、微冷色移，
+   再叠一层 soft-light 冷色柔光，整体走清新马卡龙调 */
+.world-img{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none;-webkit-user-drag:none;
+  filter:saturate(.74) brightness(.955) contrast(.95) hue-rotate(-5deg);}
+.world-grade{position:absolute;inset:0;pointer-events:none;z-index:2;
+  background:linear-gradient(180deg,rgba(168,208,232,.30),rgba(214,236,246,.16) 42%,rgba(178,216,226,.22));
+  mix-blend-mode:soft-light;}
+.world-grade::after{content:'';position:absolute;inset:0;
+  background:radial-gradient(120% 90% at 50% 40%,transparent 62%,rgba(90,120,140,.14));
+  mix-blend-mode:multiply;}
 
 /* 区域：一个覆盖整张底图的定位层 */
 .wzone{position:absolute;inset:0;pointer-events:none;}
@@ -1643,8 +1652,26 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
   border-radius:999px;padding:2px 8px;white-space:nowrap;pointer-events:none;
   backdrop-filter:blur(3px);box-shadow:0 2px 6px rgba(20,50,30,.12);}
 .wzone-tag i{font-style:normal;color:#5B7263;font-weight:600;}
-.wzone-tag-nursery{left:13%;top:53.5%;transform:translateX(-50%);}
-.wzone-tag-pond{left:34%;top:59.5%;transform:translateX(-50%);}
+.wzone-tag-fungusfield{left:7.1%;top:5.5%;transform:translateX(-50%);}
+.wzone-tag-plantfield{left:18.3%;top:5.5%;transform:translateX(-50%);}
+.wzone-tag-pond{left:58.9%;top:56.5%;transform:translateX(-50%);}
+
+/* 真菌田 · 永夜氛围：暗紫罩层（压暗）+ 缓浮光点（魔法孢子） */
+.wzone-night{position:absolute;z-index:7;pointer-events:none;border-radius:26px;overflow:hidden;
+  background:radial-gradient(85% 70% at 45% 45%,rgba(36,38,88,.40),rgba(14,16,46,.62));
+  mix-blend-mode:multiply;}
+.night-mote{position:absolute;border-radius:50%;opacity:0;
+  background:radial-gradient(circle,rgba(198,224,255,.95),rgba(150,190,255,.30) 58%,transparent 72%);
+  box-shadow:0 0 7px 2px rgba(160,195,255,.42);
+  animation:motefloat linear infinite;}
+@keyframes motefloat{
+  0%{transform:translateY(9px) scale(.82);opacity:0;}
+  16%{opacity:.92;}
+  72%{opacity:.6;}
+  100%{transform:translateY(-38px) scale(1.06);opacity:0;}
+}
+/* 真菌田里的小生物沾一点夜光 */
+.wzone-fungusfield .park-pet{filter:drop-shadow(0 0 7px rgba(158,190,255,.75)) drop-shadow(0 0 2px rgba(230,240,255,.6));}
 
 /* 固定槽位 */
 .wslot{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;
@@ -1678,27 +1705,30 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 .zone-cell .wslot-dot{margin-bottom:34px;}
 @media (max-width:400px){.zone-grid{grid-template-columns:repeat(3,1fr);gap:7px;}.zone-cell{height:74px;}}
 
-/* 机器：点击开窗 */
-.wmachine{position:absolute;transform:translate(-50%,-50%);padding:0;border:0;background:none;
-  cursor:pointer;pointer-events:auto;filter:drop-shadow(0 7px 7px rgba(20,50,30,.26));
-  transition:transform .12s;}
+/* 机器（v1.29）：已画在底图里，热区透明，只挂一枚小名牌 */
+.wmachine{position:absolute;transform:translate(-50%,-50%);aspect-ratio:1/1;padding:0;border:0;background:none;
+  cursor:pointer;pointer-events:auto;transition:transform .12s;}
 .wmachine:hover{transform:translate(-50%,-50%) scale(1.06);}
 .wmachine:active{transform:translate(-50%,-50%) scale(.95);}
-.wmachine img{display:block;width:100%;height:auto;pointer-events:none;-webkit-user-drag:none;}
 .wmachine::after{content:'';position:absolute;left:50%;top:-9px;width:11px;height:11px;margin-left:-5.5px;
   border-radius:50%;background:#FFD86B;box-shadow:0 0 0 5px rgba(255,216,107,.32);
   animation:mpulse 1.9s ease-in-out infinite;}
 @keyframes mpulse{0%,100%{opacity:.5;transform:translateY(0);}50%{opacity:1;transform:translateY(-4px);}}
+.wm-label{position:absolute;left:50%;bottom:-4px;transform:translateX(-50%);white-space:nowrap;
+  font-size:10.5px;font-weight:800;color:#5B4A86;background:rgba(255,255,255,.88);
+  border:1px solid rgba(178,160,226,.65);border-radius:999px;padding:1px 7px;
+  box-shadow:0 2px 6px rgba(20,50,30,.12);pointer-events:none;}
 
-/* 建筑 */
+/* 建筑（v1.29）：画在底图里，热区罩上去 */
 .wbuilding{position:absolute;transform:translate(-50%,-50%);padding:0;border:0;background:none;
   cursor:pointer;pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:3px;}
-.wbuilding img{display:block;width:100%;height:auto;pointer-events:none;-webkit-user-drag:none;
-  filter:drop-shadow(0 7px 8px rgba(20,50,30,.3));}
+.wbuilding.built{aspect-ratio:1/0.72;border-radius:16px;}
 .wb-name{font-size:10.5px;font-weight:800;color:#2E7A4C;background:rgba(255,255,255,.9);
   border:1px solid rgba(124,193,118,.6);border-radius:999px;padding:1px 7px;white-space:nowrap;
   box-shadow:0 2px 6px rgba(20,50,30,.12);}
+.wb-name-lv{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);white-space:nowrap;}
 .wbuilding.built:hover{transform:translate(-50%,-50%) scale(1.04);}
+.wbuilding.built:active{transform:translate(-50%,-50%) scale(.97);}
 .wbuilding.plot{aspect-ratio:1/1;border:2px dashed rgba(255,255,255,.8);border-radius:16px;
   justify-content:center;background:repeating-linear-gradient(45deg,rgba(255,255,255,.14) 0 9px,rgba(255,255,255,.05) 9px 18px);}
 .wbuilding.plot:hover{background:repeating-linear-gradient(45deg,rgba(255,255,255,.24) 0 9px,rgba(255,255,255,.1) 9px 18px);}
