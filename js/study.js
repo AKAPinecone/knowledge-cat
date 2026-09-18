@@ -19,7 +19,7 @@ window.Study = (function () {
   }
 
   /* 任务库版本：升级后强制重算当天任务，避免老存档里的旧任务结构残留 */
-  const TASK_VER = 9;  /* v9：读书进度改为「实际读了几天 / 计划几天」；v8：面试问答训练 → 综合问答训练（标题/标签改名）；v7：面试问答与导游词改为「练习台」模式；导游词不再限定每日具体篇目；面试问答不再登记题量，而是在练习台练够 10 道即完成 */
+  const TASK_VER = 10;  /* v10：读书进度改为按「章/节/页码」推进 + 刷题超额奖励（每科每日 30 道达标）；v9：读书进度改为「实际读了几天 / 计划几天」；v8：面试问答训练 → 综合问答训练（标题/标签改名）；v7：面试问答与导游词改为「练习台」模式；导游词不再限定每日具体篇目；面试问答不再登记题量，而是在练习台练够 10 道即完成 */
 
   /* 前端回调，由 app.js 挂载 */
   const hooks = {
@@ -425,13 +425,23 @@ window.Study = (function () {
     if (v.type === 'feynman') {
       if ((proof.feynmanCount || 0) < (v.minCards || 1)) errs.push('费曼卡不足：至少要产出 ' + (v.minCards || 1) + ' 张');
     }
-    /* 精读登记：必答「读哪本」+「读了什么」，笔记/照片选填 */
+    /* 精读登记（v1.28）：必答「读哪本」+「读到哪儿」（第几章 / 第几页 任一）；
+       文字说明和笔记选填 —— 位置填了，进度条就能自己往前走了。 */
     if (v.type === 'reading') {
       const rd = proof.reading || {};
       if (!rd.bookId) errs.push('还没选今天读的是哪一本课本');
+      const hasPos = (Number(rd.page) > 0) || (Number(rd.chapter) > 0);
       const txt = String(rd.read || '').trim();
-      if (txt.length < (v.minChars || 4)) {
-        errs.push('还没填"今天读了什么"（章节 / 页数，至少 ' + (v.minChars || 4) + ' 个字）');
+      if (!hasPos && txt.length < (v.minChars || 4)) {
+        errs.push('填一下「读到哪儿」——第几章、第几节、第几页都行；懒得填就写一句今天读了什么');
+      }
+      const pages = (typeof D.bookPagesOf === 'function') ? D.bookPagesOf(rd.bookId) : 0;
+      if (pages > 0 && Number(rd.page) > pages) {
+        errs.push('页码超过这本书的总页数了（书里登记的总页数是 ' + pages + '）');
+      }
+      const chN = (typeof D.bookChapterCount === 'function') ? D.bookChapterCount(rd.bookId) : 0;
+      if (chN > 0 && Number(rd.chapter) > chN) {
+        errs.push('章数超过这本书的章数了（共 ' + chN + ' 章）');
       }
     }
     if (task.pick === 'book' && v.type !== 'reading' && !proof.bookId) {
@@ -464,6 +474,8 @@ window.Study = (function () {
     if (errs.length) return { ok: false, errs: errs };
 
     const v0 = task.verify;
+    /* v1.28：刷题超额奖励 —— 每科达标之后再刷的部分，做得越多给得越多（封顶） */
+    let quizBonus = 0, quizOver = 0;
 
     /* 练习台任务：不收集额外凭证，由面板行为驱动；但如果是导游词任务，把练习的篇目标记进脚本进度 */
     if (v0.type === 'practice') {
@@ -485,6 +497,13 @@ window.Study = (function () {
       if (acc.q < v0.minQuestions) {
         return { ok: true, progress: true, count: acc.q, target: v0.minQuestions, title: task.title };
       }
+      /* v1.28：达标之后，每多刷 step 道再追加一份豆（封顶 cap）。
+         不封顶的话"刷题"就会变成最优解，把别的玩法全饿死 —— 所以有个天花板。 */
+      const qe = (D.ECONOMY && D.ECONOMY.quizExtra) || { step: 10, beans: 6, cap: 90 };
+      quizOver = Math.max(0, acc.q - v0.minQuestions);
+      if (qe.step > 0 && quizOver >= qe.step) {
+        quizBonus = Math.min(qe.cap, Math.floor(quizOver / qe.step) * qe.beans);
+      }
       /* 达标：把累计数写进凭证，回顾时显示的是整段进度而不是最后一小截 */
       proof.quiz.questions = acc.q;
       proof.quiz.correct = Math.min(acc.correct, acc.q);
@@ -495,8 +514,13 @@ window.Study = (function () {
 
     /* 发奖：做了就是做了，奖励足额发，不打折 */
     const tickets = task.reward.tickets;
-    const beans = task.reward.beans;
+    const beans = task.reward.beans + quizBonus;
     const extra = [];
+    if (quizBonus > 0) {
+      const qec = (D.ECONOMY && D.ECONOMY.quizExtra) || { step: 10, beans: 6, cap: 90 };
+      extra.push('📈 超额 ' + quizOver + ' 道：每多 ' + qec.step + ' 道 +' + qec.beans + ' 豆，这次多给 ' + quizBonus +
+        (quizBonus >= qec.cap ? '（已到上限 ' + qec.cap + ' 豆/科/天）' : ''));
+    }
 
     /* 选书的任务：把今天的选择写回任务上下文
        精读走的是 reading 类型（书是必答的第一栏），课后练习走 pick:'book'。 */
@@ -511,6 +535,13 @@ window.Study = (function () {
     /* 精读登记：把「读了哪本 / 读了什么 / 笔记」也留一份进证据库 */
     if (task.verify.type === 'reading' && proof.reading) {
       const lines = ['读了：《' + (task.ctx.bookName || '课本') + '》' + String(proof.reading.read || '').trim()];
+      if (Number(proof.reading.page) > 0 || Number(proof.reading.chapter) > 0) {
+        lines.push('读到：' +
+          (Number(proof.reading.chapter) > 0 ? '第 ' + proof.reading.chapter + ' 章' : '') +
+          (Number(proof.reading.section) > 0 ? ' 第 ' + proof.reading.section + ' 节' : '') +
+          (Number(proof.reading.page) > 0 ? '（第 ' + proof.reading.page + ' 页）' : ''));
+      }
+      if (proof.reading.finish) lines.push('（这本读完了）');
       if (proof.reading.whole) lines.push('（今天一整天都在读这本）');
       if (proof.reading.note) lines.push('笔记：' + String(proof.reading.note).trim());
       window.Store.addEvidence({
@@ -546,17 +577,32 @@ window.Study = (function () {
     task.at = Date.now();
     S.study.kolbToday[task.kolb] = (S.study.kolbToday[task.kolb] || 0) + 1;
 
-    /* 课本精读进度（v1.26：按「实际读的天数 / 计划天数」算，不再数打卡次数）
-       计划天数 = max(下限, 已读天数)，所以读得快的人第 6 天就能标读完，不必凑满 8 次。 */
+    /* 课本精读进度（v1.28：按「读到第几章 / 第几节 / 第几页」推进）
+       进度 = 已读页 / 总页数（目录见 data.js 的 BOOKS）。
+       没填位置、只写了文字的话，也算今天读了 —— 至少把"今天"记上，位置沿用上次。 */
     if (task.libId === 'p1_read') {
       const bid = task.ctx.bookId;
-      S.bookProgress[bid] = (S.bookProgress[bid] || 0) + 1;
+      const rd = proof.reading || {};
+      const hasPos = (Number(rd.page) > 0) || (Number(rd.chapter) > 0);
+      const prev = S.bookProgress[bid];
+      if (hasPos) {
+        D.bookSetPos(bid, {
+          chapter: rd.chapter, section: rd.section, page: rd.page,
+          done: !!rd.finish
+        });
+      } else if (typeof prev === 'number' || prev === undefined) {
+        /* 还是旧口径（数字天数），就先按天数记 —— 等你哪天填了页码，自动切页码制 */
+        S.bookProgress[bid] = (prev || 0) + 1;
+      } else {
+        D.bookSetPos(bid, { chapter: prev.chapter, section: prev.section, page: prev.page });
+      }
       const bp = bookProgressOf(bid);
       if (bp.done && !S.bookProgress['done_' + bid]) {
         S.bookProgress['done_' + bid] = 1;
         const n = D.SUBJECTS.filter(function (x) { return S.bookProgress['done_' + x.id]; }).length;
         S.stats.booksDone = n;
-        window.Store.pushLog('📚 《' + task.ctx.bookName + '》读完了（实际 ' + bp.days + ' 天 / 计划 ' + bp.plan + ' 天，累计 ' + n + '/4 本）');
+        window.Store.pushLog('📚 《' + task.ctx.bookName + '》读完了（' +
+          D.bookPosText(bp) + '，累计 ' + n + '/4 本）');
       }
     }
     /* 导游词核心任务通过练习台完成，进度已在 finish 上方 practice 块中标记 */

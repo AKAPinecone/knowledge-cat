@@ -93,9 +93,15 @@ window.Store = (function () {
       },
       achievements: {},
       qbank: [],            /* 自己粘贴导入的破壳测验题（内置题库在 data.js 的 QUESTION_BANK） */
-      bookProgress: { /* subjectId -> 已读天数（纯数字）。计划天数是算出来的，不存盘——
-                        见 data.js 的 bookProgressOf()：计划 = max(下限, 已读天数)。
-                        v1.25 及更早的存档里就是纯数字，所以不需要迁移。 */ },
+      qbankReports: {},     /* v1.28 题目举报：题号 -> {id, subject, stem, reason, note, at} */
+      bookToc: {},          /* v1.28 自己填的书本信息：subjectId -> {pages, chapterCount, sectionCount, chapters?}
+                               优先级高于 data.js 里的内置目录（见 D.bookMetaOf） */
+      bookProgress: { /* subjectId -> 读到哪儿
+                        v1.28 起是对象：{page, chapter, section, at, reads, hist:[{d,page,chapter,section}], done}
+                        —— 进度 = 已读页 / 总页数（目录见 data.js 的 BOOKS）。
+                        v1.26 及更早的存档里是纯数字（已读天数），继续按旧口径显示，不迁移；
+                        等你下一次登记「读到哪」，它会自动变成对象、切到页码制。
+                        唯一入口：data.js 的 bookProgressOf() 读、bookSetPos() 写。 */ },
       scripts: {},          /* scriptId -> {read, recite, mastered, lastAt} */
       feynman: [],          /* 费曼卡 */
       evidence: [],         /* 证据索引 */
@@ -237,6 +243,51 @@ window.Store = (function () {
     if (typeof ch.wins !== 'number') ch.wins = 0;
     if (typeof ch.best !== 'number') ch.best = 0;
     if (typeof ch.beans !== 'number') ch.beans = 0;
+    /* v1.28：题目举报（tí mù jǔ bào）——题号 -> {id, subject, stem, reason, note, at}
+       题目内容不全 / 答案可疑的时候按一下，攒到「我的」页统一看，回头一起改。 */
+    if (!s.qbankReports || typeof s.qbankReports !== 'object' || Array.isArray(s.qbankReports)) {
+      s.qbankReports = {};
+    }
+    /* v1.28：自己填的书本信息（总页数 / 章数 / 节数） */
+    if (!s.bookToc || typeof s.bookToc !== 'object' || Array.isArray(s.bookToc)) {
+      s.bookToc = {};
+    }
+    /* v1.28：打工休息。老存档的宠物没有 restUntil，补成 0（= 没在休息，随时能出工） */
+    if (Array.isArray(s.pets)) s.pets.forEach(function (p) {
+      if (typeof p.restUntil !== 'number') p.restUntil = 0;
+    });
+    /* v1.28：安置区满了就自动进保管室 —— 不要求玩家手动挪。
+       老存档 / 同步码带进来的小生物如果本来就超了（比如以前没有容量限制），
+       在这里一次收干净：先来的留在场地，后来的自动进保管室。 */
+    const autoStored = autoStoreOverflowIn(s);
+    if (autoStored.length) {
+      pushLog('📦 安置区住满了，' + autoStored.length + ' 只小生物（' +
+        autoStored.slice(0, 3).join('、') + (autoStored.length > 3 ? ' 等' : '') +
+        '）已自动住进保管室，想让它回场地的话在保管室里放出来就行。');
+    }
+  }
+
+  /* 把超出区域容量的（最晚出生的）小生物收进保管室。返回被收起来的名字。
+     不依赖 Game —— store.js 在 game.js 下层，只能读 data 层的 zone 规则。 */
+  function autoStoreOverflowIn(s) {
+    const Z = window.GAME_DATA;
+    const names = [];
+    if (!Z || typeof Z.zoneIdOfSpecies !== 'function' || !Array.isArray(s.pets)) return names;
+    const zs = Z.ZONES || [];
+    zs.forEach(function (z) {
+      const cap = Z.zoneCapOf(z.id);
+      if (!cap) return;                       /* 0 = 不限（草地这种敞开区域） */
+      const living = s.pets.filter(function (p) {
+        return !p.stored && Z.zoneIdOfSpecies(p.speciesId) === z.id;
+      });
+      if (living.length <= cap) return;
+      living.sort(function (a, b) { return (a.bornAt || 0) - (b.bornAt || 0); });
+      living.slice(cap).forEach(function (p) {
+        p.stored = true;
+        names.push(p.name || '小生物');
+      });
+    });
+    return names;
   }
 
   /* localStorage 只有 5MB 上下，而证据库里每条凭证都带一张 base64 缩略图。
@@ -624,6 +675,16 @@ window.Store = (function () {
     if (state.build && state.build.ops && window.Game && window.Game.finishOfflineOps) {
       const fin = window.Game.finishOfflineOps(now);
       if (fin && fin.length) report.ops = (report.ops || []).concat(fin);
+    }
+    /* v1.28：安置区满了就把超出的收进保管室（离线回来也算一遍，玩家不用手动挪） */
+    if (window.Game && window.Game.autoStoreOverflow) {
+      const st = window.Game.autoStoreOverflow();
+      if (st && st.length) {
+        report.stored = st.map(function (p) { return p.name; });
+        pushLog('📦 安置区住满了，' + st.length + ' 只小生物已自动住进保管室：' +
+          st.slice(0, 3).map(function (p) { return p.name; }).join('、') +
+          (st.length > 3 ? ' 等' : ''));
+      }
     }
 
     if (minutes < 1) { state.lastTick = now; return report; }

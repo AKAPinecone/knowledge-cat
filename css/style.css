@@ -801,6 +801,55 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
 .qz-progress{height:5px;border-radius:99px;background:var(--panel-3);overflow:hidden;margin:11px 0 14px;}
 .qz-progress > i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--mint),var(--green));transition:width .25s;}
 .qz-stem{font-size:14.5px;font-weight:600;line-height:1.72;color:var(--ink);white-space:pre-wrap;}
+
+/* ---- v1.28 ⚑ 题目举报：题干下面那一行「这道题有问题？」 ---- */
+.rep-bar{margin-top:10px;}
+.rep-btn{
+  border:1px dashed var(--line);background:var(--panel-2);color:var(--ink-3);
+  border-radius:99px;padding:6px 13px;font-size:12.5px;font-family:inherit;cursor:pointer;
+  transition:all .18s ease;
+}
+.rep-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-soft);}
+.rep-btn.on{border-style:solid;border-color:var(--gold);background:var(--gold-soft);color:#8A6216;font-weight:700;}
+.rep-hint{font-size:11px;color:var(--ink-3);margin-left:9px;}
+.rep-box[data-open="0"]{display:none;}
+.rep-box{margin-top:10px;}
+.rep-inline{
+  border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel-2);
+  padding:12px;
+}
+.rep-reasons{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px;}
+.rep-chip{
+  border:1px solid var(--line);background:#fff;color:var(--ink-2);border-radius:99px;
+  padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer;transition:all .16s ease;
+}
+.rep-chip:hover{border-color:var(--gold);}
+.rep-chip.on{background:var(--gold-soft);border-color:var(--gold);color:#8A6216;font-weight:700;}
+.rep-note{
+  width:100%;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);
+  padding:9px 11px;font-size:13px;font-family:inherit;line-height:1.6;resize:vertical;
+}
+.rep-note:focus{outline:none;border-color:var(--mint);box-shadow:0 0 0 3px rgba(143,211,168,.22);}
+.rep-inline .posrow{margin-top:10px;}
+/* 「我的」页汇总板块 */
+.rep-list{display:flex;flex-direction:column;gap:11px;}
+.rep-item{border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel-2);padding:12px;}
+.rep-i-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px;}
+.rep-i-tag{font-size:11.5px;font-weight:700;color:var(--ink-2);background:#fff;border:1px solid var(--line);border-radius:99px;padding:3px 10px;}
+.rep-i-reason{font-size:11.5px;font-weight:700;color:#8A6216;background:var(--gold-soft);border-radius:99px;padding:3px 10px;}
+.rep-i-id{margin-left:auto;font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
+.rep-i-stem{font-size:13.5px;line-height:1.7;color:var(--ink);white-space:pre-wrap;}
+.rep-i-opts{display:flex;flex-direction:column;gap:5px;margin-top:8px;}
+.rep-i-opt{font-size:12.5px;line-height:1.6;color:var(--ink-2);}
+.rep-i-opt.ans{color:var(--green-deep);font-weight:700;}
+.rep-i-note{margin-top:8px;font-size:12.5px;line-height:1.6;color:var(--ink-2);background:#fff;border:1px solid var(--line-2);border-radius:9px;padding:8px 10px;}
+.rep-i-foot{display:flex;align-items:center;gap:10px;margin-top:10px;}
+.rep-i-foot .fh-i{font-size:11px;color:var(--ink-3);}
+.rep-i-foot .btn{margin-left:auto;}
+.rep-copy-area{
+  width:100%;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--ink);
+  padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace;line-height:1.6;resize:vertical;
+}
 .qz-opts{display:flex;flex-direction:column;gap:9px;margin-top:13px;}
 .qz-opt{
   display:flex;align-items:flex-start;gap:10px;text-align:left;cursor:pointer;
@@ -1711,6 +1760,9 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
   justify-content:center;font-size:17px;overflow:hidden;flex:0 0 auto;}
 .sc-face img{width:100%;height:100%;object-fit:contain;display:block;}
 .sc-name{font-size:12.5px;font-weight:700;color:var(--green-deep);}
+/* v1.28：在岗但刚干完活在休息的，换个颜色标出来 */
+.staff-chip.tired{background:var(--gold-soft);border-color:var(--gold);}
+.staff-chip.tired .sc-name{color:#8A6216;}
 .sc-x{border:0;background:rgba(255,255,255,.75);width:22px;height:22px;border-radius:50%;cursor:pointer;
   font-size:11px;color:var(--ink-2);line-height:1;padding:0;}
 .stock-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:13px;

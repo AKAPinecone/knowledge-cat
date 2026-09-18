@@ -27,40 +27,245 @@ window.GAME_DATA = (function () {
     }
   ];
 
-  /* ---------- 课本精读：进度按「实际读了几天 / 计划几天」算（v1.26） ----------
-     旧算法是「打卡满 8 次就算读完一遍」——这只数你有没有翻开书，不数你到底读了多少。
-     计划 8 天、6 天就读完了，进度条还卡在 6/8，反而像欠了两天。
+  /* ---------- 课本精读：进度按「章 / 节 / 页码」推进（v1.28） ----------
+     v1.26 用的是「计划天数 = max(6, 已读天数)」——比"数打卡次数"准，但计划天数本身还是估的，
+     估 8 天、6 天读完，进度条永远不是满分，看着像欠账。
 
-     新算法：计划天数不是一个死数，而是「你实际用掉的天数」（带一个下限）。
-       · 第 1 天登记  → 计划 6 天，进度 1/6，还早
-       · 第 6 天登记  → 计划仍是 6 天，进度 6/6 → 这本读完了 ✅（提前完工，不用补到 8 天）
-       · 第 7 天登记  → 计划跟着变成 7 天，进度 7/7 → 依然是读完
-       · 第 9 天登记  → 计划 9 天，进度 9/9
-     所以：只要你还在这本书上投入天数，它就一直显示 100%（读完）；
-     天数涨了、百分比掉下来，只说明这本要读的比预想的多，不是"退步了"。
-     四本仍然各按自己的节奏推进，占比取平均。 */
-  const BOOK_DAYS = 8;        /* 参考值：封面/文案上说的"计划 8 天" */
-  const BOOK_DAYS_MIN = 6;    /* 计划天数的下限：少于 6 天登记，就不急着标"读完" */
+     现在改成按**位置**算，位置是硬的，不用估：
+       · 每本书有一份目录（D.BOOKS[].chapters，写着每章从第几页起、有哪几节）和总页数 pages
+       · 你每天登记「读到第几章 · 第几节 · 第几页」，进度 = 已读页数 / 总页数
+       · 没填总页数就退回按章算：进度 = 第几章 / 共几章
+       · 读完 = 读到最后一页（页码 ≥ 总页数），或者你自己按「读完了」
+     老存档里 bookProgress[id] 是纯数字（已读天数），继续按 v1.26 的口径显示，不迁移 ——
+     等你第一次登记位置，它自动切成页码制。
+     UI / 结算 / 推荐都走 bookProgressOf() 这一个入口。 */
+  const BOOK_DAYS = 8;        /* 旧口径参考值：文案里提过的"计划 8 天" */
+  const BOOK_DAYS_MIN = 6;    /* 旧口径的计划天数下限 */
 
-  /* 这本书当前认定的计划天数 = max(下限, 已读天数) */
+  /* 旧口径：这本书当前认定的计划天数 = max(下限, 已读天数) */
   function bookPlanOf(days) {
     return Math.max(BOOK_DAYS_MIN, Number(days) || 0);
   }
-  /* 读书进度（唯一的计算入口，UI / 结算 / 推荐都从这里读）
-     老存档里 bookProgress[bookId] 就是纯数字（已读天数），所以不用迁移，直接兼容。 */
-  function bookProgressOf(bookId) {
-    const days = (window.Store.state.bookProgress[bookId] | 0);   /* |0 兼容 undefined / 字符串 */
-    const plan = bookPlanOf(days);
-    return { days: days, plan: plan, pct: Math.min(1, days / plan), done: days >= plan };
+  /* 这本书的目录（按科目 id 找 D.BOOKS 里对应那本）。
+     v1.28：玩家在「📐 书本信息」里填过的（存存档的 S.bookToc）优先于内置目录 ——
+     总页数、章数、节数、每章起始页都可以自己补，补完进度条当场按新数据重算。 */
+  function bookMetaOf(subjectId) {
+    const list = BOOKS || [];
+    let base = null;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].subject === subjectId) base = list[i];
+    }
+    let ov = null;
+    try {
+      const S = window.Store && window.Store.state;
+      ov = (S && S.bookToc && S.bookToc[subjectId]) || null;
+    } catch (e) { ov = null; }
+    if (!base && !ov) return null;
+
+    const meta = {
+      id: (base && base.id) || subjectId,
+      subject: subjectId,
+      name: (base && base.name) || subjectId,
+      short: (base && base.short) || '课本',
+      emoji: (base && base.emoji) || '📘',
+      pages: (base && Number(base.pages)) || 0,
+      chapters: (base && base.chapters) ? base.chapters.slice() : []
+    };
+    if (!ov) return meta;
+
+    if (Number(ov.pages) > 0) meta.pages = Math.round(Number(ov.pages));
+    if (ov.chapters && ov.chapters.length) {
+      meta.chapters = ov.chapters;
+    } else if (Number(ov.chapterCount) > 0 && !meta.chapters.length) {
+      const n = Math.round(Number(ov.chapterCount));
+      for (let i = 1; i <= n; i++) meta.chapters.push({ title: '第 ' + i + ' 章', page: 0, sections: [] });
+    }
+    /* 只填了总节数：按章均分，好让「第几节」有得选 */
+    const secN = Number(ov.sectionCount) || 0;
+    if (secN > 0 && meta.chapters.length) {
+      const per = Math.max(1, Math.round(secN / meta.chapters.length));
+      meta.chapters = meta.chapters.map(function (c) {
+        if (c.sections && c.sections.length) return c;
+        const arr = [];
+        for (let i = 1; i <= per; i++) arr.push('');
+        return { title: c.title, page: c.page, sections: arr };
+      });
+    }
+    return meta;
   }
-  /* 四本合计：用于「我的」页那格「读完的课本」 */
+  /* 玩家自己填的书本信息（写存档，不写代码）。传 0 / 空 = 清掉这一项 */
+  function bookSetToc(subjectId, toc) {
+    const S = window.Store.state;
+    if (!S.bookToc || typeof S.bookToc !== 'object') S.bookToc = {};
+    const cur = S.bookToc[subjectId] || {};
+    ['pages', 'chapterCount', 'sectionCount'].forEach(function (k) {
+      const v = Math.round(Number(toc[k]) || 0);
+      if (v > 0) cur[k] = v;
+      else delete cur[k];
+    });
+    if (toc.chapters && toc.chapters.length) cur.chapters = toc.chapters;
+    S.bookToc[subjectId] = cur;
+    return cur;
+  }
+  function bookChapterCount(subjectId) {
+    const m = bookMetaOf(subjectId);
+    return (m && m.chapters) ? m.chapters.length : 0;
+  }
+  function bookSectionCount(subjectId, chapter) {
+    const m = bookMetaOf(subjectId);
+    if (!m || !m.chapters) return 0;
+    const c = m.chapters[chapter - 1];
+    return (c && c.sections) ? c.sections.length : 0;
+  }
+  /* 总页数：目录里显式写的 pages；没写就是 0（表示"还没填"，UI 会提示去补） */
+  function bookPagesOf(subjectId) {
+    const m = bookMetaOf(subjectId);
+    return (m && Number(m.pages)) || 0;
+  }
+  /* 章 → 起始页（目录里每章的 page 字段）。没写返回 0 */
+  function bookChapterPage(meta, chapter) {
+    if (!meta || !meta.chapters) return 0;
+    const c = meta.chapters[chapter - 1];
+    return (c && Number(c.page)) || 0;
+  }
+  /* 由页码反推在第几章（用于展示「读到第三章」这种话） */
+  function bookChapterAtPage(subjectId, page) {
+    const m = bookMetaOf(subjectId);
+    if (!m || !m.chapters || !m.chapters.length) return 0;
+    let ch = 1;
+    for (let i = 0; i < m.chapters.length; i++) {
+      const p = Number(m.chapters[i].page) || 0;
+      if (p > 0 && page >= p) ch = i + 1;
+    }
+    return ch;
+  }
+  /* 章 + 节 → 估算页码（章有起始页时按章内均分；没有就只能返回章首） */
+  function bookPageOfPos(subjectId, chapter, section) {
+    const m = bookMetaOf(subjectId);
+    if (!m || !m.chapters || !m.chapters.length) return 0;
+    const c0 = bookChapterPage(m, chapter);
+    if (!c0) return 0;
+    let next = 0;
+    for (let i = chapter; i < m.chapters.length; i++) {
+      const p = Number(m.chapters[i].page) || 0;
+      if (p > c0) { next = p; break; }
+    }
+    const secN = bookSectionCount(subjectId, chapter);
+    if (!next || !secN || !section) return c0;
+    return Math.min(next - 1, c0 + Math.round((next - c0) * section / (secN + 1)));
+  }
+  /* 读书进度（唯一的计算入口，UI / 结算 / 推荐都从这里读） */
+  function bookProgressOf(subjectId) {
+    const raw = window.Store.state.bookProgress[subjectId];
+    const meta = bookMetaOf(subjectId);
+    const chTotal = (meta && meta.chapters) ? meta.chapters.length : 0;
+    let secTotal = 0;
+    if (meta && meta.chapters) meta.chapters.forEach(function (c) { secTotal += (c.sections || []).length; });
+
+    /* ── 位置制：登记过「读到哪」之后，bookProgress[id] 是一个对象 ── */
+    if (raw && typeof raw === 'object') {
+      const pages = Number(meta && meta.pages) || 0;
+      const page = Math.max(0, Number(raw.page) || 0);
+      const chapter = Math.max(0, Number(raw.chapter) || bookChapterAtPage(subjectId, page));
+      const section = Math.max(0, Number(raw.section) || 0);
+      const days = (raw.hist && raw.hist.length) || 0;
+      let pct;
+      if (pages > 0) pct = Math.min(1, page / pages);
+      else if (chTotal > 0) pct = Math.min(1, chapter / chTotal);
+      else pct = Math.min(1, days / Math.max(1, bookPlanOf(days)));
+      const done = !!raw.done ||
+        (pages > 0 ? page >= pages : (chTotal > 0 ? chapter >= chTotal : false));
+      return {
+        mode: 'pos', id: subjectId, done: done, pct: done ? 1 : pct,
+        page: page, pages: pages, chapter: chapter, chapters: chTotal,
+        section: section, sections: bookSectionCount(subjectId, chapter), sectionsTotal: secTotal,
+        days: days, hist: raw.hist || [], at: raw.at || 0
+      };
+    }
+
+    /* ── 旧口径：纯数字 = 已读天数（v1.26 的算法，读快读慢都不会掉百分比） ── */
+    const days = (Number(raw) || 0);
+    const plan = bookPlanOf(days);
+    return {
+      mode: 'days', id: subjectId, done: days >= plan, pct: Math.min(1, days / plan),
+      days: days, plan: plan, hist: [],
+      page: 0, pages: Number(meta && meta.pages) || 0,
+      chapter: 0, chapters: chTotal, section: 0, sections: 0, sectionsTotal: secTotal, at: 0
+    };
+  }
+  /* 登记读到哪儿（唯一写入口）。同一天多次登记就覆盖当天那条，days 不会因为改主意而虚增 */
+  function bookSetPos(subjectId, pos) {
+    const S = window.Store.state;
+    pos = pos || {};
+    const prev = S.bookProgress[subjectId];
+    const cur = (prev && typeof prev === 'object') ? prev : { hist: [] };
+    if (!cur.hist) cur.hist = [];
+    const today = window.Store.today();
+    const pages = Number((bookMetaOf(subjectId) || {}).pages) || 0;
+
+    /* 三个量互相补：给了章/节没给页码 → 估算页码；给了页码没给章 → 反推章 */
+    let chapter = Math.max(0, Number(pos.chapter) || 0);
+    let section = Math.max(0, Number(pos.section) || 0);
+    let page = Math.max(0, Number(pos.page) || 0);
+    if (page > 0) {
+      if (!chapter) chapter = bookChapterAtPage(subjectId, page);
+    } else if (chapter > 0) {
+      page = bookPageOfPos(subjectId, chapter, section);
+    }
+    cur.page = page;
+    cur.chapter = chapter;
+    cur.section = section;
+    cur.at = Date.now();
+    cur.reads = (cur.reads || 0) + 1;
+    if (pos.done) cur.done = 1;
+    if (pos.undone) delete cur.done;
+    if (pages > 0 && page >= pages) cur.done = 1;
+
+    const rec = { d: today, page: page, chapter: chapter, section: section };
+    if (cur.hist[0] && cur.hist[0].d === today) cur.hist[0] = rec;
+    else cur.hist.unshift(rec);
+    if (cur.hist.length > 60) cur.hist = cur.hist.slice(0, 60);
+    S.bookProgress[subjectId] = cur;
+    return cur;
+  }
+  /* 那本书读到哪个位置的一句话说明（卡面 / 弹窗共用，免得两处说法不一致） */
+  function bookPosText(bp, meta) {
+    if (!bp) return '';
+    if (bp.mode === 'days') {
+      return bp.done ? ('已读 ' + bp.days + ' 天 · 读完了') : ('已读 ' + bp.days + ' 天 / 计划 ' + bp.plan + ' 天（还没填过读到哪一页）');
+    }
+    const name = (meta && meta.short) || '课本';
+    if (!bp.page && !bp.chapter) return '还没登记读到哪儿';
+    const at = bp.chapter ? ('第 ' + bp.chapter + ' 章') : '';
+    const sec = bp.section ? ('第 ' + bp.section + ' 节') : '';
+    if (bp.pages > 0) {
+      return (at ? at + (sec ? ' ' + sec + ' · ' : ' · ') : '') + '第 ' + bp.page + ' / ' + bp.pages + ' 页';
+    }
+    if (bp.chapters > 0) return at + (sec ? ' ' + sec : '') + ' · 共 ' + bp.chapters + ' 章';
+    return '第 ' + bp.page + ' 页';
+  }
+  /* 四本合计：用于「我的」页那格统计 */
   function booksOverview() {
-    let days = 0, plan = 0, doneN = 0;
+    let doneN = 0, pages = 0, pagesTotal = 0, chapters = 0, chapterTotal = 0, days = 0, plan = 0;
     SUBJECTS.forEach(function (s) {
       const p = bookProgressOf(s.id);
-      days += p.days; plan += p.plan; if (p.done) doneN++;
+      if (p.done) doneN++;
+      pages += p.page; pagesTotal += p.pages;
+      chapters += p.chapter; chapterTotal += p.chapters;
+      days += p.days; plan += (p.plan || 0);
     });
-    return { days: days, plan: plan, done: doneN, total: SUBJECTS.length };
+    return {
+      done: doneN, total: SUBJECTS.length,
+      pages: pages, pagesTotal: pagesTotal,
+      chapters: chapters, chapterTotal: chapterTotal,
+      days: days, plan: plan
+    };
+  }
+  /* 这本课本的目录有没有填（pages 或 chapters 任一有货就算有） */
+  function bookTocReady(subjectId) {
+    const m = bookMetaOf(subjectId);
+    if (!m) return false;
+    return (Number(m.pages) > 0) || ((m.chapters || []).length > 0);
   }
 
   const SUBJECTS = [
@@ -533,7 +738,10 @@ window.GAME_DATA = (function () {
     canteen: { base: 9,  perLv: 4 },            /* 食堂每份饭 = base + perLv × 食堂等级 */
     travel:  { base: 20, perLv: 12, rand: 14 }, /* 旅行社每次出团 = base + perLv × 等级 + [0,rand) 随机 */
     adopt:   { 1: 22, 2: 55, 3: 130 },          /* 送养谢礼基数（稀有度 1/2/3） */
-    adoptStageMul: { baby: 0.5, teen: 0.8, adult: 1.2, elite: 1.8 } /* 送养阶段系数 */
+    adoptStageMul: { baby: 0.5, teen: 0.8, adult: 1.2, elite: 1.8 }, /* 送养阶段系数 */
+    /* 刷题超额奖励（v1.28）：每科每天 30 道达标，超出部分做得越多给得越多。
+       每多 step 道 → +beans 豆，封顶 cap（防止"刷题=刷豆"把别的玩法饿死）。 */
+    quizExtra: { step: 10, beans: 6, cap: 90 }
   };
 
   /* ---------- 题库（这就是那个「端口」） ----------
@@ -696,8 +904,23 @@ window.GAME_DATA = (function () {
 ];
 
   /* ---------- 课本目录 ----------
-     用于「课本精读」任务的选书器。后续上传新章节后在这里追加章节即可。 */
+     每本书一份「章 → 起始页 / 节」的目录，外加总页数 pages（v1.28）。
+     读书进度就按这份目录算（见上面的 bookProgressOf）：
+       · 填了 pages     → 进度 = 读到第几页 / 总页数（最准，也最连续）
+       · 只有 chapters  → 进度 = 第几章 / 共几章
+       · 两个都没有     → 退回旧口径（按登记的天数）
+     pages 写 0 = "还没填"，界面会提醒补上；在「读书 → 📐 书本信息」里随时能改，
+     改完当场重算百分比。四本各按自己的节奏推进，不互相拖累。 */
   const BOOKS = [
+    {
+      id: 'law_zhengce',
+      subject: 'law',
+      name: '政策与法律法规',
+      short: '法规课本',
+      emoji: '⚖️',
+      pages: 0,          /* 待填：告诉我总页数就能按页算进度 */
+      chapters: []       /* 待填：每章 {title, page, sections:[]} */
+    },
     {
       id: 'ops_daoyouyewu_11',
       subject: 'ops',
@@ -714,9 +937,44 @@ window.GAME_DATA = (function () {
         { title: '第七章 导游服务技巧', page: 194, sections: ['导游语言技巧', '导游操作技巧'] },
         { title: '第八章 旅游者个别要求的处理', page: 267, sections: ['旅游者个别要求处理的原则', '旅游者个别要求处理的方法'] },
         { title: '第九章 旅游常见问题和突发事件的预防与处理', page: 281, sections: ['导游处理常见问题和突发事件的原则', '旅游常见问题的预防与处理', '旅游突发事件的预防与处理'] }
-      ]
+      ],
+      pages: 0           /* 待填：总页数 */
+    },
+    {
+      id: 'nat_quanguo',
+      subject: 'nat',
+      name: '全国导游基础知识',
+      short: '全导课本',
+      emoji: '🗺️',
+      pages: 0,
+      chapters: []
+    },
+    {
+      id: 'loc_yunnan',
+      subject: 'loc',
+      name: '地方导游基础知识（云南）',
+      short: '地导课本',
+      emoji: '🌿',
+      pages: 0,
+      chapters: []
     }
   ];
+
+  /* ---------- 运营/打工：休息与稀有度（v1.28） ----------
+     「干完活得歇一歇」——出工之后按该物种的孵化时间 × REST_MUL 进入休息，休息中不能再出工。
+     越稀有的小生物底子越好：同样一趟活，产出更高、也更省时间（RARITY_WORK）。
+     两个系数都只在这里调，game.js 的 opStart / buildStart 读它们。 */
+  const REST_MUL = 3;                                   /* 休息时长 = 孵化时间 × 3 */
+  const RARITY_WORK = { 1: 1.00, 2: 1.30, 3: 1.70 };    /* 稀有度 → 工作效益系数 */
+  function rarityWorkOf(rarity) {
+    return RARITY_WORK[rarity] || RARITY_WORK[1];
+  }
+  /* 某只小生物干完一趟活要歇多久（毫秒）：按它的稀有度取孵化时间 ×3 */
+  function restMsOfSpecies(species) {
+    const r = (species && species.rarity) || 1;
+    const mins = (GACHA.hatchMinutes && GACHA.hatchMinutes[r]) || 15;
+    return mins * REST_MUL * 60000;
+  }
 
   /* 粘贴导入的文本格式示例（只用于界面上点「填入格式示例」，不会自动入库）。
      每行一题，用竖线 | 分隔：
@@ -753,7 +1011,7 @@ window.GAME_DATA = (function () {
     {
       id: 'p1_read', phase: [1], title: '课本精读（读哪本你定）', core: true, coreLabel: '读书',
       kolb: 'CE', icon: '📖',
-      desc: '每天登记一次：今天读了哪一本、读到哪里（章节 / 页数）。笔记和感想选填，愿意写就写两句。一本书计划 8 天。别抄书，边读边问自己"如果我要讲给一个外国人听，我会怎么讲"。',
+      desc: '每天登记一次：今天读哪一本、读到第几章第几节第几页。进度条按「已读页 / 总页数」自己往前走，读到最后一页就算读完。笔记和感想选填 —— 别抄书，边读边问自己"如果我要讲给一个外国人听，我会怎么讲"。',
       reward: { tickets: 2, beans: 52 },
       verify: { type: 'reading', minChars: 6, optionalPhoto: true }
     },
@@ -761,7 +1019,7 @@ window.GAME_DATA = (function () {
       id: 'p1_quiz', phase: [1], title: '刷题 · {subject} 30 道', core: true, coreLabel: '{subject}',
       kolb: 'CE', icon: '✍️',
       split: 'subject',
-      desc: '每科单独算一笔，30 道就够。做完回来登记题量和正确率，拍一张准题库的结果页。哪一科留着没做，一眼就看得到。',
+      desc: '每科单独算一笔，30 道是达标线。每章题量不固定、每天做多少也随你 —— 做完回来登记题量和正确率，拍一张准题库的结果页。达标之后每多 10 道还额外给可可豆，做得越多给得越多（每科每天有上限）。哪一科留着没做，一眼就看得到。',
       reward: { tickets: 1, beans: 20 },
       verify: { type: 'quiz', minQuestions: 30 },
       need: { photo: true }
@@ -856,7 +1114,7 @@ window.GAME_DATA = (function () {
       id: 'p2_quiz_keep', phase: [2, 3], title: '保持手感 · {subject} 15 道', core: true, coreLabel: '{subject}',
       kolb: 'CE', icon: '✍️',
       split: 'subject',
-      desc: '不用多，每科 15 道，但每天不断。重点是别让手感凉掉。',
+      desc: '每科 15 道保底，但每天不断，重点是别让手感凉掉。超额同样有加豆（跟阶段一同一个规则）。',
       reward: { tickets: 0, beans: 16 },
       verify: { type: 'quiz', minQuestions: 15 },
       need: { photo: false }
@@ -1004,6 +1262,31 @@ window.GAME_DATA = (function () {
       rect: [46, 48, 51, 48]        /* x, y, w, h（百分比）：动物遛弯范围（v1.20 收到草地上，别走进树线） */
     }
   ];
+
+  /* ---------- 安置区域：小生物该住哪儿 / 住满了没有（v1.28） ----------
+     判定只有这一个源头（跟 v1.25 的 isWaterDweller 同理：store 在 game 下层，
+     不能反调 Game.zoneIdOf，所以规则放 data 层，game / store 都来这儿读）。
+     水生的 → 池塘；动物 → 草地；真菌 → 温室；其余 → 苗圃。
+     容量：roam 区域（草地）是敞开的，返回 0 表示"不限"；其余看 cap。 */
+  function zoneIdOfSpecies(speciesId) {
+    if (isWaterDweller(speciesId)) return 'pond';
+    const sp = SPECIES_MAP[speciesId];
+    if (!sp) return 'nursery';
+    if (sp.kind === 'animal') return 'meadow';
+    if (sp.kind === 'fungus') return 'greenhouse';
+    return 'nursery';
+  }
+  function zoneMetaById(id) {
+    const zs = ZONES || [];
+    for (let i = 0; i < zs.length; i++) if (zs[i].id === id) return zs[i];
+    return null;
+  }
+  /* 容量上限：0 表示不限（草地这种敞开区域） */
+  function zoneCapOf(id) {
+    const z = zoneMetaById(id);
+    if (!z || z.roam) return 0;
+    return Number(z.cap) || 0;
+  }
 
   /* 点击开窗的「机器」三件。
      v1.21：三台机器改到池塘上方、道路左侧的空地，交错成三角，不压道路/温室/池塘。 */
@@ -1226,7 +1509,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.27',
+    VERSION: 'v1.28',
     WORLD: WORLD,
     ZONES: ZONES,
     MACHINES: MACHINES,
@@ -1252,7 +1535,22 @@ window.GAME_DATA = (function () {
     BOOK_DAYS_MIN: BOOK_DAYS_MIN,
     bookPlanOf: bookPlanOf,
     bookProgressOf: bookProgressOf,
+    bookSetPos: bookSetPos,
+    bookPosText: bookPosText,
+    bookMetaOf: bookMetaOf,
+    bookSetToc: bookSetToc,
+    bookPagesOf: bookPagesOf,
+    bookChapterCount: bookChapterCount,
+    bookSectionCount: bookSectionCount,
+    bookChapterPage: bookChapterPage,
+    bookChapterAtPage: bookChapterAtPage,
+    bookPageOfPos: bookPageOfPos,
+    bookTocReady: bookTocReady,
     booksOverview: booksOverview,
+    REST_MUL: REST_MUL,
+    RARITY_WORK: RARITY_WORK,
+    rarityWorkOf: rarityWorkOf,
+    restMsOfSpecies: restMsOfSpecies,
     SUBJECTS: SUBJECTS,
     SCRIPTS: SCRIPTS,
     INTERVIEW_QA: INTERVIEW_QA,
@@ -1260,6 +1558,9 @@ window.GAME_DATA = (function () {
     SPECIES: SPECIES_ALL,
     SPECIES_ACTIVE: SPECIES_ACTIVE,
     SPECIES_MAP: SPECIES_MAP,
+    zoneIdOfSpecies: zoneIdOfSpecies,
+    zoneMetaById: zoneMetaById,
+    zoneCapOf: zoneCapOf,
     isWaterDweller: isWaterDweller,
     ITEMS: ITEMS,
     ITEM_MAP: ITEM_MAP,

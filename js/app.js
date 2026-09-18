@@ -825,9 +825,9 @@
     let readProgTag = null;
     if (v.type === 'reading') {
       const bp = window.Study.bookProgressOf(t.ctx.bookId || '');
+      /* v1.28：卡面这行跟着「读到第几页」走（以前写死的是天数口径，页码制下会一直停在"已读 1 天"） */
       readProgTag = '<span class="tag tag-bookprog' + (bp.done ? ' tag-ok' : '') + '" data-readprog="' + esc(t.uid) + '">' +
-        '📖 ' + esc(t.ctx.bookName || '未选') + '：' + (bp.done ? '✅ 读完' : '已读 ' + bp.days + ' 天') +
-        ' / 计划 ' + bp.plan + ' 天</span>';
+        '📖 ' + esc(t.ctx.bookName || '未选') + '：' + esc(readProgText(bp, false)) + '</span>';
     }
 
     let sc = null;
@@ -1637,6 +1637,7 @@
       '：动物 ×1（劳力）＋ 植物 ×1（材料）＋ 真菌 ×1（胶合料）<br>' +
       '三位一起出工，需求值各 −' + cost.need + (cost.beans ? '　·　额外花费 🌰 ' + cost.beans : '') + '</div>';
     if (!gate.ok) h += '<div class="warnbox">⚠️ ' + esc(gate.msg) + '</div>';
+    let anyTired = false;
     [['animal', '劳力', '动物'], ['plant', '材料', '植物'], ['fungus', '胶合料', '真菌']].forEach(function (r) {
       const pool = window.Game.workersOf(r[0]);
       h += '<div class="field"><label>出' + r[1] + '的' + r[2] + '（可选 ' + pool.length + ' 只）</label>' +
@@ -1644,11 +1645,19 @@
         '<option value="">— 选一只 —</option>' +
         pool.map(function (p) {
           const st = window.Game.stageOf(p);
-          return '<option value="' + p.id + '"' + (bxState && bxState[r[0]] === p.id ? ' selected' : '') + '>' +
+          /* v1.28：刚干完活的在休息，选不了 —— 直接在选项里说清楚，别让人选完才被弹回来 */
+          const tired = (typeof window.Game.isResting === 'function') && window.Game.isResting(p);
+          if (tired) anyTired = true;
+          return '<option value="' + p.id + '"' + (bxState && bxState[r[0]] === p.id ? ' selected' : '') +
+            (tired ? ' disabled' : '') + '>' +
             esc(p.name) + '（' + esc(window.Game.speciesById(p.speciesId).name) + ' · ' + st.name +
-            (p.illness ? ' · 生病中' : '') + '）</option>';
+            (p.illness ? ' · 生病中' : '') +
+            (tired ? ' · 💤 休息中 还剩 ' + window.Game.restLeftMin(p) + ' 分' : '') + '）</option>';
         }).join('') + '</select></div>';
     });
+    if (anyTired) {
+      h += '<div class="fh" style="margin:-4px 0 10px">💤 标着「休息中」的刚出过工，暂时派不了；歇好了自动就能选（休息时长 = 该物种孵化时间 × 3）。</div>';
+    }
     const ready = bxState && bxState.animal && bxState.plant && bxState.fungus;
     h += '<button class="btn btn-primary btn-block" data-act="bx-go" data-id="' + id + '"' +
       (gate.ok && ready ? '' : ' disabled') + '>' + (up ? '🔨 开始扩建' : '🔨 开始建造') + '</button>';
@@ -1667,10 +1676,12 @@
         const p = window.Game.petById(pid);
         if (!p) return;
         const sp = window.Game.speciesById(p.speciesId);
-        h += '<div class="staff-chip">' +
+        const tired = (typeof window.Game.isResting === 'function') && window.Game.isResting(p);
+        h += '<div class="staff-chip' + (tired ? ' tired' : '') + '"' +
+          (tired ? ' title="💤 刚干完活，还剩 ' + window.Game.restLeftMin(p) + ' 分钟" ' : '') + '>' +
           '<span class="sc-face' + (sp.img ? '' : ' pet-emoji') + '">' +
           (sp.img ? '<img src="' + sp.img + '" alt="">' : sp.emoji) + '</span>' +
-          '<span class="sc-name">' + esc(p.name) + '</span>' +
+          '<span class="sc-name">' + esc(p.name) + (tired ? ' 💤' : '') + '</span>' +
           '<button class="sc-x" data-act="bx-unstaff" data-id="' + id + '" data-pet="' + p.id + '" title="让它下班">✕</button>' +
           '</div>';
       });
@@ -1681,14 +1692,24 @@
     const pool = S.pets.filter(function (p) {
       return !p.stored && !p.illness && staff.indexOf(p.id) < 0;
     });
+    const poolTired = pool.filter(function (p) {
+      return (typeof window.Game.isResting === 'function') && window.Game.isResting(p);
+    });
     if (pool.length && staff.length < cap) {
       h += '<div class="field"><label>安排一只来上班</label>' +
         '<select data-act="bx-staff" data-id="' + id + '"><option value="">— 选一只 —</option>' +
         pool.map(function (p) {
           const st = window.Game.stageOf(p);
           const sp = window.Game.speciesById(p.speciesId);
-          return '<option value="' + p.id + '">' + esc(p.name) + '（' + esc(sp.name) + ' · ' + st.name + '）</option>';
+          const tired = (typeof window.Game.isResting === 'function') && window.Game.isResting(p);
+          return '<option value="' + p.id + '"' + (tired ? ' disabled' : '') + '>' +
+            esc(p.name) + '（' + esc(sp.name) + ' · ' + st.name +
+            (tired ? ' · 💤 休息中 还剩 ' + window.Game.restLeftMin(p) + ' 分' : '') + '）</option>';
         }).join('') + '</select></div>';
+    }
+    if (poolTired.length) {
+      h += '<div class="fh" style="margin:-4px 0 10px">💤 ' + poolTired.length +
+        ' 只刚干完活还在休息，暂时排不了班；开工时也会自动跳过它们。</div>';
     }
     /* v1.27：运营建筑（食堂 / 澡堂 / 图书馆）走倒计时制 */
     if (typeof window.Game.opCfg === 'function' && window.Game.opCfg(id)) {
@@ -2043,6 +2064,18 @@
         '<button class="btn btn-sm btn-warn" id="cm-heal" style="margin-left:8px">💉 治疗</button></div>';
     } else if (p.dormant) {
       body += '<div class="warnbox" style="margin-top:10px">😴 生病超过 24 小时进入了休眠：成长暂停、不会消失，治好就醒。</div>';
+    }
+
+    /* v1.28：干完活得歇一歇 —— 状态写在脸上，免得点了「出工」才发现派不出去 */
+    const restTxt = (typeof window.Game.restText === 'function') ? window.Game.restText(p) : '';
+    if (restTxt) {
+      body += '<div class="warnbox" style="margin-top:10px">' + esc(restTxt) +
+        '：它刚出过工，歇好了才能再派活。<span class="fh-i">（休息时长 = 该物种孵化时间 × 3）</span></div>';
+    }
+    const workMul = (typeof D.rarityWorkOf === 'function') ? D.rarityWorkOf(sp.rarity) : 1;
+    if (workMul > 1 && !restTxt) {
+      body += '<div class="okbox" style="margin-top:8px">💪 ' + rarityName(sp.rarity) +
+        '体质：出工一趟的产出 <b>×' + workMul.toFixed(2) + '</b>，活儿也干得更快。</div>';
     }
 
     /* v1.25：住在池塘里的水栖生物不缺水，水位恒满（给个水色条 + 一句说明，
@@ -2555,7 +2588,14 @@
     h += meStat('🌰', S.cur.beans, '可可豆');
     h += meStat('🐾', S.pets.length, '小生物');
     h += meStat('🏅', achN + ' / ' + achAll, '成就');
-    h += meStat('📚', bOverview.days + ' / ' + bOverview.plan, '读书天数（读完了 ' + bOverview.done + ' / ' + bOverview.total + ' 本）');
+    /* v1.28：读书那格按「读到第几页 / 共几页」说（没有页数就退到章数、再退到天数）。
+       下面还有一颗「📐 补全书本信息」的按钮，点开能填每本的总页数 / 章数。 */
+    const bHasPage = bOverview.pagesTotal > 0;
+    const bHasCh = !bHasPage && bOverview.chapterTotal > 0;
+    h += meStat('📚',
+      bHasPage ? (bOverview.pages + ' / ' + bOverview.pagesTotal)
+        : (bHasCh ? (bOverview.chapters + ' / ' + bOverview.chapterTotal) : (bOverview.days + ' 天')),
+      '读到的' + (bHasPage ? '页数' : (bHasCh ? '章数' : '天数')) + '（读完了 ' + bOverview.done + ' / ' + bOverview.total + ' 本）');
     h += meStat('🎤', S.stats.scriptsMastered + ' / 12', '拿下的导游词');
     h += meStat('✍️', S.stats.questions, '刷过的题');
     h += meStat('🎯', rate + '%', '总正确率');
@@ -2579,6 +2619,9 @@
         '<span class="ml-t">证据库</span><span class="ml-d">' + S.evidence.length + ' 份凭证</span><span class="ml-go">›</span></button>' +
       '</div>';
     h += '</div>';
+
+    /* v1.28：做题时标的「有问题的题」，都在这里汇总 */
+    h += meReportsPanel();
 
     /* 破壳题库（从乐园页搬过来的） */
     h += qbankPanel();
@@ -2949,6 +2992,8 @@
     h += '<div class="step"><b>3</b><div>破壳后开始照顾：<b>水分、营养、清洁</b>三条状态会随时间下滑。植物用浇水/施肥/除虫，动物用喂水/喂食/洗澡。<br><span style="color:#2E7D9A">🌊 例外：住在<b>池塘</b>里的水栖生物（海菜花 / 红瘰疣螈 / 云南闭壳龟 / 藻类）<b>永远不会缺水</b>——水位常满，也绝不会渴到生病，你只需照顾它的营养、清洁、娱乐。</span></div></div>';
     h += '<div class="step"><b>4</b><div>某项状态归零超过 2 小时，它就可能<b>生病</b>。要买对症的药水（买错了不生效），病超过 24 小时会进入休眠。</div></div>';
     h += '<div class="step"><b>5</b><div>成长值到 100 / 300 / 700 会进阶：幼体 → 成长 → 成熟 → 圆满，每次进阶都有额外可可豆。</div></div>';
+    h += '<div class="step"><b>6</b><div>成年之后能<b>干活</b>（修建/扩建建筑、在运营建筑上班、出团）。干完一趟活会<b>累</b>：<b>休息时长 = 该物种孵化时间 × 3</b>（普通约 45 分钟、传说约 4 小时），休息期间派不了活——面板上会直接写着「💤 休息中 · 还剩 N 分钟」，排班下拉里也会把休息中的标出来。<br><span style="color:#B8791C">💪 越稀有越能干：普通 ×1.00 / 稀有 ×1.30 / 传说 ×1.70，同一趟活产出更多、干得也更快。</span></div></div>';
+    h += '<div class="step"><b>7</b><div>场地有<b>安置限额</b>（苗圃 12 / 温室 12 / 池塘 6，草地敞开不限）。住满之后新破壳的会自动送进<b>保管室</b>，不用你手动挪位置——想让它上场，从保管室「取出」再腾个位子就行。</div></div>';
 
     h += '<h3>四、每天喂哪 7 样：投喂单 + 加餐</h3>';
     h += '<p>学习页最上面是<b>「今日投喂单」</b>——每天固定 7 样，进度条只数这 7 件：</p>';
@@ -2959,21 +3004,22 @@
       '<tr><td>7</td><td>🗣️ 综合问答</td><td>在「练习台」里看参考答案，练够 10 道问答题</td></tr>' +
       '</table>';
     h += '<p>7 件全喂满，当天额外 <b>+2 券 / +' + feedBonus() + ' 豆</b>，连着喂满 7 天和 30 天还有成就。</p>';
+    h += '<p>刷题不封顶：每科<b>每日 30 道</b>算达标，达标之后<b>每多刷 10 道再多给 6 豆</b>（单科单日封顶 90 豆）——状态好就多刷点，状态差刷够 30 道也不算欠账。</p>';
     h += '<p>7 件之外是<b>「加餐」</b>：课后练习、章节框架图、合书自测、昨日回照、费曼工作坊、合稿默讲……这些<b>做不做都行</b>，不计入 7 件，少做一件也不会让你"今天没做完"。有精力就加一口，没精力就明天再说。</p>';
 
     h += '<h3>五、课本精读：登记式，三步走完</h3>';
     h += '<p>精读是一张登记表——<b>能填出这两栏，就说明你今天真的翻过书</b>：</p>';
     h += '<div class="step"><b>1</b><div><b>选了哪一本</b>（必答）。四选一，顺序完全由你定，不想先读法规就先读别的。</div></div>';
-    h += '<div class="step"><b>2</b><div><b>今天读了什么</b>（必答）。章节、页数、范围都行，比如「第三章 3.2 节，P78–P96」。要写满几个字，光填个数字不算。</div></div>';
+    h += '<div class="step"><b>2</b><div><b>今天读到哪</b>（必答）。填「第几章 / 第几节 / 第几页」，能填几栏填几栏——填页码最准。</div></div>';
     h += '<div class="step"><b>3</b><div><b>笔记 / 感想</b>（选填）。愿意写就写两句，也可以拍一张手写笔记的照片。空着照样结算。</div></div>';
     h += '<p>登记的内容会连同时间戳存进<b>证据库</b>，日后能回头看"这本书我是哪天读到哪儿的"。</p>';
-    h += '<p><b>进度怎么算：读到的天数 / 计划的天数。</b>计划不是写死的 8 天——它是<b>你实际用掉的天数</b>（下限 6 天，免得翻两页就被算成"读完"）：</p>';
+    h += '<p><b>进度怎么算：读到第几页 / 全书共几页。</b>每本课本「共几章、共几节、共多少页」由你填一次（精读窗里点「📐 书本信息」），填完存进存档、当场重算，不用改代码：</p>';
     h += '<table class="mini"><tr><th>你登记到</th><th>进度显示</th><th>意思</th></tr>' +
-      '<tr><td>第 3 天</td><td>已读 3 天 / 计划 6 天</td><td>刚起步，离 6 天还有 3 天</td></tr>' +
-      '<tr><td>第 6 天</td><td><b>✅ 读完</b> · 已读 6 天</td><td>这本收工了 —— 6 天读完就是 6/6，不必硬凑到 8 天</td></tr>' +
-      '<tr><td>第 7 天</td><td>✅ 读完 · 已读 7 天</td><td>计划跟着变成 7 天，照样是 100%；再读就是二刷</td></tr>' +
+      '<tr><td>第 3 章 · 第 120 页</td><td>第 120 / 320 页 · 38%</td><td>按页码连续推进，读多少涨多少</td></tr>' +
+      '<tr><td>第 9 章 · 第 320 页</td><td><b>✅ 读完</b> · 100%</td><td>读到最后一页就算读完，不用凑天数</td></tr>' +
+      '<tr><td>还没填总页数</td><td>第 3 / 9 章</td><td>退回按章算；连章数都没有就退回按天数</td></tr>' +
       '</table>';
-    h += '<div class="hintbox">🍬 读得快是好事，不是欠账。四本各按自己的节奏走，「我的」页那格「读书天数」把四本加起来看总盘子。</div>';
+    h += '<div class="hintbox">🍬 读得快是好事，不是欠账。四本各按自己的节奏走，「我的」页那格「读到的页数」把四本加起来看总盘子。</div>';
 
     h += '<h3>六、学习验证链路：做了就是做了</h3>';
     h += '<p>这里<b>没有任何倒计时</b>，也不攒什么碎片——<b>做了就是做了，没做就是没做</b>：做完当场登记，奖励足额马上发，今天的格子立刻亮一个。</p>';
@@ -2984,6 +3030,7 @@
       '<tr><td>④ 输出与成像</td><td>深挖、框架图、法规速记都要写<b>费曼卡</b>或拍框架图（粘贴会被记录）；反思象限用「昨日回照」两句话逼你说出"还是模糊的那一点"。</td></tr></table>';
     h += '<div class="warnbox">⚠️ 坦白说：如果你铁了心要作弊，总能找到办法（比如随便传张旧截图）。但这个链路的目标是<b>让作弊比学习更麻烦</b>，同时又不至于让"今天只学了 15 分钟"变成一件有负担的事。真正能约束你的只有一个东西：11 月 21 日那天考场上只有你一个人。</div>';
     h += '<div class="hintbox" style="margin-top:10px">📌 另外：<b>这里没有错题本</b>。你另一个 App 已经在管错题了，这个游戏不再碰它。反思象限换成「昨日回照」，就写两句话，不抄题、不整理。</div>';
+    h += '<div class="hintbox" style="margin-top:10px">⚑ <b>题目有问题就当场标一下</b>：做题时题干下面有一行「⚑ 这道题有问题？」，点开选个原因（内容不完整 / 答案不对 / 选项重复……）就存下了，不打断做题。所有标记汇总在「我的 → ⚑ 题目举报」，改完题可以一键清空，也可以「复制全部举报」拿出去对照着改。</div>';
 
     h += '<h3>七、破壳测验（小生物出生前的关卡）</h3>';
     h += '<p>小生物要从温室 / 孵化仓出来的那一刻，先过「破壳测验」：<b>每次 1 道题</b>，<b>答对就破壳</b>。答错了不破壳，可以再答一题；第二次还错，会给你看这道题的解析，看完同样能破壳（无限次数、不扣任何东西）。这样既挡住乱点破壳，又不让人卡住。</p>';
@@ -3150,6 +3197,34 @@
       return render();
     }
     if (act === 'me-edit') return openProfileModal();
+    /* ---- v1.28 ⚑ 题目举报 ---- */
+    if (act === 'rep-undo') {
+      const k = ds.key;
+      if (k && S.qbankReports && S.qbankReports[k]) {
+        delete S.qbankReports[k];
+        window.Store.save(true);
+        toast('已撤销这条标记', 'ok');
+        render();
+      }
+      return;
+    }
+    if (act === 'rep-copy') {
+      const txt = reportsText();
+      if (!txt) return toast('还没有标记，没东西可复制。', 'warn');
+      return copyText(txt).then(function (ok) {
+        toast(ok ? '📋 举报清单已复制，粘到能改题的地方就行。' : '复制失败，可以手动选中下面这段。', ok ? 'ok' : 'warn');
+        if (!ok) openReportTextModal();
+      });
+    }
+    if (act === 'rep-clear') {
+      const n = reportCount();
+      if (!n) return toast('还没有标记。', 'warn');
+      if (!confirm('清空全部 ' + n + ' 条举报标记？改完题之后可以一键清干净。')) return;
+      S.qbankReports = {};
+      window.Store.save(true);
+      toast('已清空 ' + n + ' 条标记', 'ok');
+      return render();
+    }
     if (act === 'stack-toggle') {
       /* 点同一个格子＝收起，点别的＝换成那一格（收放都就地做，不换弹窗） */
       stackOpen = stackIsOpen(ds.kind, ds.sp) ? null : { kind: ds.kind, sp: ds.sp };
@@ -3377,6 +3452,192 @@
     });
   }
 
+  /* ---------------- ⚑ 题目举报（v1.28） ----------------
+     题库里内容不全（选项缺字、题干断在半个句子上）、答案可疑的题，
+     做到的时候按一下就能标出来 —— 不打断做题，攒到「我的 → ⚑ 题目举报」统一看、统一改。
+     标记存在存档里（S.qbankReports），连题干/选项/答案一起存快照，
+     回头对着它改题，不用再去题库里翻。 */
+  const REPORT_REASONS = [
+    '内容不完整（选项缺字 / 题干断掉）',
+    '答案不对',
+    '选项有重复或错字',
+    '表述含糊看不懂',
+    '和另一道题重复'
+  ];
+  function reportKeyOf(q) {
+    if (!q) return '';
+    return String(q.id || q.qid || '') || ('q_' + String(q.stem || '').slice(0, 40));
+  }
+  function reportOf(q) {
+    const k = reportKeyOf(q);
+    return (k && S.qbankReports && S.qbankReports[k]) || null;
+  }
+  function reportSave(q, reason, note) {
+    if (!q) return null;
+    if (!S.qbankReports || typeof S.qbankReports !== 'object') S.qbankReports = {};
+    const k = reportKeyOf(q);
+    const rec = {
+      key: k,
+      id: String(q.id || q.qid || k),
+      subject: q.subject || '',
+      type: q.type || '',
+      stem: String(q.stem || ''),
+      options: (q.options || []).slice(),
+      answer: q.answer,
+      explain: String(q.explain || ''),
+      reason: reason || REPORT_REASONS[0],
+      note: String(note || '').trim(),
+      at: Date.now()
+    };
+    S.qbankReports[k] = rec;
+    window.Store.save(true);
+    return rec;
+  }
+  function reportUndo(q) {
+    const k = reportKeyOf(q);
+    if (!k || !S.qbankReports || !S.qbankReports[k]) return false;
+    delete S.qbankReports[k];
+    window.Store.save(true);
+    return true;
+  }
+  function reportCount() { return Object.keys(S.qbankReports || {}).length; }
+  /* 题目卡上那一行「⚑ 举报」+ 就地展开的盒子 */
+  function reportBarHtml(q) {
+    const cur = reportOf(q);
+    return '<div class="rep-bar">' +
+      '<button type="button" class="rep-btn' + (cur ? ' on' : '') + '" data-rep="toggle">' +
+        (cur ? ('⚑ 已标记 · ' + esc(cur.reason)) : '⚑ 这道题有问题？') +
+      '</button>' +
+      '<span class="rep-hint">' + (cur ? '点一下能改原因或撤销' : '内容不全 / 答案可疑，标一下，回头统一改') + '</span>' +
+      '<div class="rep-box" data-open="0"></div>' +
+      '</div>';
+  }
+  function reportInlineHtml(q) {
+    const cur = reportOf(q);
+    let h = '<div class="rep-inline">';
+    h += '<div class="rep-reasons">' + REPORT_REASONS.map(function (r) {
+      return '<button type="button" class="rep-chip' + ((cur && cur.reason === r) ? ' on' : '') +
+        '" data-r="' + esc(r) + '">' + esc(r) + '</button>';
+    }).join('') + '</div>';
+    h += '<textarea class="rep-note" style="min-height:64px" placeholder="再说两句（选填）：哪个选项是空的？答案应该是哪个？">' +
+      esc(cur ? cur.note : '') + '</textarea>';
+    h += '<div class="posrow"><button type="button" class="btn btn-sm btn-primary rep-save">保存标记</button>' +
+      (cur ? '<button type="button" class="btn btn-sm btn-ghost rep-del">撤销标记</button>' : '') +
+      '<button type="button" class="btn btn-sm btn-ghost rep-close">收起</button></div>';
+    h += '</div>';
+    return h;
+  }
+  function bindReportInline(root, q, afterFn) {
+    let picked = null;
+    $$('.rep-chip', root).forEach(function (b) {
+      if (b.classList.contains('on')) picked = b.dataset.r;
+      b.onclick = function () {
+        picked = b.dataset.r;
+        $$('.rep-chip', root).forEach(function (x) { x.classList.toggle('on', x === b); });
+      };
+    });
+    const sv = $('.rep-save', root);
+    if (sv) sv.onclick = function () {
+      reportSave(q, picked || REPORT_REASONS[0], ($('.rep-note', root) || {}).value);
+      toast('⚑ 已标记这道题 —— 到「我的 → ⚑ 题目举报」能统一看、统一改', 'ok');
+      if (afterFn) afterFn();
+    };
+    const dl = $('.rep-del', root);
+    if (dl) dl.onclick = function () {
+      reportUndo(q);
+      toast('已撤销这道题的标记', 'ok');
+      if (afterFn) afterFn();
+    };
+    const cl = $('.rep-close', root);
+    if (cl) cl.onclick = function () { root.dataset.open = '0'; root.innerHTML = ''; };
+  }
+  /* 每个答题界面渲染完之后调一次，把「⚑ 举报」接上 */
+  function bindReportBar(root, q, afterFn) {
+    const btn = $('[data-rep="toggle"]', root);
+    const box = $('.rep-box', root);
+    if (!btn || !box) return;
+    btn.onclick = function () {
+      if (box.dataset.open === '1') { box.dataset.open = '0'; box.innerHTML = ''; return; }
+      box.dataset.open = '1';
+      box.innerHTML = reportInlineHtml(q);
+      bindReportInline(box, q, afterFn);
+    };
+  }
+
+  /* 「我的」页那块汇总：所有被标记的题，一条条列出来 */
+  function meReportsPanel() {
+    const list = Object.keys(S.qbankReports || {}).map(function (k) { return S.qbankReports[k]; })
+      .sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+    let h = '<div class="panel" id="me-reports">';
+    h += '<div class="panel-head"><h2>⚑ 题目举报</h2>' +
+      '<span class="hint">' + (list.length ? (list.length + ' 道待处理') : '还没有标记') + '</span></div>';
+    if (!list.length) {
+      h += '<div class="empty">做题时碰到内容不全、答案可疑的题，按一下题面下的「⚑ 这道题有问题？」，就会汇总到这里。</div>';
+    } else {
+      h += '<div class="rep-list">';
+      list.forEach(function (r) {
+        const sub = D.SUBJECTS.filter(function (x) { return x.id === r.subject })[0];
+        h += '<div class="rep-item" data-key="' + esc(r.key) + '">' +
+          '<div class="rep-i-head">' +
+            '<span class="rep-i-tag">' + ((sub && sub.emoji) || '❓') + ' ' + esc((sub && sub.short) || '未分类') + '</span>' +
+            '<span class="rep-i-reason">' + esc(r.reason) + '</span>' +
+            '<span class="rep-i-id">' + esc(r.id) + '</span>' +
+          '</div>' +
+          '<div class="rep-i-stem">' + esc(String(r.stem || '').slice(0, 160)) + '</div>' +
+          (r.options && r.options.length
+            ? '<div class="rep-i-opts">' + r.options.map(function (o, i) {
+                const isAns = Array.isArray(r.answer) ? r.answer.indexOf(i) >= 0 : r.answer === i;
+                return '<span class="rep-i-opt' + (isAns ? ' ans' : '') + '">' +
+                  String.fromCharCode(65 + i) + '. ' + esc(String(o || '（空）')) + (isAns ? ' ✔' : '') + '</span>';
+              }).join('') + '</div>'
+            : '') +
+          (r.note ? '<div class="rep-i-note">📝 ' + esc(r.note) + '</div>' : '') +
+          '<div class="rep-i-foot">' +
+            '<span class="fh-i">' + fmtWhen(r.at) + ' 标记</span>' +
+            '<button class="btn btn-sm btn-ghost" data-act="rep-undo" data-key="' + esc(r.key) + '">撤销标记</button>' +
+          '</div>' +
+        '</div>';
+      });
+      h += '</div>';
+      h += '<div class="posrow">' +
+        '<button class="btn btn-sm" data-act="rep-copy">📋 复制全部举报（改题时用）</button>' +
+        '<button class="btn btn-sm btn-ghost" data-act="rep-clear">🧹 改完了，清空标记</button>' +
+        '</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+  /* 复制失败时兜底：弹一段可手动选中的纯文本 */
+  function openReportTextModal() {
+    const txt = reportsText() || '（没有标记）';
+    openModal({
+      title: '⚑ 举报清单',
+      wide: true,
+      body: '<div class="fh" style="margin-bottom:8px">长按或全选下面这段文字复制走。</div>' +
+        '<textarea class="rep-copy-area" readonly style="min-height:280px;font-size:12px">' + esc(txt) + '</textarea>',
+      foot: '<button class="btn btn-primary" data-act="m-close">关闭</button>'
+    });
+  }
+  /* 举报清单的纯文本版：复制出去对照着改题 */
+  function reportsText() {
+    const list = Object.keys(S.qbankReports || {}).map(function (k) { return S.qbankReports[k]; })
+      .sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+    const out = [];
+    list.forEach(function (r, n) {
+      const sub = D.SUBJECTS.filter(function (x) { return x.id === r.subject })[0];
+      out.push('[' + (n + 1) + '] ' + r.id + '　科目：' + ((sub && sub.name) || '未分类'));
+      out.push('问题：' + r.reason + (r.note ? ('　补充：' + r.note) : ''));
+      out.push('题干：' + r.stem);
+      (r.options || []).forEach(function (o, i) {
+        const isAns = Array.isArray(r.answer) ? r.answer.indexOf(i) >= 0 : r.answer === i;
+        out.push('  ' + String.fromCharCode(65 + i) + '. ' + String(o || '（空）') + (isAns ? '  ← 现答案' : ''));
+      });
+      if (r.explain) out.push('解析：' + r.explain);
+      out.push('');
+    });
+    return out.join('\n');
+  }
+
   function renderWrongQuiz(mask) {
     if (!wz || !mask) return;
     if (wz.done) return renderWrongResult(mask);
@@ -3393,6 +3654,7 @@
       '</div>';
     h += '<div class="qz-progress"><i style="width:' + ((wz.idx + 1) / total * 100) + '%"></i></div>';
     h += '<div class="qz-stem">' + esc(p.stem) + '</div>';
+    h += reportBarHtml(p);   /* v1.28 ⚑ 举报：就地展开，不换弹窗（换弹窗会丢掉答题进度） */
     h += '<div class="qz-opts">';
     p.options.forEach(function (o, i) {
       let cls = 'qz-opt';
@@ -3425,6 +3687,8 @@
         (last ? '<button class="btn btn-primary" data-wz="finish">看成绩</button>'
               : '<button class="btn btn-primary" data-wz="next">下一题</button>');
     }
+
+    bindReportBar($('.rep-bar', body), p, function () { renderWrongQuiz(mask); });   /* v1.28 ⚑ 举报 */
 
     $$('[data-wz]', mask).forEach(function (el) {
       el.onclick = function () { onWrongAct(el.dataset.wz, parseInt(el.dataset.i, 10)); };
@@ -3563,6 +3827,7 @@
       '</div>';
     h += '<div class="qz-progress"><i style="width:' + ((chz.idx + 1) / chz.paper.length * 100) + '%"></i></div>';
     h += '<div class="qz-stem">' + esc(p.stem) + '</div>';
+    h += reportBarHtml(p);   /* v1.28 ⚑ 举报：就地展开，不换弹窗（换弹窗会丢掉答题进度） */
 
     h += '<div class="qz-opts">';
     const selected = chz.answers[chz.idx] || [];
@@ -3588,6 +3853,8 @@
         ? '<button class="btn" data-chz="next">下一题</button>'
         : '<button class="btn" disabled>最后一题</button>') +
       '<button class="btn btn-primary" data-chz="submit">交卷</button>';
+
+    bindReportBar($('.rep-bar', body), p, function () { renderChal(mask); });   /* v1.28 ⚑ 举报 */
 
     $$('[data-chz]', mask).forEach(function (el) {
       el.onclick = function () { onChalAct(el.dataset.chz, parseInt(el.dataset.i, 10)); };
@@ -3778,6 +4045,7 @@
     h += '<div class="qz-progress"><i style="width:' + ((qz.idx + 1) / qz.paper.length * 100) + '%"></i></div>';
 
     h += '<div class="qz-stem">' + esc(p.stem) + '</div>';
+    h += reportBarHtml(p);   /* v1.28 ⚑ 举报：就地展开，不换弹窗（换弹窗会丢掉答题进度） */
 
     h += '<div class="qz-opts">';
     const selected = qz.answers[qz.idx] || [];
@@ -3804,6 +4072,8 @@
         ? '<button class="btn" data-qz="next">下一题</button>'
         : '<button class="btn" disabled>最后一题</button>') +
       '<button class="btn btn-primary" data-qz="submit">交卷</button>';
+
+    bindReportBar($('.rep-bar', body), p, function () { renderQuiz(mask); });   /* v1.28 ⚑ 举报 */
 
     $$('[data-qz]', mask).forEach(function (el) {
       el.onclick = function () { onQuizAct(el.dataset.qz, parseInt(el.dataset.i, 10)); };
@@ -4018,7 +4288,14 @@
       '<tr><th>成长值</th><td>' + Math.round(p.growth) + '</td></tr>' +
       '<tr><th>被照顾</th><td>' + p.careCount + ' 次</td></tr>' +
       '<tr><th>出身地</th><td>' + esc(sp.home) + '</td></tr>' +
-      '<tr><th>安置处</th><td>' + window.Game.zoneNameFor(sp) + '</td></tr>' +
+      '<tr><th>安置处</th><td>' + window.Game.zoneNameFor(sp) +
+        ((typeof window.Game.zoneCap === 'function' && window.Game.zoneCap(window.Game.zoneIdOf(p)))
+          ? '（' + window.Game.petsInZone(window.Game.zoneIdOf(p)).length + ' / ' + window.Game.zoneCap(window.Game.zoneIdOf(p)) + ' 个位置）' : '') + '</td></tr>' +
+      '<tr><th>干活</th><td>' +
+        ((typeof window.Game.restText === 'function' && window.Game.restText(p))
+          ? esc(window.Game.restText(p))
+          : '现在就能出工') +
+        ' · 稀有度效益 ×' + ((typeof D.rarityWorkOf === 'function') ? D.rarityWorkOf(sp.rarity).toFixed(2) : '1.00') + '</td></tr>' +
       '</table>';
     openModal({
       title: '📋 ' + esc(p.name) + ' 的档案', body: body,
@@ -4196,17 +4473,104 @@
     }
   }
 
-  /* 读书进度标签的文案（弹窗里的选书按钮、任务卡面共用一套说法） */
+  /* 读书进度的文案（弹窗里的选书按钮、任务卡面、「我的」页共用一套说法）
+     v1.28：按「读到第几页 / 共几页」说，百分比是主信息。
+     还没登记过位置的旧存档走 v1.26 的天数口径（mode:'days'）。 */
   function readProgText(bp, long) {
-    bp = bp || { days: 0, plan: 6, done: false };
+    if (!bp) bp = { mode: 'days', days: 0, plan: 6, done: false };
+    const pct = Math.round((bp.pct || 0) * 100);
+    if (bp.mode === 'pos') {
+      if (bp.done) return long ? ('✅ 已读完 · ' + pct + '%') : '✅ 读完';
+      if (!bp.page && !bp.chapter) return long ? '还没登记读到哪儿（点「📖 去精读」记一下）' : '还没登记';
+      /* 短式给任务卡上的标签用：一眼看到「读到第几页 / 共几页」，比光给百分比有用 */
+      const short = bp.pages > 0 ? ('第 ' + bp.page + ' / ' + bp.pages + ' 页')
+        : (bp.chapters > 0 ? ('第 ' + bp.chapter + ' / ' + bp.chapters + ' 章') : (pct + '%'));
+      return long ? (D.bookPosText(bp) + ' · ' + pct + '%') : short;
+    }
     if (bp.done) return long ? '✅ 已读完 · 已读 ' + bp.days + ' 天' : '✅ 读完';
-    return long ? '已读 ' + bp.days + ' 天 / 计划 ' + bp.plan + ' 天' : '已读 ' + bp.days + ' 天';
+    /* 还没登记过位置：这本书连页数/章数都没填，就先提示去补，别一直显示"已读 0 天" */
+    if (!bp.pages && !bp.chapters) {
+      return long ? '还没填共几页 · 点「📐 书本信息」补一下' : '还没填页数';
+    }
+    return long ? '已读 ' + bp.days + ' 天 / 计划 ' + bp.plan + ' 天（还没登记读到哪一页）' : '已读 ' + bp.days + ' 天';
   }
 
-  /* 在弹窗里换了课本 → 同步刷新任务卡面上的读书进度标签（不用重开弹窗） */
+  /* 精读弹窗里「读到哪儿」那一段：换书 / 换章都要重算节数、总页数与提示。
+     行里的元素（在 openVerifyModal 里生成）：
+       #vf-ch 章　#vf-sec 节（select）　#vf-pg 页　#vf-pos-of 共几页　#vf-pos-hint 提示 */
+  function refreshPosPad(bookId, mask) {
+    mask = mask || document;
+    const meta = (typeof D.bookMetaOf === 'function') ? D.bookMetaOf(bookId) : null;
+    const pages = (typeof D.bookPagesOf === 'function') ? D.bookPagesOf(bookId) : 0;
+    const chN = (typeof D.bookChapterCount === 'function') ? D.bookChapterCount(bookId) : 0;
+    const bp = window.Study.bookProgressOf(bookId);
+
+    const of = $('#vf-pos-of', mask);
+    if (of) {
+      of.textContent = pages > 0 ? ('/ 共 ' + pages + ' 页') : (chN > 0 ? ('/ 共 ' + chN + ' 章') : '/ 总页数还没填');
+    }
+    const chIn = $('#vf-ch', mask);
+    if (chIn) {
+      if (chN > 0) chIn.setAttribute('max', String(chN));
+      else chIn.removeAttribute('max');
+    }
+    const pgIn = $('#vf-pg', mask);
+    if (pgIn) {
+      if (pages > 0) pgIn.setAttribute('max', String(pages));
+      else pgIn.removeAttribute('max');
+    }
+    /* 节：跟着当前选的章重新生成选项 */
+    const sec = $('#vf-sec', mask);
+    if (sec && chIn) {
+      const ch = parseInt(chIn.value || '0', 10) || 0;
+      const n = (typeof D.bookSectionCount === 'function') ? D.bookSectionCount(bookId, ch) : 0;
+      const t = meta && meta.chapters ? meta.chapters[ch - 1] : null;
+      const names = (t && t.sections) ? t.sections : [];
+      let h = '<option value="0">—</option>';
+      for (let i = 1; i <= n; i++) {
+        h += '<option value="' + i + '">第 ' + i + ' 节' + (names[i - 1] ? ' ' + esc(names[i - 1]) : '') + '</option>';
+      }
+      sec.innerHTML = h;
+    }
+    const hint = $('#vf-pos-hint', mask);
+    if (hint) updatePosPreview(mask);
+  }
+
+  /* 「读到哪儿」下面那行提示：实时告诉你「这么填，进度会变成多少」 */
+  function updatePosPreview(mask) {
+    mask = mask || document;
+    const hint = $('#vf-pos-hint', mask);
+    if (!hint) return;
+    const bookId = (vf && vf.bookId) || '';
+    const pages = (typeof D.bookPagesOf === 'function') ? D.bookPagesOf(bookId) : 0;
+    const chN = (typeof D.bookChapterCount === 'function') ? D.bookChapterCount(bookId) : 0;
+    const chIn = $('#vf-ch', mask), pgIn = $('#vf-pg', mask);
+    const ch = chIn ? (parseInt(chIn.value || '0', 10) || 0) : 0;
+    const pg = pgIn ? (parseInt(pgIn.value || '0', 10) || 0) : 0;
+    const finBtn = $('#vf-finish', mask);
+    const markDone = !!(finBtn && finBtn.classList.contains('on'));
+
+    let pct = 0;
+    if (markDone) pct = 1;
+    else if (pages > 0 && pg > 0) pct = Math.min(1, pg / pages);
+    else if (chN > 0 && ch > 0) pct = Math.min(1, ch / chN);
+
+    const parts = [];
+    if (pages > 0) parts.push('全书 ' + pages + ' 页');
+    else if (chN > 0) parts.push('全书 ' + chN + ' 章');
+    else parts.push('这本书的目录还没填（点「📐 书本信息」补一下，填了总页数就能按页走）');
+    if (pct > 0) {
+      parts.push('登记后进度 <b>' + Math.round(pct * 100) + '%</b>' + (pct >= 1 ? ' ✅ 读完' : ''));
+    }
+    const bp = window.Study.bookProgressOf(bookId);
+    if (!markDone && bp.mode === 'pos' && bp.at) parts.push('上次记到 ' + esc(D.bookPosText(bp)));
+    hint.innerHTML = parts.join('　·　');
+  }
+
+  /* 在弹窗里换了课本 → 同步刷新任务卡面上的读书进度标签 + 位置输入区（不用重开弹窗） */
   function refreshReadProgBadge(bookId, bpEl, task) {
     const bp = window.Study.bookProgressOf(bookId);
-    const sub = D.SUBJECTS.filter(function (x) { return x.id === bookId; })[0];
+    const sub = D.SUBJECTS.filter(function (x) { return x.id === bookId })[0];
     if (bpEl) {
       bpEl.textContent = readProgText(bp, true);
       bpEl.classList.toggle('bp-done', !!bp.done);
@@ -4214,15 +4578,67 @@
     const hint = $('#vf-bp-hint');
     if (hint) {
       hint.textContent = bp.done
-        ? '这本已经读完了（' + bp.days + ' 天）。今天再读算二刷，进度保持 100%。'
-        : '计划天数 = 你实际用掉的天数（少于 6 天不急着算完）。读得快，6 天读完就是 6/6，不用硬凑到 8 天。';
+        ? '这本已经读完了（' + Math.round((bp.pct || 1) * 100) + '%）。今天再读算二刷，进度保持 100%。'
+        : '进度 = 读到第几页 / 全书总页数。读到最后一页就自动标读完，不用凑天数。';
     }
-    /* 同一本书连着读第 2 天起，进度不会变——每天照常登记，奖励照常发，不扣也不减 */
+    refreshPosPad(bookId, document);
+    /* 任务卡面上那块标签也跟着换书走 */
     const badge = task ? $('[data-readprog="' + task.uid + '"]') : null;
     if (badge && sub) {
-      badge.textContent = '📖 ' + sub.name + '：' + readProgText(bp, false) + ' / 计划 ' + bp.plan + ' 天';
+      badge.textContent = '📖 ' + sub.name + '：' + readProgText(bp, false);
       badge.classList.toggle('tag-ok', !!bp.done);
     }
+  }
+
+  /* ---------------- 📐 书本信息（v1.28） ----------------
+     每本课本「共几章 / 共几节 / 共多少页」你说了算：填一次存进存档（S.bookToc），
+     优先级高于 data.js 里的内置目录，进度条当场按新数字重算。
+     在精读弹窗里是就地展开（不换弹窗，否则未保存的输入会丢）。 */
+  function bookInfoHtml(bookId) {
+    const meta = (typeof D.bookMetaOf === 'function') ? (D.bookMetaOf(bookId) || {}) : {};
+    const ov = (S.bookToc && S.bookToc[bookId]) || {};
+    const chN = (meta.chapters || []).length;
+    let h = '<div class="bi-grid">' +
+      '<label class="bi-i">总页数<input id="bi-pages" type="number" min="0" inputmode="numeric" placeholder="比如 320" value="' +
+        (meta.pages || '') + '"></label>' +
+      '<label class="bi-i">共几章<input id="bi-chs" type="number" min="0" inputmode="numeric" placeholder="比如 9" value="' +
+        (chN || '') + '"></label>' +
+      '<label class="bi-i">共几节<input id="bi-secs" type="number" min="0" inputmode="numeric" placeholder="选填" value="' +
+        (ov.sectionCount || '') + '"></label>' +
+      '</div>' +
+      '<div class="fh">填上<b>总页数</b>，进度条就按「读到第几页 / 总页数」走（最准）；只填章数也能按章算。</div>';
+    if (chN) {
+      h += '<div class="bi-toc">' + meta.chapters.map(function (c, i) {
+        return '<div class="bi-row"><span class="bi-ch">' + (i + 1) + '</span>' +
+          '<span class="bi-t">' + esc(c.title || ('第 ' + (i + 1) + ' 章')) + '</span>' +
+          (c.page ? '<span class="bi-p">P' + c.page + '</span>' : '') + '</div>';
+      }).join('') + '</div>';
+    }
+    return h;
+  }
+  function bindBookInfo(root, bookId, cb) {
+    const btn = $('#bi-save', root);
+    if (!btn) return;
+    btn.onclick = function () {
+      const pages = parseInt(($('#bi-pages', root) || {}).value || '0', 10) || 0;
+      const chs = parseInt(($('#bi-chs', root) || {}).value || '0', 10) || 0;
+      const secs = parseInt(($('#bi-secs', root) || {}).value || '0', 10) || 0;
+      if (pages > 0 && pages < 10) return toast('总页数看着不太对（至少 10 页吧）', 'warn');
+      D.bookSetToc(bookId, { pages: pages, chapterCount: chs, sectionCount: secs });
+      window.Store.save(true);
+      const sub = D.SUBJECTS.filter(function (x) { return x.id === bookId })[0];
+      toast('📐 《' + ((sub && sub.name) || '课本') + '》的书本信息已存下，进度按新数据重算', 'ok');
+      if (cb) cb();
+    };
+  }
+  function toggleBookInfo(box, bookId, cb, headText) {
+    if (!box) return;
+    if (box.dataset.open === '1') { box.dataset.open = '0'; box.innerHTML = ''; return; }
+    box.dataset.open = '1';
+    box.innerHTML = '<div class="bi-head">' + (headText || '📐 书本信息（填一次就行）') + '</div>' +
+      bookInfoHtml(bookId) +
+      '<div class="posrow"><button type="button" class="btn btn-sm btn-primary" id="bi-save">保存并重算进度</button></div>';
+    bindBookInfo(box, bookId, cb);
   }
 
   function openVerifyModal(task) {
@@ -4238,7 +4654,7 @@
       task: task, photo: null, file: null, feynmanCount: 0,
       audios: [],
       bookId: (task.pick === 'book' || isReading) ? (task.ctx.bookId || '') : '',
-      reading: { read: '', note: '' }
+      reading: { read: '', note: '', chapter: 0, section: 0, page: 0, finish: false }
     };
 
     const needFeyn = Math.max(need.feynman || 0, v.type === 'feynman' ? (v.minCards || 1) : 0);
@@ -4276,22 +4692,43 @@
             '</span>' +
             '</button>';
         }).join('') + '</div>';
-      /* 计划天数不是死的：今天选这本，计划就跟着这本的天数走（进度会实时刷新） */
+      /* v1.28：进度按页码走。今天选这本，卡面和下面的「读到哪儿」就跟着这本走 */
       body += '<div class="fh" id="vf-bp-hint">' +
-        '计划天数 = 你实际用掉的天数（少于 6 天不急着算完）。读得快，6 天读完就是 6/6，不用硬凑到 8 天。' +
+        '进度 = 读到第几页 / 全书总页数。读到最后一页就自动标读完，不用凑天数。' +
         '</div>' +
         '<label class="chk-line"><input type="checkbox" id="vf-whole"> ' +
         '<span>今天一整天都在读这本（读完才收工）</span></label>' +
         '</div>';
     }
 
-    /* 精读第二步：今天读了什么（必答） */
+    /* v1.28 精读第二步：读到哪儿了（章 / 节 / 页）——进度条就按这个往前走 */
+    if (isReading) {
+      const bp0 = window.Study.bookProgressOf(vf.bookId || '');
+      body += '<div class="field"><label>② 读到哪儿了？<span class="req">必答</span>' +
+        '<span class="fh-i">填了页码，进度条自动更新</span></label>' +
+        '<div class="pospad">' +
+          '<label class="pos-i">第 <input id="vf-ch" type="number" min="0" max="999" step="1" inputmode="numeric" value="' +
+            (bp0.chapter || '') + '"> 章</label>' +
+          '<label class="pos-i">第 <select id="vf-sec"><option value="0">—</option></select> 节</label>' +
+          '<label class="pos-i">第 <input id="vf-pg" type="number" min="0" max="99999" step="1" inputmode="numeric" value="' +
+            (bp0.page || '') + '"> 页</label>' +
+          '<span class="pos-of" id="vf-pos-of">/ 共 ? 页</span>' +
+        '</div>' +
+        '<div class="posrow">' +
+          '<button type="button" class="btn btn-sm" id="vf-finish">📕 这本我读完了</button>' +
+          '<button type="button" class="btn btn-sm btn-ghost" id="vf-bookinfo">📐 书本信息</button>' +
+        '</div>' +
+        '<div class="fh" id="vf-pos-hint"></div>' +
+        '<div class="bookinfo-box" id="vf-bookinfo-box" data-open="0"></div></div>';
+    }
+
+    /* 精读第三步：今天读了什么（选填；填了位置就不强制写字了） */
     if (isReading) {
       const mChars = v.minChars || 6;
-      body += '<div class="field"><label>② 今天读了什么？<span class="req">必答</span></label>' +
-        '<textarea id="vf-read" style="min-height:72px" placeholder="章节、页数、范围都行，例如：第三章 3.2 节，P78–P96，旅行社的责任范围"></textarea>' +
+      body += '<div class="field"><label>③ 今天读了什么？<span class="opt">选填</span></label>' +
+        '<textarea id="vf-read" style="min-height:72px" placeholder="比如：第三章 3.2 节，P78–P96，旅行社的责任范围。懒得写就空着。"></textarea>' +
         '<div class="fh"><span id="vf-read-cnt">0 / ' + mChars + ' 字起</span></div></div>';
-      body += '<div class="field"><label>③ 笔记 / 感想（选填）</label>' +
+      body += '<div class="field"><label>④ 笔记 / 感想（选填）</label>' +
         '<textarea id="vf-note" style="min-height:92px" placeholder="今天这一段，最想记住的一点是什么？哪里还没看明白？（空着也行）"></textarea>' +
         '<div class="fh"><span id="vf-note-cnt">0 字</span></div></div>';
     }
@@ -4498,10 +4935,75 @@
             b.onclick = function () {
               vf.bookId = b.dataset.bid;
               $$('.bpick', m).forEach(function (x) { x.classList.toggle('on', x === b); });
-              /* 选了哪本，卡面上的「已读 N 天 / 计划 M 天」就跟着切到哪本 */
+              /* 选了哪本，卡面上的进度就跟着切到哪本，下面的「读到哪儿」也跟着换书 */
               refreshReadProgBadge(b.dataset.bid, b.querySelector('.bp-prog'), task);
+              /* 换书时把「读到哪儿」预填成这本书上次记的位置，省得每天重填 */
+              if (isReading) {
+                const bp = window.Study.bookProgressOf(b.dataset.bid);
+                const chI = $('#vf-ch', m), pgI = $('#vf-pg', m);
+                if (chI) chI.value = bp.chapter || '';
+                if (pgI) pgI.value = bp.page || '';
+                const f = $('#vf-finish', m);
+                if (f) f.classList.toggle('on', !!bp.done);
+                refreshPosPad(b.dataset.bid, m);
+              }
             };
           });
+        }
+
+        /* 精读：「读到哪儿」——章 / 节 / 页，边填边更新进度预览 */
+        if (isReading) {
+          const chI = $('#vf-ch', m), pgI = $('#vf-pg', m), secI = $('#vf-sec', m);
+          if (chI) {
+            chI.oninput = function () { refreshPosPad(vf.bookId, m); updatePosPreview(m); };
+            chI.onchange = function () { refreshPosPad(vf.bookId, m); updatePosPreview(m); };
+          }
+          if (secI) secI.onchange = function () { updatePosPreview(m); };
+          if (pgI) pgI.oninput = function () { updatePosPreview(m); };
+          const fBtn = $('#vf-finish', m);
+          if (fBtn) {
+            const bp0 = window.Study.bookProgressOf(vf.bookId || '');
+            fBtn.classList.toggle('on', !!bp0.done);
+            fBtn.onclick = function () {
+              const on = !fBtn.classList.contains('on');
+              fBtn.classList.toggle('on', on);
+              fBtn.textContent = on ? '📕 已标记：这本读完了' : '📕 这本我读完了';
+              const pages = (typeof D.bookPagesOf === 'function') ? D.bookPagesOf(vf.bookId) : 0;
+              const chN = (typeof D.bookChapterCount === 'function') ? D.bookChapterCount(vf.bookId) : 0;
+              vf.reading.finish = on;
+              if (on) {
+                if (pages > 0 && pgI) pgI.value = pages;
+                if (chN > 0 && chI) chI.value = chN;
+                refreshPosPad(vf.bookId, m);
+              }
+              updatePosPreview(m);
+            };
+          }
+          const biBtn = $('#vf-bookinfo', m);
+          if (biBtn) {
+            biBtn.onclick = function () {
+              const box = $('#vf-bookinfo-box', m);
+              if (!box) return;
+              if (box.dataset.open === '1') {
+                box.dataset.open = '0'; box.innerHTML = '';
+                biBtn.classList.remove('on');
+                return;
+              }
+              box.dataset.open = '1'; biBtn.classList.add('on');
+              box.innerHTML = '<div class="bi-head">📐 书本信息（填一次就行）</div>' +
+                bookInfoHtml(vf.bookId) +
+                '<div class="posrow"><button type="button" class="btn btn-sm btn-primary" id="bi-save">保存并重算进度</button></div>';
+              bindBookInfo(box, vf.bookId, function () {
+                refreshPosPad(vf.bookId, m);
+                updatePosPreview(m);
+                /* 卡面上的百分比也跟着新页数走 */
+                const el = $('.bpick.on .bp-prog', m);
+                refreshReadProgBadge(vf.bookId, el, task);
+              });
+            };
+          }
+          refreshPosPad(vf.bookId, m);
+          updatePosPreview(m);
         }
 
         /* 精读登记：读了什么（必答）+ 笔记（选填） */
@@ -4617,11 +5119,16 @@
       quiz = { questions: q || 0, correct: c || 0, score: isNaN(sc) ? undefined : sc };
     }
 
-    /* 收集精读登记（必答：读哪本 + 读了什么；选填：笔记） */
+    /* 收集精读登记（必答：读哪本 + 读到哪儿；选填：读了什么 / 笔记） */
     let reading = null;
     if (v.type === 'reading') {
+      const finEl = $('#vf-finish', mask);
       reading = {
         bookId: vf.bookId,
+        chapter: parseInt((($('#vf-ch', mask) || {}).value) || '0', 10) || 0,
+        section: parseInt((($('#vf-sec', mask) || {}).value) || '0', 10) || 0,
+        page: parseInt((($('#vf-pg', mask) || {}).value) || '0', 10) || 0,
+        finish: !!(finEl && finEl.classList.contains('on')),
         whole: !!($('#vf-whole', mask) || {}).checked,
         read: String((($('#vf-read', mask) || {}).value) || '').trim(),
         note: String((($('#vf-note', mask) || {}).value) || '').trim()
@@ -4735,6 +5242,12 @@
       const bk = D.SUBJECTS.filter(function (x) { return x.id === reading.bookId })[0];
       if (bk) {
         summary.push('精读《' + bk.name + '》');
+        const posBits = [];
+        if (reading.chapter > 0) posBits.push('第 ' + reading.chapter + ' 章');
+        if (reading.section > 0) posBits.push('第 ' + reading.section + ' 节');
+        if (reading.page > 0) posBits.push('第 ' + reading.page + ' 页');
+        if (posBits.length) summary.push('读到 ' + posBits.join(' '));
+        if (reading.finish) summary.push('✅ 这本读完了');
         if (reading.whole) summary.push('今天一整天都在读这本');
         if (reading.read) summary.push('读了：' + reading.read);
         if (reading.note) summary.push('写了笔记');
