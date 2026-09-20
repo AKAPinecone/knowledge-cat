@@ -614,6 +614,12 @@
     } catch (e) { return ''; }
   }
 
+  /* 今天（本地）的日期串，和 game.js 的 todayKey 同一个格式 —— 内容指纹用 */
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
   /* 乐园页内容指纹：地图上看得见的东西（小生物落位与生病/休眠、掉落胶囊、
      工地进度、在岗人数、剧情旗子、保存舱开合）。内容没变就不重绘——
      地图是可拖动的，8 秒拆一次会造成"抖动 + 手指下的元素被抽走"。 */
@@ -621,13 +627,15 @@
     try {
       const pets = S.pets.map(function (p) {
         return p.id + (p.stored ? '|s' : '') + (p.illness ? '|i' : '') + (p.dormant ? '|d' : '') +
+          (p.workDay && p.workDay === todayStr() ? '|w' : '') +
           '|' + window.Game.stageOf(p).name;
       }).join(',');
       const caps = S.capsules.map(function (c) { return c.id + (c.place || 'x'); }).join(',');
       const b = S.build || {};
       const built = (b.built || []).join(',');
       const lv = Object.keys(b.lv || {}).map(function (k) { return k + b.lv[k]; }).join(',');
-      const staff = Object.keys(b.staff || {}).map(function (k) { return k + (b.staff[k] || []).length; }).join(',');
+      /* v1.32：岗位记到人（谁在哪栋上班）—— 地图上的打工牌子靠它刷新 */
+      const staff = Object.keys(b.staff || {}).map(function (k) { return k + ':' + (b.staff[k] || []).join('+'); }).join(',');
       const story = Object.keys(b.story || {}).filter(function (k) { return b.story[k]; }).sort().join(',');
       /* 建造中的剩余分钟：让进度条每隔约 1 分钟自然推进一次 */
       const under = Object.keys(b.under || {}).map(function (k) {
@@ -926,6 +934,20 @@
       '</svg>';
   }
 
+  /* v1.32：地图上的打工标识。
+     在岗（被安排进某栋建筑上班）→ 金色小牌「👜 建筑名」；
+     今天已经出过工、人已下班 → 淡灰小牌「💤 今天已出工」，明天刷新。 */
+  function workBadgeOf(p) {
+    const g = window.Game;
+    if (!g || typeof g.workplaceOf !== 'function') return '';
+    const at = g.workplaceOf(p.id);
+    if (at) return '<span class="pp-work">👜 <i>' + esc(at.name) + '</i></span>';
+    if (typeof g.isWorkedToday === 'function' && g.isWorkedToday(p)) {
+      return '<span class="pp-work rest">💤 <i>今天已出工</i></span>';
+    }
+    return '';
+  }
+
   function petFaceHtml(p) {
     const sp = window.Game.speciesById(p.speciesId);
     const mood = window.Game.moodOf(p);
@@ -935,6 +957,7 @@
         (b ? b.icon + ' <i>' + esc(b.text) + '</i>' : '…') + '</span>' +
       '<span class="pp-body">' + spArt(sp, 'pp-emoji') + '</span>' +
       (happy ? '<span class="pp-happy">💗</span>' : '') +
+      workBadgeOf(p) +
       '<span class="pp-shadow"></span>';
   }
 
@@ -1017,9 +1040,8 @@
     let h = '<div class="world-viewport" id="world-vp">';
     h += '<div class="world-map" id="world-map">';
     h += '<img class="world-img" src="' + D.WORLD.img + '" alt="乐园地图" draggable="false">';
-    /* 全图调色：新底图偏黄过曝，压红转绿 + 冷绿柔光（清新低饱和马卡龙调） */
-    h += '<div class="world-grade"></div>';
-    h += '<div class="world-cool"></div>';
+    /* v1.32：撤掉了压红转绿 / 冷绿柔光两层滤镜——底图按原色显示（只在 CSS 里留了一点点
+       饱和与亮度校正，见 .world-img），不再有那层绿膜。 */
 
     /* 固定槽位的区域：真菌田 / 植物田 / 池塘（建筑已画在底图里，只摆热区） */
     D.ZONES.forEach(function (z) {
@@ -1705,23 +1727,34 @@
     let anyTired = false;
     [['animal', '劳力', '动物'], ['plant', '材料', '植物'], ['fungus', '胶合料', '真菌']].forEach(function (r) {
       const pool = window.Game.workersOf(r[0]);
-      h += '<div class="field"><label>出' + r[1] + '的' + r[2] + '（可选 ' + pool.length + ' 只）</label>' +
-        '<select data-act="bx-pick" data-role="' + r[0] + '">' +
-        '<option value="">— 选一只 —</option>' +
-        pool.map(function (p) {
-          const st = window.Game.stageOf(p);
-          /* v1.28：刚干完活的在休息，选不了 —— 直接在选项里说清楚，别让人选完才被弹回来 */
-          const tired = (typeof window.Game.isResting === 'function') && window.Game.isResting(p);
-          if (tired) anyTired = true;
-          return '<option value="' + p.id + '"' + (bxState && bxState[r[0]] === p.id ? ' selected' : '') +
-            (tired ? ' disabled' : '') + '>' +
-            esc(p.name) + '（' + esc(window.Game.speciesById(p.speciesId).name) + ' · ' + st.name +
-            (p.illness ? ' · 生病中' : '') +
-            (tired ? ' · 💤 休息中 还剩 ' + window.Game.restLeftMin(p) + ' 分' : '') + '）</option>';
-        }).join('') + '</select></div>';
+      h += '<div class="pick-head"><b>出' + r[1] + '的' + r[2] + '</b><span>成年体可选 · ' +
+        pool.length + ' 只</span></div>';
+      if (!pool.length) {
+        h += '<div class="empty">还没有能出' + r[1] + '的成年' + r[2] + '。</div>';
+        return;
+      }
+      h += '<div class="staff-grid">';
+      pool.forEach(function (p) {
+        const sp = window.Game.speciesById(p.speciesId);
+        const st = window.Game.stageOf(p);
+        /* v1.32：今天已经出过工的派不了 —— 格子上直接说清楚，别让人点完才被弹回来 */
+        const tired = (typeof window.Game.isWorkedToday === 'function') && window.Game.isWorkedToday(p);
+        if (tired) anyTired = true;
+        const sel = !!(bxState && bxState[r[0]] === p.id);
+        h += '<button type="button" class="pg-cell' + (sel ? ' on' : '') + (tired ? ' off' : '') +
+          '" data-act="bx-pick" data-role="' + r[0] + '" data-pet="' + p.id + '"' + (tired ? ' disabled' : '') + '>' +
+          '<span class="pg-face' + (sp.img ? '' : ' pet-emoji') + '">' +
+          (sp.img ? '<img src="' + sp.img + '" alt="">' : sp.emoji) + '</span>' +
+          '<span class="pg-name">' + esc(p.name) + '</span>' +
+          '<span class="pg-sub">' + esc(sp.name) + ' · ' + st.name + '</span>' +
+          (tired ? '<span class="pg-tag rest">💤 今天已出工</span>' : '') +
+          '</button>';
+      });
+      h += '</div>';
     });
     if (anyTired) {
-      h += '<div class="fh" style="margin:-4px 0 10px">💤 标着「休息中」的刚出过工，暂时派不了；歇好了自动就能选（休息时长 = 该物种孵化时间 × 3）。</div>';
+      h += '<div class="fh" style="margin:-4px 0 10px">💤 标着「今天已出工」的刚干过活，今天派不了；' +
+        '明天自动刷新（一只小生物每天只出一趟工，修建和打工算同一趟）。</div>';
     }
     const ready = bxState && bxState.animal && bxState.plant && bxState.fungus;
     h += '<button class="btn btn-primary btn-block" data-act="bx-go" data-id="' + id + '"' +
@@ -1741,9 +1774,9 @@
         const p = window.Game.petById(pid);
         if (!p) return;
         const sp = window.Game.speciesById(p.speciesId);
-        const tired = (typeof window.Game.isResting === 'function') && window.Game.isResting(p);
+        const tired = (typeof window.Game.isWorkedToday === 'function') && window.Game.isWorkedToday(p);
         h += '<div class="staff-chip' + (tired ? ' tired' : '') + '"' +
-          (tired ? ' title="💤 刚干完活，还剩 ' + window.Game.restLeftMin(p) + ' 分钟" ' : '') + '>' +
+          (tired ? ' title="💤 今天已经出过工了，明天再来" ' : '') + '>' +
           '<span class="sc-face' + (sp.img ? '' : ' pet-emoji') + '">' +
           (sp.img ? '<img src="' + sp.img + '" alt="">' : sp.emoji) + '</span>' +
           '<span class="sc-name">' + esc(p.name) + (tired ? ' 💤' : '') + '</span>' +
@@ -1752,29 +1785,55 @@
       });
       h += '</div>';
     } else {
-      h += '<div class="empty">还没有小生物来上班。</div>';
+      h += '<div class="empty">还没有小生物来上班。点下面的头像安排一只。</div>';
     }
+    /* v1.32：格子式选人（原来是个下拉菜单）。一格一只，头像 + 名字 + 状态标签，
+       点一下就上岗；今天已经出过工的格子会灰掉（每天只出一趟工）。 */
     const pool = S.pets.filter(function (p) {
       return !p.stored && !p.illness && staff.indexOf(p.id) < 0;
     });
     const poolTired = pool.filter(function (p) {
-      return (typeof window.Game.isResting === 'function') && window.Game.isResting(p);
+      return (typeof window.Game.isWorkedToday === 'function') && window.Game.isWorkedToday(p);
     });
     if (pool.length && staff.length < cap) {
-      h += '<div class="field"><label>安排一只来上班</label>' +
-        '<select data-act="bx-staff" data-id="' + id + '"><option value="">— 选一只 —</option>' +
-        pool.map(function (p) {
-          const st = window.Game.stageOf(p);
-          const sp = window.Game.speciesById(p.speciesId);
-          const tired = (typeof window.Game.isResting === 'function') && window.Game.isResting(p);
-          return '<option value="' + p.id + '"' + (tired ? ' disabled' : '') + '>' +
-            esc(p.name) + '（' + esc(sp.name) + ' · ' + st.name +
-            (tired ? ' · 💤 休息中 还剩 ' + window.Game.restLeftMin(p) + ' 分' : '') + '）</option>';
-        }).join('') + '</select></div>';
+      /* 能上岗的排前面，灰掉的往后放，一眼看清"现在能派谁" */
+      const sorted = pool.slice().sort(function (a, b) {
+        const ta = (typeof window.Game.isWorkedToday === 'function') && window.Game.isWorkedToday(a) ? 1 : 0;
+        const tb = (typeof window.Game.isWorkedToday === 'function') && window.Game.isWorkedToday(b) ? 1 : 0;
+        if (ta !== tb) return ta - tb;
+        const aa = (typeof window.Game.isAdult === 'function') && window.Game.isAdult(a) ? 0 : 1;
+        const ab = (typeof window.Game.isAdult === 'function') && window.Game.isAdult(b) ? 0 : 1;
+        return aa - ab;
+      });
+      h += '<div class="pick-head"><b>安排一只来上班</b><span>点一下就上岗 · 还剩 ' +
+        (cap - staff.length) + ' 个空位</span></div>';
+      h += '<div class="staff-grid">';
+      sorted.forEach(function (p) {
+        const sp = window.Game.speciesById(p.speciesId);
+        const st = window.Game.stageOf(p);
+        const tired = typeof window.Game.isWorkedToday === 'function' && window.Game.isWorkedToday(p);
+        const adult = typeof window.Game.isAdult === 'function' ? window.Game.isAdult(p) : true;
+        const at = (typeof window.Game.workplaceOf === 'function') ? window.Game.workplaceOf(p.id) : null;
+        const off = tired || !adult;
+        h += '<button type="button" class="pg-cell' + (off ? ' off' : '') +
+          '" data-act="bx-staff" data-id="' + id + '" data-pet="' + p.id + '"' + (off ? ' disabled' : '') + '>' +
+          '<span class="pg-face' + (sp.img ? '' : ' pet-emoji') + '">' +
+          (sp.img ? '<img src="' + sp.img + '" alt="">' : sp.emoji) + '</span>' +
+          '<span class="pg-name">' + esc(p.name) + '</span>' +
+          '<span class="pg-sub">' + esc(sp.name) + ' · ' + st.name + '</span>' +
+          (tired ? '<span class="pg-tag rest">💤 今天已出工</span>'
+                 : (at ? '<span class="pg-tag move">👜 在' + esc(at.name) + '·转岗</span>'
+                       : (adult ? '' : '<span class="pg-tag off">未成年</span>'))) +
+          '</button>';
+      });
+      h += '</div>';
+    } else if (pool.length) {
+      h += '<div class="fh" style="margin:-4px 0 4px">岗位满了（' + staff.length + '/' + cap +
+        '）。想多带几只的话，先扩建这栋，或者让一只下班。</div>';
     }
     if (poolTired.length) {
       h += '<div class="fh" style="margin:-4px 0 10px">💤 ' + poolTired.length +
-        ' 只刚干完活还在休息，暂时排不了班；开工时也会自动跳过它们。</div>';
+        ' 只今天已经出过工了，明天自动刷新；收工后它们会自己从岗位上撤下来。</div>';
     }
     /* v1.27：运营建筑（食堂 / 澡堂 / 图书馆）走倒计时制 */
     if (typeof window.Game.opCfg === 'function' && window.Game.opCfg(id)) {
@@ -3193,7 +3252,9 @@
     if (act === 'build-open') return openBuildingModal(ds.id);
     if (act === 'bx-up') return openBuildingModal(ds.id, true);
     if (act === 'bx-pick') {
-      if (bxState) bxState[ds.role] = el.value || null;
+      /* v1.32：出工改成点头像格子（原来读下拉框的 value，现在读格子上的 data-pet） */
+      if (bxState) bxState[ds.role] = ds.pet || el.value || null;
+      if (bxPaint) { bxPaint(); return; }
       const go = $('[data-act="bx-go"][data-id="' + bxId + '"]', activeMask() || document);
       if (go) go.disabled = !(bxState && bxState.animal && bxState.plant && bxState.fungus);
       return;
@@ -3218,9 +3279,10 @@
       return;
     }
     if (act === 'bx-staff') {
-      if (!el.value) return;
-      const r = window.Game.addStaff(ds.id, el.value);
-      toast((r.ok ? '👜 ' + r.msg : '❌ ' + r.msg), r.ok ? 'ok' : 'err');
+      const pid = ds.pet || el.value;
+      if (!pid) return;
+      const r = window.Game.addStaff(ds.id, pid);
+      toast((r.ok ? '' : '❌ ') + r.msg, r.ok ? 'ok' : 'err');
       if (bxPaint) bxPaint(); else render();
       renderTop();
       return;

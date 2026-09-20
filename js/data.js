@@ -739,6 +739,9 @@ window.GAME_DATA = (function () {
     travel:  { base: 20, perLv: 12, rand: 14 }, /* 旅行社每次出团 = base + perLv × 等级 + [0,rand) 随机 */
     adopt:   { 1: 22, 2: 55, 3: 130 },          /* 送养谢礼基数（稀有度 1/2/3） */
     adoptStageMul: { baby: 0.5, teen: 0.8, adult: 1.2, elite: 1.8 }, /* 送养阶段系数 */
+    /* 出工一趟涨多少成长值（v1.32）：在岗打工收工后按这个基数给在岗的小生物加成长，
+       再乘它自己的稀有度效益系数（RARITY_WORK）。修建出工同样按这个基数算。 */
+    work:    { grow: 8 },
     /* 刷题超额奖励（v1.28）：每科每天 30 道达标，超出部分做得越多给得越多。
        每多 step 道 → +beans 豆，封顶 cap（防止"刷题=刷豆"把别的玩法饿死）。 */
     quizExtra: { step: 10, beans: 6, cap: 90 }
@@ -1042,20 +1045,19 @@ window.GAME_DATA = (function () {
     }
   ];
 
-  /* ---------- 运营/打工：休息与稀有度（v1.28） ----------
-     「干完活得歇一歇」——出工之后按该物种的孵化时间 × REST_MUL 进入休息，休息中不能再出工。
+  /* ---------- 打工与稀有度（v1.32：出工改成「每天一次」） ----------
+     一只小生物每天只能出一次工：只要干过活（在建筑里打工收工、或参与修建），
+     当天就进休息，不能再去任何建筑打工，也不能再参与修建；第二天自动恢复。
+     所以「休息」是一个"今天已经出过工"的标记，而不是一段计时（旧版是孵化时长 × REST_MUL 分钟）。
      越稀有的小生物底子越好：同样一趟活，产出更高、也更省时间（RARITY_WORK）。
-     两个系数都只在这里调，game.js 的 opStart / buildStart 读它们。 */
-  const REST_MUL = 3;                                   /* 休息时长 = 孵化时间 × 3 */
+     效益系数与成长值基数都只在这里调，game.js 的 opStart / opFinish / buildStart 读它们。 */
   const RARITY_WORK = { 1: 1.00, 2: 1.30, 3: 1.70 };    /* 稀有度 → 工作效益系数 */
   function rarityWorkOf(rarity) {
     return RARITY_WORK[rarity] || RARITY_WORK[1];
   }
-  /* 某只小生物干完一趟活要歇多久（毫秒）：按它的稀有度取孵化时间 ×3 */
-  function restMsOfSpecies(species) {
-    const r = (species && species.rarity) || 1;
-    const mins = (GACHA.hatchMinutes && GACHA.hatchMinutes[r]) || 15;
-    return mins * REST_MUL * 60000;
+  /* 出工一趟涨多少成长值（在岗打工、修建出工都按它算，再乘各自的效益系数） */
+  function workGrowBase() {
+    return (ECONOMY.work && ECONOMY.work.grow) || 8;
   }
 
   /* 粘贴导入的文本格式示例（只用于界面上点「填入格式示例」，不会自动入库）。
@@ -1606,7 +1608,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.31',
+    VERSION: 'v1.32',
     WORLD: WORLD,
     ZONES: ZONES,
     ROAM_AVOID: ROAM_AVOID,
@@ -1645,10 +1647,9 @@ window.GAME_DATA = (function () {
     bookPageOfPos: bookPageOfPos,
     bookTocReady: bookTocReady,
     booksOverview: booksOverview,
-    REST_MUL: REST_MUL,
     RARITY_WORK: RARITY_WORK,
     rarityWorkOf: rarityWorkOf,
-    restMsOfSpecies: restMsOfSpecies,
+    workGrowBase: workGrowBase,
     SUBJECTS: SUBJECTS,
     SCRIPTS: SCRIPTS,
     INTERVIEW_QA: INTERVIEW_QA,

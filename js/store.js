@@ -252,10 +252,30 @@ window.Store = (function () {
     if (!s.bookToc || typeof s.bookToc !== 'object' || Array.isArray(s.bookToc)) {
       s.bookToc = {};
     }
-    /* v1.28：打工休息。老存档的宠物没有 restUntil，补成 0（= 没在休息，随时能出工） */
+    /* v1.32：出工改成「每天一次」—— pet.workDay 记着最近一次出工的日子，
+       和当天日期一致就是"今天已经出过工了"，第二天自动能再出工。
+       旧存档是「歇 N 分钟」的计时制：还在休息的（restUntil 在未来）直接折成"今天已出工"，
+       其余的 restUntil 一律清零，免得旧计时和新规则打架。 */
+    const workDayNow = dateKey(new Date());
     if (Array.isArray(s.pets)) s.pets.forEach(function (p) {
       if (typeof p.restUntil !== 'number') p.restUntil = 0;
+      if (typeof p.workDay !== 'string') p.workDay = '';
+      if (p.restUntil > Date.now()) { p.workDay = workDayNow; p.restUntil = 0; }
     });
+    /* v1.32：一只小生物同一时间只能在一个建筑上班。
+       老存档 / 同步码里同一只被塞进多栋建筑的岗位名单时，只留最先遇到的那一处（v1.31 及之前的 bug）。 */
+    if (s.build && s.build.staff && typeof s.build.staff === 'object' && !Array.isArray(s.build.staff)) {
+      const seated = {};
+      Object.keys(s.build.staff).forEach(function (k) {
+        const arr = s.build.staff[k];
+        if (!Array.isArray(arr)) { s.build.staff[k] = []; return; }
+        s.build.staff[k] = arr.filter(function (pid) {
+          if (!pid || seated[pid]) return false;
+          seated[pid] = true;
+          return true;
+        });
+      });
+    }
     /* v1.28：安置区满了就自动进保管室 —— 不要求玩家手动挪。
        老存档 / 同步码带进来的小生物如果本来就超了（比如以前没有容量限制），
        在这里一次收干净：先来的留在场地，后来的自动进保管室。 */

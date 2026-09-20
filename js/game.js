@@ -536,11 +536,7 @@ window.Game = (function () {
     const name = pet.name;
     /* 把它从各处摘干净：先下工，再出货。留在岗位上的幽灵 id 会让建筑面板打不开。 */
     ensureBuild();
-    Object.keys(S.build.staff || {}).forEach(function (k) {
-      const arr = S.build.staff[k] || [];
-      const j = arr.indexOf(petId);
-      if (j >= 0) arr.splice(j, 1);
-    });
+    unstaffEverywhere(petId);
     const i = S.pets.indexOf(pet);
     if (i >= 0) S.pets.splice(i, 1);
     S.cur.beans += beans;
@@ -685,28 +681,39 @@ window.Game = (function () {
     return (typeof D.isWaterDweller === 'function') && D.isWaterDweller(pet.speciesId);
   }
 
-  /* ---------------- 打工休息（v1.28） ----------------
-     干完一趟活（修建出工 / 运营开工）就得歇一歇：休息时长 = 该物种的孵化时间 × 3
-     （普通 15 分→45 分、稀有 40→120 分、传说 80→240 分）。休息期间不能被派活。
-     稀有的底子好：同样一趟活，产出更高、也更省时间（系数在 D.RARITY_WORK）。 */
-  function restMsFor(pet) {
-    const sp = speciesById(pet.speciesId);
-    if (typeof D.restMsOfSpecies === 'function') return D.restMsOfSpecies(sp);
-    return 15 * 3 * 60000;
+  /* ---------- 出工与休息（v1.32：出工改成「每天一次」） ----------
+     旧版是「干完活按孵化时长歇 N 分钟」；现在改成：出过工（打工 / 修建）之后，
+     这只小生物当天就不能再出工了，第二天自动恢复——一只一天只出一趟工。
+     标记写在 pet.workDay（当天日期字符串），比计时更好懂、也不会因为离线跨天出岔子。
+     老存档里遗留的 restUntil（未来时间戳）当作"今天已出工"，由 Store.migrate 折平。 */
+  function isWorkedToday(pet) {
+    if (!pet) return false;
+    if (pet.workDay === todayKey()) return true;
+    return (pet.restUntil || 0) > Date.now();     /* 旧存档的计时残留，还认它 */
   }
-  function isResting(pet) { return !!pet && (pet.restUntil || 0) > Date.now(); }
-  function restLeftMs(pet) { return Math.max(0, (pet.restUntil || 0) - Date.now()); }
-  function restLeftMin(pet) { return Math.ceil(restLeftMs(pet) / 60000); }
-  /* 让它开始休息，返回歇多久（毫秒） */
+  function isResting(pet) { return isWorkedToday(pet); }
+  /* 到第二天 0 点刷新——离能再出工还有多久 */
+  function restLeftMs() {
+    const d = new Date();
+    d.setHours(24, 0, 0, 0);
+    return Math.max(0, d.getTime() - Date.now());
+  }
+  function restLeftMin() { return Math.max(1, Math.ceil(restLeftMs() / 60000)); }
+  /* 让它开始休息（= 记下今天已经出过工了），返回离刷新还有多久 */
   function setRest(pet) {
     if (!pet) return 0;
-    const ms = restMsFor(pet);
-    pet.restUntil = Date.now() + ms;
-    return ms;
+    pet.workDay = todayKey();
+    pet.restUntil = 0;
+    return restLeftMs();
   }
   function restText(pet) {
     if (!isResting(pet)) return '';
-    return '💤 休息中 · 还剩 ' + restLeftMin(pet) + ' 分钟';
+    return '💤 今天已出过工 · 明天再来';
+  }
+  /* 出工一趟涨多少成长值：基数在 D.ECONOMY.work.grow，乘上这趟活的效益系数 */
+  function workGrowOf(boost) {
+    const base = (typeof D.workGrowBase === 'function') ? D.workGrowBase() : 8;
+    return Math.max(1, Math.round(base * (boost || 1)));
   }
   /* 一趟活的效益系数 = 出工那几只的稀有度系数的平均（1 / 1.3 / 1.7） */
   function workBoostOf(pets) {
@@ -890,6 +897,15 @@ window.Game = (function () {
           S.cur.tickets += rw.tickets;
           msg += '　🎖️ 升级到 Lv.' + S.cur.level + '！+' + rw.beans + ' 豆 +' + rw.tickets + ' 券';
         }
+        /* v1.32：参与修建的三只也长本事（和打工同一个成长基数 × 各自的效益系数） */
+        const crewMembers = ['animal', 'plant', 'fungus'].map(function (k) {
+          return petById((u.assign || {})[k]);
+        }).filter(Boolean);
+        if (crewMembers.length) {
+          const g = workGrowOf(workBoostOf(crewMembers));
+          crewMembers.forEach(function (p) { p.growth += g; });
+          msg += '　🌱 出工的 ' + crewMembers.length + ' 只各涨成长 +' + g;
+        }
         window.Store.pushLog('🏗️ ' + msg);
         finished.push({ id: id, name: b ? b.name : id, msg: msg });
       }
@@ -925,7 +941,7 @@ window.Game = (function () {
       if (speciesById(pet.speciesId).kind !== kind) return { ok: false, msg: '出' + label + '的那只不合适' };
       if (pet.stored || pet.illness) return { ok: false, msg: pet.name + '现在没法出力' };
       if (!isAdult(pet)) return { ok: false, msg: pet.name + '还没成年，不能参与修建' };
-      if (isResting(pet)) return { ok: false, msg: pet.name + '刚干完活还在休息（还剩 ' + restLeftMin(pet) + ' 分钟），换一只或者等等' };
+      if (isWorkedToday(pet)) return { ok: false, msg: pet.name + '今天已经出过工了，换一只（一只小生物每天只出一趟工，明天刷新）' };
       crew[kind] = pet;
     }
     const cost = buildCost(id);
@@ -943,7 +959,7 @@ window.Game = (function () {
     const targetLv = (buildLv(id) || 0) + 1;
     const crewList = [crew.animal, crew.plant, crew.fungus];
     const duration = buildDurationMs(id, crewList);
-    /* v1.28：出工即开始休息（休息时长 = 各自孵化时间 ×3），修完也得歇够 */
+    /* v1.32：出工即算「今天已经出过工了」——修完之后也不能再去打工，第二天自动刷新 */
     let restMin = 0;
     crewList.forEach(function (p) {
       const ms = setRest(p);
@@ -963,7 +979,7 @@ window.Game = (function () {
     window.Store.save(true);
     return {
       ok: true,
-      msg: b.name + ' 开始建造，预计 ' + minutes + ' 分钟后完工（出工的三只先休息，最长 ' + restMin + ' 分钟）',
+      msg: b.name + ' 开始建造，预计 ' + minutes + ' 分钟后完工（出工的三只今天不能再出工，明天刷新）',
       minutes: minutes, restMin: restMin
     };
   }
@@ -996,21 +1012,57 @@ window.Game = (function () {
       return S.pets.some(function (p) { return p.id === pid; });
     });
   }
+  /* 它现在在哪个建筑上班？（v1.32：一只小生物同一时间只能占一个岗位） */
+  function workplaceOf(petId) {
+    const st = S.build && S.build.staff;
+    if (!st || !petId) return null;
+    const ids = Object.keys(st);
+    for (let i = 0; i < ids.length; i++) {
+      if ((st[ids[i]] || []).indexOf(petId) >= 0) {
+        return buildingById(ids[i]) || { id: ids[i], name: ids[i] };
+      }
+    }
+    return null;
+  }
+  /* 把某只小生物从所有岗位名单里摘干净（同一只正常只在一处，这里兜底全扫一遍） */
+  function unstaffEverywhere(petId) {
+    const st = S.build && S.build.staff;
+    if (!st || !petId) return [];
+    const from = [];
+    Object.keys(st).forEach(function (k) {
+      const arr = st[k] || [];
+      let i = arr.indexOf(petId);
+      while (i >= 0) {
+        arr.splice(i, 1);
+        const b = buildingById(k);
+        const nm = b ? b.name : k;
+        if (from.indexOf(nm) < 0) from.push(nm);
+        i = arr.indexOf(petId);
+      }
+    });
+    return from;
+  }
   function addStaff(id, petId) {
     ensureBuild();
     if (!isBuilt(id)) return { ok: false, msg: '这栋还没建好' };
+    const pet = petById(petId);
+    if (!pet) return { ok: false, msg: '找不到这只小生物' };
     const arr = S.build.staff[id] || (S.build.staff[id] = []);
     if (arr.indexOf(petId) >= 0) return { ok: false, msg: '它已经在这儿上班了' };
-    if (arr.length >= staffCap(id)) return { ok: false, msg: '位置满了（' + arr.length + '/' + staffCap(id) + '），扩建能多招几员' };
-    const pet = S.pets.filter(function (p) { return p.id === petId; })[0];
-    if (!pet) return { ok: false, msg: '找不到这只小生物' };
     if (pet.stored) return { ok: false, msg: pet.name + '还在保管室里，先取出来' };
     if (pet.illness) return { ok: false, msg: pet.name + '正在生病，先治好' };
     if (!isAdult(pet)) return { ok: false, msg: pet.name + '还没成年，不能来打工' };
-    if (isResting(pet)) return { ok: false, msg: pet.name + '刚干完活还在休息（还剩 ' + restLeftMin(pet) + ' 分钟），歇好了再来' };
+    if (isWorkedToday(pet)) return { ok: false, msg: pet.name + '今天已经出过工了，明天再来（一只小生物每天只出一趟工）' };
+    /* 容量判在摘旧岗之前：万一这边满了，也不会让它把原来的班上丢 */
+    if (arr.length >= staffCap(id)) return { ok: false, msg: '位置满了（' + arr.length + '/' + staffCap(id) + '），扩建能多招几员' };
+    /* v1.32：它要是在别的建筑上着班，就从那边撤下来 —— 同一时间只占一个岗位 */
+    const fromName = unstaffEverywhere(petId)[0] || '';
     arr.push(petId);
     window.Store.save(true);
-    return { ok: true, msg: '👜 ' + pet.name + ' 来' + buildingById(id).name + '上班了。' };
+    return {
+      ok: true,
+      msg: '👜 ' + pet.name + (fromName ? '从' + fromName + '转到' + buildingById(id).name : '来' + buildingById(id).name) + '上班了。'
+    };
   }
   function removeStaff(id, petId) {
     ensureBuild();
@@ -1096,15 +1148,15 @@ window.Game = (function () {
     if (staff.length < (cfg.labor || 1)) {
       return { ok: false, msg: b.name + '至少要有 ' + (cfg.labor || 1) + ' 位小生物在岗出力' };
     }
-    /* v1.28：刚干完活的还在休息，不能连着上班 */
-    const ready = staff.filter(function (pid) { const p = petById(pid); return p && !isResting(p); });
+    /* v1.32：今天已经出过工的（含刚收工下班的）不能连着上班，等明天刷新 */
+    const ready = staff.filter(function (pid) { const p = petById(pid); return p && !isWorkedToday(p); });
     if (ready.length < (cfg.labor || 1)) {
-      const tired = staff.filter(function (pid) { const p = petById(pid); return p && isResting(p); });
-      const tn = tired.map(function (pid) { const p = petById(pid); return p.name + '（还剩 ' + restLeftMin(p) + ' 分钟）'; });
+      const tired = staff.filter(function (pid) { const p = petById(pid); return p && isWorkedToday(p); });
+      const tn = tired.map(function (pid) { const p = petById(pid); return p.name; });
       return {
         ok: false,
-        msg: b.name + '人手不够：' + (tn.length ? tn.join('、') + '还在休息。' : '在岗的都不在状态。') +
-          '歇够、或者再安排一只上岗。'
+        msg: b.name + '人手不够：' + (tn.length ? tn.join('、') + '今天已经出过工了。' : '在岗的都不在状态。') +
+          '明天刷新、或者再安排一只上岗。'
       };
     }
     const guests = opPickGuests(id, opGuestCap(id));
@@ -1220,9 +1272,20 @@ window.Game = (function () {
     } else {
       outTxt = '📖 大伙儿的心情与见识';
     }
+    /* v1.32：收工即下班 —— 在岗出力的小生物自动撤出建筑，并结算成长值（出力长本事）。
+       撤岗之后再也没法拿它去别的建筑连着打工（加上 workDay 标记，双保险）。 */
+    let crewGrow = 0;
+    if (crewPets.length) {
+      crewGrow = workGrowOf(boost);
+      crewPets.forEach(function (p) {
+        unstaffEverywhere(p.id);
+        p.growth += crewGrow;
+      });
+    }
     const rec = {
       at: at || Date.now(), op: id, label: cfg.label, emoji: cfg.emoji,
       guests: entries, out: outTxt, outN: outN, lv: lv, boost: boost,
+      crewGrow: crewGrow,
       crew: crewPets.map(function (p) { return p.name; })
     };
     if (!S.build.logs[id]) S.build.logs[id] = [];
@@ -1230,12 +1293,14 @@ window.Game = (function () {
     if (S.build.logs[id].length > 12) S.build.logs[id] = S.build.logs[id].slice(0, 12);
     delete S.build.ops[id];
     window.Store.pushLog(cfg.emoji + ' ' + b.name + cfg.label + '收工：' + guests.length + ' 位客人，' + outTxt +
-      (boost > 1.01 ? '（稀有出工 ×' + boost.toFixed(2) + '）' : ''));
+      (boost > 1.01 ? '（稀有出工 ×' + boost.toFixed(2) + '）' : '') +
+      (crewGrow ? '；出工的 ' + crewPets.length + ' 只下班了，各涨成长 +' + crewGrow : ''));
     window.Store.save(true);
     return {
       ok: true, id: id, name: b.name, rec: rec, boost: boost,
       msg: cfg.emoji + ' ' + b.name + cfg.label + '收工！' + guests.length + ' 位客人' + cfg.verb + '，' + outTxt +
-        (boost > 1.01 ? '　✨ 稀有出工，效益 ×' + boost.toFixed(2) : '')
+        (boost > 1.01 ? '　✨ 稀有出工，效益 ×' + boost.toFixed(2) : '') +
+        (crewGrow ? '　🌱 出工的 ' + crewPets.length + ' 只下班，各涨成长 +' + crewGrow + '（今天不能再出工）' : '')
     };
   }
   /* 离线到点的营业，回来一并结算（advanceOffline 里调） */
@@ -1301,9 +1366,21 @@ window.Game = (function () {
     }
     S.build.trips.push({ at: Date.now(), guide: guide.id, guideName: guide.name, party: party.map(function (p) { return p.id; }), got: got });
     if (S.build.trips.length > 40) S.build.trips = S.build.trips.slice(-40);
+    /* v1.32：出团也是一趟工 —— 走的这几只当天下班、不能再出工，回来各自涨成长（见多识广也是长本事） */
+    const tripGrow = workGrowOf(workBoostOf([guide].concat(party)));
+    [guide].concat(party).forEach(function (p) {
+      setRest(p);
+      unstaffEverywhere(p.id);
+      p.growth += tripGrow;
+    });
     markDone('travel:' + id);
     window.Store.save(true);
-    return { ok: true, msg: '🧭 ' + guide.name + ' 带 ' + party.length + ' 只出游回来了：' + got.join('、'), collection: col };
+    return {
+      ok: true,
+      msg: '🧭 ' + guide.name + ' 带 ' + party.length + ' 只出游回来了：' + got.join('、') +
+        '　🌱 它们今天不能再出工了，各涨成长 +' + tripGrow,
+      collection: col
+    };
   }
   /* 已收集的收藏品（去重，标记件数） */
   function collectionsOwned() {
@@ -1327,11 +1404,14 @@ window.Game = (function () {
     zoneFull: zoneFull,
     autoStoreOverflow: autoStoreOverflow,
     isResting: isResting,
+    isWorkedToday: isWorkedToday,
     restLeftMs: restLeftMs,
     restLeftMin: restLeftMin,
-    restMsFor: restMsFor,
     restText: restText,
     setRest: setRest,
+    workGrowOf: workGrowOf,
+    workplaceOf: workplaceOf,
+    unstaffEverywhere: unstaffEverywhere,
     workBoostOf: workBoostOf,
     bestWorker: bestWorker,
     buildingById: buildingById,

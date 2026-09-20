@@ -1274,6 +1274,20 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
 .pp-bubble.hide{display:none;}
 @keyframes bubblepop{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.09)}}
 
+/* ---- 地图上的打工标识（v1.32） ----
+   在建筑里上班的挂一面金色小牌（👜 + 建筑名）；今天已经出过工、人不在岗的
+   挂一面淡灰小牌（💤 今天已出工）。挂在脚下，不跟头顶的会话气泡打架。 */
+.pp-work{position:absolute;left:50%;bottom:-4px;transform:translate(-50%,100%);z-index:7;
+  display:inline-flex;align-items:center;gap:3px;white-space:nowrap;
+  font-size:10.5px;font-weight:800;line-height:1.5;letter-spacing:.2px;color:#7A4A0B;
+  background:linear-gradient(180deg,#FFEAB0,#FFD166);border:1px solid rgba(210,148,28,.72);
+  border-radius:999px;padding:0 7px;box-shadow:0 2px 5px rgba(70,45,10,.2);pointer-events:none;}
+.pp-work i{font-style:normal;}
+.pp-work.rest{color:#5D6B62;background:rgba(255,255,255,.86);border-color:rgba(148,164,154,.55);
+  box-shadow:0 1px 4px rgba(40,60,50,.14);font-weight:700;}
+/* 草地上的小生物整体缩到 .8，牌子也跟着缩，把字号补回来一点 */
+.wzone-meadow .pp-work{font-size:13px;}
+
 /* ---- 生物弹窗 ---- */
 .cm-head{display:flex;gap:12px;align-items:flex-start;}
 .cm-face{width:74px;height:74px;border-radius:50%;background:var(--green-soft);border:2px solid var(--line);
@@ -1634,21 +1648,11 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 .world-map{position:absolute;top:0;left:0;will-change:transform;
   transition:transform .2s ease-out;}
 .world-viewport.dragging .world-map{transition:none;}
-/* v1.31 调色：底图黄味重——压红通道（黄转绿）、整体降饱和、提一点亮度，
-   草地走清新低饱和绿，画面保持明亮治愈 */
+/* v1.32：撤掉了 v1.31 的「压红转绿（multiply）+ 冷绿柔光（soft-light）」两层滤镜
+   —— 那两层给整张地图蒙了一层绿膜。现在画面回到底图原本的色彩，
+   只在图像上留一点点亮度/对比校正压住过曝，不做任何色相偏移、也不再大幅降饱和。 */
 .world-img{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none;-webkit-user-drag:none;
-  filter:saturate(.62) brightness(1.06) contrast(.94) hue-rotate(4deg);}
-/* 冷绿柔光（soft-light）：给画面统一罩一层薄荷绿的氛围 */
-.world-grade{position:absolute;inset:0;pointer-events:none;z-index:2;
-  background:linear-gradient(180deg,rgba(168,224,200,.32),rgba(206,240,222,.14) 45%,rgba(160,218,196,.24));
-  mix-blend-mode:soft-light;}
-/* 压红通道（multiply）：黄(255,255,0)→(198,255,0)，黄的占比肉眼可见地下降 */
-.world-cool{position:absolute;inset:0;pointer-events:none;z-index:2;
-  background:linear-gradient(180deg,rgba(190,255,242,.85),rgba(198,254,244,.8));
-  mix-blend-mode:multiply;}
-.world-grade::after{content:'';position:absolute;inset:0;
-  background:radial-gradient(120% 90% at 50% 40%,transparent 62%,rgba(70,120,100,.12));
-  mix-blend-mode:multiply;}
+  filter:brightness(.97) contrast(.97);}
 
 /* 区域：一个覆盖整张底图的定位层 */
 .wzone{position:absolute;inset:0;pointer-events:none;}
@@ -1801,6 +1805,39 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 /* v1.28：在岗但刚干完活在休息的，换个颜色标出来 */
 .staff-chip.tired{background:var(--gold-soft);border-color:var(--gold);}
 .staff-chip.tired .sc-name{color:#8A6216;}
+/* ---------------- v1.32：格子式选人（打工 / 修建出工共用） ----------------
+   原来这两处是一排下拉菜单，看不全谁是谁；改成一格一只的头像格子，
+   点一下就上岗（修建那边点一下是选中，会有勾和描边）。 */
+.pick-head{display:flex;align-items:baseline;gap:8px;margin:2px 0 8px;}
+.pick-head b{font-size:12.5px;color:var(--ink);}
+.pick-head span{font-size:11px;color:var(--ink-3);}
+.staff-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:9px;margin-bottom:14px;}
+.pg-cell{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;
+  background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:9px 6px 7px;
+  cursor:pointer;font-family:inherit;text-align:center;color:inherit;
+  transition:border-color .16s,background .16s,transform .12s;}
+.pg-cell:hover{border-color:var(--mint);transform:translateY(-1px);}
+.pg-cell .pg-face{width:42px;height:42px;border-radius:50%;background:var(--green-soft);
+  display:flex;align-items:center;justify-content:center;font-size:25px;overflow:hidden;flex:0 0 auto;}
+.pg-cell .pg-face img{width:100%;height:100%;object-fit:contain;display:block;}
+.pg-cell .pg-face.pet-emoji{transform:translateY(3px);}   /* emoji 字形自带下留白，压一压才居中 */
+.pg-name{font-size:12px;font-weight:700;line-height:1.3;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pg-sub{font-size:10.5px;color:var(--ink-3);line-height:1.3;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pg-tag{font-size:9.5px;font-weight:700;border-radius:999px;padding:1px 6px;line-height:1.55;margin-top:1px;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pg-tag.rest{background:var(--gold-soft);color:#8A6216;}
+.pg-tag.move{background:rgba(53,183,168,.14);color:var(--teal);}
+.pg-tag.off{background:#F1F1F1;color:#8C8C8C;}
+.pg-cell.on{border-color:var(--teal);background:rgba(53,183,168,.09);
+  box-shadow:0 0 0 2px rgba(53,183,168,.16);}
+.pg-cell.on::after{content:'✓';position:absolute;top:3px;right:6px;font-size:11px;font-weight:800;color:var(--teal);}
+.pg-cell.off{background:#F7F7F7;border-color:#E8E8E8;cursor:not-allowed;}
+.pg-cell.off .pg-name,.pg-cell.off .pg-sub{color:#9C9C9C;}
+.pg-cell.off .pg-face{background:#EFEFEF;filter:grayscale(.35);}
+.pg-cell.off:hover{border-color:#E8E8E8;transform:none;}
+.pg-cell:active{transform:scale(.985);}
 .sc-x{border:0;background:rgba(255,255,255,.75);width:22px;height:22px;border-radius:50%;cursor:pointer;
   font-size:11px;color:var(--ink-2);line-height:1;padding:0;}
 .stock-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:13px;
