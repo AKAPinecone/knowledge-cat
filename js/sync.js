@@ -227,6 +227,16 @@ window.Sync = (function () {
     (c.evidence || []).forEach(function (e) {
       if (e.thumb) { e.thumb = ''; e.thumbDropped = true; }
     });
+    /* v1.33：每只小生物的日志也占地方（一只最多 40 条）。
+       同步码只带**最近几条**——"它最近过得怎么样"这一层信息保住了，
+       码也不至于越长越离谱。本机存档不受影响，一条都不少。 */
+    const keep = (window.GAME_DATA && window.GAME_DATA.PET_LOG_SYNC_MAX) || 8;
+    (c.pets || []).forEach(function (p) {
+      if (Array.isArray(p.log) && p.log.length > keep) {
+        p.log = p.log.slice(0, keep);
+        p.logTrimmed = true;
+      }
+    });
     return c;
   }
 

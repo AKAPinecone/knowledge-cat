@@ -351,6 +351,66 @@ h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:.2px;}
 .trait-one{font-size:12.5px;color:var(--ink-2);}
 .trait-fx{width:100%;display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;}
 .trait-fx span{font-size:11.5px;color:var(--ink-2);background:#fff;border:1px solid var(--line-2);border-radius:99px;padding:2px 8px;}
+/* v1.33 一键照顾：面板里最省事的一颗按钮（按钮下面直接写清要花什么） */
+.onekey{
+  width:100%;margin-top:11px;border:1px solid #BFE3C8;border-radius:14px;cursor:pointer;
+  background:linear-gradient(160deg,#F2FCF3,#E4F6E8);padding:10px 12px;text-align:left;
+  display:flex;flex-direction:column;gap:2px;transition:all .15s ease;
+}
+.onekey:hover{background:#fff;border-color:var(--green);transform:translateY(-1px);box-shadow:var(--shadow-sm);}
+.onekey-main{font-size:14px;font-weight:800;color:var(--green-deep);}
+.onekey-sub{font-size:11.5px;color:var(--ink-2);line-height:1.5;}
+.onekey.onekey-off{background:var(--panel-3);border-color:var(--line);cursor:not-allowed;opacity:.72;}
+.onekey.onekey-off:hover{transform:none;background:var(--panel-3);border-color:var(--line);box-shadow:none;}
+.onekey.onekey-off .onekey-main{color:var(--ink-3);}
+.onekey.onekey-done{background:linear-gradient(160deg,#FFFDF3,var(--gold-soft));border-color:var(--gold);}
+/* v1.33 性格倾向：事件给性格加分，攒够就换脾气 */
+.tend-card{margin-top:10px;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:9px 11px;}
+.tend-head{font-size:12.5px;font-weight:800;color:var(--green-deep);display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;}
+.tend-head span{font-size:11px;font-weight:400;color:var(--ink-3);}
+.tend-row{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11.5px;color:var(--ink-2);}
+.tend-row.cur{color:var(--green-deep);font-weight:700;}
+.tend-name{flex:0 0 124px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tend-bar{flex:1;height:6px;border-radius:99px;background:var(--line-2);overflow:hidden;}
+.tend-bar i{display:block;height:100%;border-radius:99px;transition:width .3s;}
+.tend-val{flex:0 0 auto;font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
+/* v1.33 小生物日志：按天分组，每条带属性前后值与增减量 */
+.plog{margin-top:11px;border:1px solid var(--line);border-radius:14px;background:var(--panel-2);overflow:hidden;}
+.plog-head{width:100%;border:0;background:transparent;padding:10px 12px;display:flex;align-items:center;gap:7px;cursor:pointer;text-align:left;}
+.plog-head:hover{background:#fff;}
+.plog-title{font-size:13px;font-weight:800;color:var(--green-deep);}
+.plog-hint{font-size:11px;color:var(--ink-3);}
+.plog-caret{font-size:12px;color:var(--ink-3);}
+.plog.open .plog-head{border-bottom:1px solid var(--line-2);background:#fff;}
+.plog-day{font-size:11px;font-weight:800;color:var(--ink-3);padding:8px 12px 2px;letter-spacing:.04em;}
+.plog-item{display:flex;gap:8px;padding:8px 12px;border-top:1px dashed var(--line-2);}
+.plog-item:first-of-type{border-top:0;}
+.plog-ico{flex:0 0 20px;font-size:15px;line-height:1.3;}
+.plog-main{min-width:0;flex:1;}
+.plog-text{font-size:12px;color:var(--ink);line-height:1.55;}
+.plog-time{font-size:10.5px;color:var(--ink-3);margin-right:5px;font-variant-numeric:tabular-nums;}
+.plog-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
+.plog-d{font-size:10.5px;border-radius:99px;padding:2px 8px;border:1px solid var(--line-2);background:#fff;color:var(--ink-2);white-space:nowrap;}
+.plog-d i{font-style:normal;color:var(--ink-3);}
+.plog-d b{font-weight:800;}
+.plog-d.up{background:#F0FAF1;border-color:#CDE9D3;color:var(--green-deep);}
+.plog-d.up b{color:var(--green);}
+.plog-d.down{background:var(--danger-soft);border-color:#F0CFCD;color:#B03B37;}
+.plog-d.down b{color:var(--danger);}
+.plog-d.mark{background:linear-gradient(160deg,#FFFCF3,#FDF3DF);border-color:#EFD8A2;color:#7A5A16;}
+.plog-d.mark i{color:#A8823A;}
+.plog-shift{margin-top:5px;font-size:11.5px;font-weight:800;color:#7A5A16;background:var(--gold-soft);border:1px solid #EFD8A2;border-radius:9px;padding:4px 9px;}
+.plog-note{padding:7px 12px 10px;font-size:11px;color:var(--ink-3);}
+.plog .empty{padding:10px 12px;font-size:11.5px;}
+/* 跑开（v1.33）：双击同一只动物，它自己挪到远处，把位置让出来 */
+.wzone-meadow .park-pet.fleeing{transition:left 1.05s cubic-bezier(.25,.9,.35,1),top 1.05s linear;}
+.walker.fleeing .pp-emoji{animation:scamper .28s ease-in-out 4;}
+@keyframes scamper{
+  0%{transform:translateY(0) scale(1);}
+  35%{transform:translateY(-7px) scale(1.06);}
+  70%{transform:translateY(2px) scale(.97);}
+  100%{transform:translateY(0) scale(1);}
+}
 /* 运营建筑：倒计时 + 小日志（v1.27） */
 .op-box{border:1px solid var(--line);border-radius:14px;background:var(--panel-2);padding:11px 12px;margin-top:12px;}
 .op-box.running{border-color:#EFD8A2;background:linear-gradient(160deg,#FFFDF6,var(--gold-soft));}

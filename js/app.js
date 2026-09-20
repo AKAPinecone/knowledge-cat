@@ -1353,6 +1353,9 @@
     const r = (z && z.rect) || [3, 10, 94, 82];
     $$('#wzone-meadow .walker').forEach(function (el) {
       const id = el.dataset.pet;
+      /* v1.33：刚被双击赶跑的，给它几秒安静时间 —— 不然随机游走立刻把它拖回原处，
+         "跑开"就成了一次没用的动画 */
+      if (fleeUntil[id] && fleeUntil[id] > Date.now()) return;
       const from = parkPosMap()[id];
       if (!from) return;
       const to = parkPick(from);
@@ -1361,6 +1364,67 @@
       el.style.left = ((to.x - r[0]) / r[2] * 100) + '%';
       el.style.top = ((to.y - r[1]) / r[3] * 100) + '%';
     });
+  }
+
+  /* ---- v1.33：连点两次，动物就跑开 ----
+     为什么要有这个：草地上小动物一多就会叠在一起，挡住了就点不开想点的那只。
+     双击是"让一让"的意思 —— 它自己挪到一个离得远、又不穿建筑的新位置。
+     只对**动物**生效（植物、水栖不会跑）；单击照旧弹状态面板，
+     所以单击要等 300ms 确认没第二次点击再打开 —— 这点延迟换来的是不误开弹窗。 */
+  const fleeUntil = {};
+  let tapState = { id: '', at: 0, timer: null };
+  function isAnimalPet(petId) {
+    const p = S.pets.filter(function (x) { return x.id === petId; })[0];
+    if (!p) return false;
+    const sp = window.Game.speciesById(p.speciesId);
+    return !!(sp && sp.kind === 'animal');
+  }
+  function fleePet(petId) {
+    const el = document.querySelector('#wzone-meadow .walker[data-pet="' + petId + '"]');
+    const map = parkPosMap();
+    const from = map[petId];
+    if (!el || !from) return;
+    const z = window.Game.zoneById('meadow');
+    const r = (z && z.rect) || [3, 10, 94, 82];
+    const b = parkBounds();
+    let to = null;
+    for (let i = 0; i < 30; i++) {
+      const x = b.x1 + Math.random() * (b.x2 - b.x1);
+      const y = b.y1 + Math.random() * (b.y2 - b.y1);
+      if (!roamFree(x, y)) continue;
+      const dist = Math.sqrt((x - from.x) * (x - from.x) + (y - from.y) * (y - from.y));
+      if (dist < 14) continue;                       /* 太近不算"跑开" */
+      if (!pathClear(from.x, from.y, x, y)) continue; /* 走过去不能穿建筑 */
+      to = { x: x, y: y }; break;
+    }
+    if (!to) return;    /* 抽不到远处的空地就不动它 —— 宁可不动，也别把它塞进建筑里 */
+    el.classList.toggle('flip', to.x < from.x);
+    el.classList.add('fleeing');
+    from.x = to.x; from.y = to.y;
+    el.style.left = ((to.x - r[0]) / r[2] * 100) + '%';
+    el.style.top = ((to.y - r[1]) / r[3] * 100) + '%';
+    fleeUntil[petId] = Date.now() + 6000;
+    setTimeout(function () { if (el.classList) el.classList.remove('fleeing'); }, 1300);
+    const p = S.pets.filter(function (x) { return x.id === petId; })[0];
+    if (p) toast('💨 ' + esc(p.name) + ' 跑开了，换了个地方待着。', 'ok', 2600);
+  }
+  function tapWalker(el) {
+    const id = el.dataset.pet;
+    if (!id) return;
+    if (!isAnimalPet(id)) return openCreatureModal(id);   /* 非动物：保持单击即开 */
+    const now = Date.now();
+    if (tapState.id === id && now - tapState.at < 340) {  /* 第二次点同一只 → 跑开 */
+      if (tapState.timer) { clearTimeout(tapState.timer); tapState.timer = null; }
+      tapState.id = ''; tapState.at = 0;
+      return fleePet(id);
+    }
+    tapState.id = id; tapState.at = now;
+    if (tapState.timer) clearTimeout(tapState.timer);
+    tapState.timer = setTimeout(function () {
+      tapState.timer = null; tapState.id = '';
+      if (activeMask()) return;      /* 这 300ms 里开了别的弹窗，就别顶掉它 */
+      openCreatureModal(id);
+    }, 300);
   }
 
   /* =========================================================
@@ -2159,6 +2223,118 @@
     return h;
   }
 
+  /* =========================================================
+   * v1.33 小生物日志：渲染（数据在 game.js 的 logPet / petLogOf）
+   * 「今天 / 昨天 / 更早」分组 + 每条带属性前后值与增减量
+   * ========================================================= */
+  let petLogOpen = {};        /* 每只的展开状态，只在本机内存，不存盘 */
+  function dKeyA(t) {
+    const d = new Date(t);
+    const z = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
+  }
+  function hhmmA(t) {
+    const d = new Date(t);
+    const z = function (n) { return (n < 10 ? '0' : '') + n; };
+    return z(d.getHours()) + ':' + z(d.getMinutes());
+  }
+  function dayLabelOf(day, todayK, ydayK) {
+    if (day === todayK) return '今天';
+    if (day === ydayK) return '昨天';
+    return day ? day.slice(5) : '';
+  }
+  /* 一条变化胶囊：属性 变化前→变化后 ▲+42 */
+  function logDeltaChip(x) {
+    const up = (x.d || 0) > 0;
+    return '<span class="plog-d ' + (up ? 'up' : (x.d < 0 ? 'down' : 'flat')) + '">' +
+      (x.icon || '') + esc(x.label || x.stat || '') + ' ' +
+      '<i>' + x.before + '→' + x.after + '</i> ' +
+      '<b>' + (up ? '▲+' : (x.d < 0 ? '▼' : '±')) + Math.abs(x.d || 0) + '</b></span>';
+  }
+  function petLogItemHtml(e) {
+    let h = '<div class="plog-item k-' + esc(e.kind || 'care') + '">';
+    h += '<span class="plog-ico">' + (e.icon || '📌') + '</span>';
+    h += '<div class="plog-main">';
+    h += '<div class="plog-text"><span class="plog-time">' + esc(e.at || '') + '</span>' +
+      esc(e.text || '') + '</div>';
+    const chips = [];
+    (e.deltas || []).forEach(function (x) { chips.push(logDeltaChip(x)); });
+    if (e.grow) {
+      chips.push(logDeltaChip({ icon: '🌱', label: '成长', before: e.grow.before, after: e.grow.after, d: e.grow.d }));
+    }
+    if (e.exp) chips.push('<span class="plog-d flat">✳️ 经验 +' + e.exp + '</span>');
+    if (e.trait) {
+      chips.push('<span class="plog-d mark" title="性格印记：同类事件攒够 ' +
+        (e.trait.gate || 8) + ' 分，它就会换个脾气">' +
+        (e.trait.icon || '🎭') + esc(e.trait.name || '') + ' +' + e.trait.d +
+        '<i>（' + e.trait.score + '/' + (e.trait.gate || 8) + '）</i></span>');
+    }
+    if (chips.length) h += '<div class="plog-chips">' + chips.join('') + '</div>';
+    if (e.shift) {
+      h += '<div class="plog-shift">🎭 它的性格从「' + esc(e.shift.from || '') +
+        '」变成了「' + esc(e.shift.to || '') + '」</div>';
+    }
+    h += '</div></div>';
+    return h;
+  }
+  function petLogHtml(p) {
+    const list = (window.Game.petLogOf ? window.Game.petLogOf(p) : (p.log || []));
+    const open = !!petLogOpen[p.id];
+    const now = Date.now();
+    const todayK = dKeyA(now), ydayK = dKeyA(now - 86400000);
+    let h = '<div class="plog' + (open ? ' open' : '') + '">';
+    h += '<button class="plog-head" id="cm-log-toggle">' +
+      '<span class="plog-title">📓 它的日志</span>' +
+      '<span class="plog-hint">' + (list.length ? '共 ' + list.length + ' 条 · 只记它自己的事' : '还没有记录') + '</span>' +
+      '<span class="spacer"></span>' +
+      '<span class="plog-caret">' + (open ? '▾' : '▸') + '</span></button>';
+    if (open) {
+      if (!list.length) {
+        h += '<div class="empty">它的故事从今天开始：以后每次照顾、每趟出工、每次生病和长本事，都会记在这里。</div>';
+      } else {
+        let curDay = null;
+        list.forEach(function (e) {
+          if (e.day !== curDay) {
+            curDay = e.day;
+            h += '<div class="plog-day">' + dayLabelOf(e.day, todayK, ydayK) + '</div>';
+          }
+          h += petLogItemHtml(e);
+        });
+        if (p.logTrimmed) {
+          h += '<div class="plog-note">（这台设备上只保留了最近的记录；换设备同步时只带最近几条。）</div>';
+        }
+      }
+    }
+    h += '</div>';
+    return h;
+  }
+
+  /* 性格倾向：它正在变成什么脾气（事件给性格加分，攒够就换）。 */
+  function traitTendencyHtml(p) {
+    let tend = (window.Game.traitTendency ? window.Game.traitTendency(p) : []);
+    /* 还没攒到任何印记时也把它的「现在的脾气」摆出来 —— 板块常驻，
+       不然新玩家会以为这游戏没有性格系统（分从 0 开始，看得见才知道能攒）。 */
+    if (!tend.length) {
+      const cur = (typeof D.traitOf === 'function') ? D.traitOf(p) : null;
+      if (!cur) return '';
+      tend = [{ id: cur.id, name: cur.name, emoji: cur.emoji, color: cur.color, score: 0, current: true, gap: 0 }];
+    }
+    const gate = (D.TRAIT_SHIFT_GATE || 8);
+    const top = tend.slice(0, 4);
+    let h = '<div class="tend-card">' +
+      '<div class="tend-head">🎭 性格倾向<span>你做的事会慢慢改变它的脾气</span></div>';
+    top.forEach(function (t) {
+      const pct = Math.min(100, Math.round((t.score / (gate * 2)) * 100));
+      h += '<div class="tend-row' + (t.current ? ' cur' : '') + '">' +
+        '<span class="tend-name">' + t.emoji + ' ' + esc(t.name) + (t.current ? '（现在）' : '') + '</span>' +
+        '<span class="tend-bar"><i style="width:' + pct + '%;background:' + t.color + '"></i></span>' +
+        '<span class="tend-val">' + (t.current && !t.score ? '还没攒到印记'
+          : t.score + (t.current ? '' : ' / 还差 ' + t.gap)) + '</span></div>';
+    });
+    h += '</div>';
+    return h;
+  }
+
   /* ---------------- 乐园：点小生物 / 点胶囊 ---------------- */
   function openCreatureModal(petId) {
     const p = S.pets.filter(function (x) { return x.id === petId; })[0];
@@ -2220,6 +2396,30 @@
       body += '<div class="okbox" style="margin-top:8px">🌊 它住在池塘里，池水常满：<b>永远不会缺水</b>，也不会因为渴而生病。营养 / 清洁 / 娱乐照常照顾。</div>';
     }
 
+    /* v1.33：一键照顾 —— 面板里最省事的那颗按钮。
+       先把账算一遍（dry：只算不动），把"要花什么、还差什么"直接摊在按钮下面；
+       道具凑不齐就**整颗按钮禁用**，绝不点了一半扣一半。 */
+    const onePlan = (typeof window.Game.oneKeyCare === 'function') ? window.Game.oneKeyCare(p.id, { dry: true }) : null;
+    if (onePlan) {
+      const canOne = !!onePlan.ok;
+      const needTxt = (onePlan.needs || []).map(function (n) { return n.emoji + n.name + '×' + n.count; }).join('　');
+      const target = window.Game.ONKEY_TARGET || 75;
+      let sub;
+      if (canOne) {
+        sub = '需要：' + needTxt + '　·　把四项状态一次抬到 ' + target + ' 以上';
+      } else if (onePlan.why === 'lack') {
+        sub = '道具不够：' + (onePlan.lack || []).map(function (x) {
+          return x.emoji + x.label + '只有 ' + x.value + '（差 ' + x.short + '）';
+        }).join('、') + '　·　补齐前一件都不会用掉';
+      } else {
+        sub = '状态都已经在 ' + target + ' 以上了，不用照顾';
+      }
+      body += '<button class="onekey' + (canOne ? '' : ' onekey-off') + '" id="cm-onekey"' +
+        (canOne ? '' : ' disabled') + '>' +
+        '<span class="onekey-main">✨ 一键照顾</span>' +
+        '<span class="onekey-sub">' + esc(sub) + '</span></button>';
+    }
+
     body += '<div class="grow-row"><span>成长</span>' +
       '<div class="bar bar-thin" style="flex:1"><i style="width:' + growPct + '%;background:linear-gradient(90deg,#9FDCAE,#4CA96B)"></i></div>' +
       '<span style="color:#8AA394">' + Math.round(p.growth) + (nextStage ? ' / ' + nextStage.min : '') + '</span></div>';
@@ -2241,6 +2441,9 @@
           (favName ? '<span>最爱去：' + esc(favName) + '</span>' : '') +
         '</div></div>';
     }
+
+    /* v1.33：性格倾向 —— 事件给性格加分，攒够就会真的换脾气（规则见 data.js） */
+    body += traitTendencyHtml(p);
 
     /* v1.27：基础道具与高级道具分成两个按钮。
        以前两者混在一个数字里、由系统挑一件消耗，玩家买了高级货却看不出它到底用了没有——
@@ -2280,6 +2483,9 @@
       body += '<div class="pet-acts" style="margin-top:10px"><button class="btn btn-ghost" id="cm-store">📦 放进保管室（幼体也能存）</button></div>';
     }
 
+    /* v1.33：它自己的日志（默认折叠。展开后有今天/昨天/更早的分组） */
+    body += petLogHtml(p);
+
     /* 送养（v1.23）：不要的小生物托付给别的乐园，换回可可豆。
        写在最下面、样式最轻，不跟照顾按钮抢视线——它是个出口，不是主要玩法。 */
     body += '<div class="pet-acts pet-acts-sub" style="margin-top:10px">' +
@@ -2317,6 +2523,35 @@
         };
         const adoptBtn = $('#cm-adopt', m);
         if (adoptBtn) adoptBtn.onclick = function () { openAdoptModal(p.id); };
+        /* v1.33：一键照顾 —— 一次扣齐、一次提升，然后就是同款"演完动画原位刷新" */
+        const okBtn = $('#cm-onekey', m);
+        if (okBtn) okBtn.onclick = function () {
+          const r = window.Game.oneKeyCare(p.id);
+          if (!r.ok) { toast('❌ ' + r.msg, 'err', 5200); return; }
+          $$('#cm-onekey, .act[data-care]', m).forEach(function (b) { b.disabled = true; });
+          okBtn.classList.add('onekey-done');
+          playSfx('music');
+          careFx('fert', $('#cm-face', m));
+          toast(r.msg + (r.traitShift ? '　🎭 它的性格变成「' + r.traitShift.toName + '」了！' : ''), 'ok', 6500);
+          render();
+          setTimeout(function () {
+            if (!document.documentElement.contains(m) || m !== activeMask()) return;
+            closeModal();
+            openCreatureModal(p.id);
+          }, 900);
+        };
+        /* 日志折叠/展开：只换这一块，不整窗重开（重开会丢滚动位置，看着像闪一下） */
+        function bindLogToggle() {
+          const lt = $('#cm-log-toggle', m);
+          if (!lt) return;
+          lt.onclick = function () {
+            petLogOpen[p.id] = !petLogOpen[p.id];
+            const box = $('.plog', m);
+            if (box) box.outerHTML = petLogHtml(p);
+            bindLogToggle();
+          };
+        }
+        bindLogToggle();
         $$('.act[data-care]', m).forEach(function (el) {
           el.onclick = function () {
             const act = el.dataset.care;
@@ -2327,8 +2562,10 @@
             $$('.act[data-care]', m).forEach(function (b) { b.disabled = true; });
             playSfx(act);
             careFx(act, $('#cm-face', m));
-            /* 明确反馈：点名用了哪一件道具（高级道具尤其要说清楚，不然像没生效） */
-            toast(r.msg + (r.traitLine ? '　' + r.traitLine : ''), 'ok');
+            /* 明确反馈：点名用了哪一件道具（高级道具尤其要说清楚，不然像没生效）。
+               v1.33：攒够性格印记、当场换了脾气的话，也要在这句话里说出来。 */
+            toast(r.msg + (r.traitLine ? '　' + r.traitLine : '') +
+              (r.traitShift ? '　🎭 它的性格变成「' + r.traitShift.toName + '」了！' : ''), 'ok');
             if (r.isAdv) {
               window.Store.pushLog('✨ 用掉了高级道具「' + r.itemName + '」照顾 ' + p.name + '。');
             }
@@ -3224,6 +3461,11 @@
    * ========================================================= */
   function wireView() {
     $$('#view [data-act]').forEach(function (el) {
+      /* v1.33：草地上的动物要分单击 / 双击 —— 单击看状态，双击它就跑开（让位给别的小生物） */
+      if (el.dataset.act === 'pet-open' && el.dataset.pet) {
+        el.onclick = function () { tapWalker(el); };
+        return;
+      }
       el.onclick = function () { onAction(el.dataset.act, el); };
     });
   }

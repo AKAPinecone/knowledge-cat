@@ -203,6 +203,12 @@ window.Store = (function () {
       if (typeof p.stats.fun !== 'number') p.stats.fun = 72;
       if (typeof p.stored !== 'boolean') p.stored = false;
       if (!p.neglect || typeof p.neglect !== 'object') p.neglect = { water: 0, nutri: 0, clean: 0 };
+      /* v1.33：每只小生物自己的日志与性格印记分。
+         老存档没有这两个字段 —— 就地补空壳，不迁移、不编造历史。
+         日志条目本身是"往后发生的事"，从今天开始记就行。 */
+      if (!Array.isArray(p.log)) p.log = [];
+      if (!p.traitScore || typeof p.traitScore !== 'object' || Array.isArray(p.traitScore)) p.traitScore = {};
+      if (typeof p.neglectDay !== 'string') p.neglectDay = '';
     });
     /* v1.25：池塘里的水栖生物永远不缺水 —— 打开存档就把它补满，
        不然要等下一次 tick（8 秒后）才回正，那几秒状态条会显示它在渴着。 */
@@ -745,6 +751,16 @@ window.Store = (function () {
           illnessHappened = true;
           report.sick.push(p);
           pushLog('😷 ' + p.name + ' 生病了：' + p.illness.name);
+          /* v1.33：生病也算它的经历，写进它自己的日志（并给一点「胆小」印记） */
+          if (window.Game && window.Game.logPet) {
+            const smark = window.Game.traitMark(p, 'sick');
+            window.Game.logPet(p, {
+              kind: 'sick', icon: '😷',
+              text: '得了「' + p.illness.name + '」——有一项状态空了太久，身体扛不住了。',
+              trait: smark ? { id: smark.id, name: smark.name, icon: smark.icon, d: smark.d, score: smark.score, gate: smark.gate } : null,
+              shift: (smark && smark.shifted) ? { from: smark.fromName, to: smark.toName } : null
+            });
+          }
         }
       }
 
@@ -755,6 +771,20 @@ window.Store = (function () {
         if (now - p.illnessSince > 24 * 3600000) p.dormant = true;
       } else {
         p.dormant = false;
+      }
+      /* v1.33：被冷落也留痕。条件是「某项状态空了 1 小时以上」，
+         而且**每天最多记一条** —— 不设这个上限，日志会被刷成一堵墙。 */
+      if (!p.illness && worstNeglect >= 60 && p.neglectDay !== today()) {
+        p.neglectDay = today();
+        if (window.Game && window.Game.logPet) {
+          const nmark = window.Game.traitMark(p, 'neglect');
+          window.Game.logPet(p, {
+            kind: 'neglect', icon: '🕸️',
+            text: '有一项状态空了 ' + Math.round(worstNeglect / 60) + ' 小时没人管，它有点蔫。',
+            trait: nmark ? { id: nmark.id, name: nmark.name, icon: nmark.icon, d: nmark.d, score: nmark.score, gate: nmark.gate } : null,
+            shift: (nmark && nmark.shifted) ? { from: nmark.fromName, to: nmark.toName } : null
+          });
+        }
       }
       if (illnessHappened) state.stats.sickFreeDays = 0;
     });

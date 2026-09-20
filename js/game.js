@@ -202,9 +202,22 @@ window.Game = (function () {
       neglect: { water: 0, nutri: 0, clean: 0 },
       lastCare: Date.now(),
       careToday: {},
+      log: [],               /* v1.33：它自己的日志（每只一本，见 logPet） */
+      traitScore: {},        /* v1.33：性格印记分（事件给性格加分，攒够换性格） */
       careCount: 0
     };
     S.pets.push(pet);
+    /* v1.33：日志的第一条永远是出生，带着它的初始状态与脾气
+       （这里不能借下面那行 `const tr`——它还没声明，用了会踩 TDZ） */
+    const traitBorn = (typeof D.traitOf === 'function') ? D.traitOf(pet) : null;
+    logPet(pet, {
+      kind: 'birth',
+      text: '破壳出生，成了一只' + sp.name + '。' +
+        (traitBorn ? '天生一副「' + traitBorn.name + '」脾气。' : ''),
+      deltas: ['water', 'nutri', 'clean', 'fun'].map(function (k) {
+        return statSnap(k, 0, pet.stats[k]);
+      })
+    });
     /* v1.28：目标区域住满了就自动进保管室 —— 玩家不用手动挪位置。
        判定放在 push 之后：这时 pet 已经被算进区域人数，超了就是真的超了。 */
     let storedNow = false;
@@ -338,6 +351,121 @@ window.Game = (function () {
     };
   }
 
+  /* =========================================================
+   * v1.33 小生物日志 + 性格印记
+   * 每只小生物一本自己的日志，就存在它自己身上（pet.log）。
+   * 别的宠物看不见、也改不动它 —— 天然互不干扰，跟着存档 / 同步码一起走。
+   * ========================================================= */
+  function twoDigit(n) { return (n < 10 ? '0' : '') + n; }
+  function dayKeyAt(t) {
+    const d = new Date(t);
+    return d.getFullYear() + '-' + twoDigit(d.getMonth() + 1) + '-' + twoDigit(d.getDate());
+  }
+  function stampAt(t) {
+    const d = new Date(t);
+    return twoDigit(d.getMonth() + 1) + '-' + twoDigit(d.getDate()) + ' ' +
+      twoDigit(d.getHours()) + ':' + twoDigit(d.getMinutes());
+  }
+  /* 这只小生物的日志本体（懒建，老存档不用迁移） */
+  function petLogOf(pet) {
+    if (!pet) return [];
+    if (!Array.isArray(pet.log)) pet.log = [];
+    return pet.log;
+  }
+  /* 写一条日志。rec: {t, kind, icon, text, deltas, grow, exp, trait, shift}
+     只留最近 D.PET_LOG_MAX 条 —— 够回看它的日子，又不至于把存档撑爆。 */
+  function logPet(pet, rec) {
+    if (!pet || !rec) return null;
+    const t = rec.t || Date.now();
+    const kind = rec.kind || 'care';
+    const km = D.LOG_KINDS[kind] || {};
+    const entry = {
+      t: t, day: dayKeyAt(t), at: stampAt(t),
+      kind: kind, icon: rec.icon || km.icon || '📌', text: rec.text || ''
+    };
+    if (rec.deltas && rec.deltas.length) entry.deltas = rec.deltas;
+    if (rec.grow && rec.grow.d) entry.grow = rec.grow;
+    if (rec.exp) entry.exp = rec.exp;
+    if (rec.trait) entry.trait = rec.trait;
+    if (rec.shift) entry.shift = rec.shift;
+    const arr = petLogOf(pet);
+    arr.unshift(entry);
+    const max = D.PET_LOG_MAX || 40;
+    if (arr.length > max) arr.length = max;
+    return entry;
+  }
+  /* 属性变化快照：before 用取操作前的原值，天然带"增减量" */
+  function statSnap(stat, before, after) {
+    const si = D.STAT_INFO[stat] || { label: stat, emoji: '•' };
+    const b = Math.round(before), a = Math.round(after);
+    return { stat: stat, label: si.label, icon: si.emoji, before: b, after: a, d: a - b };
+  }
+
+  /* ---- 性格印记：事件给性格加分，攒够就换性格（规则见 data.js 的 TRAIT_RULES） ---- */
+  function traitScoreOf(pet) {
+    if (!pet) return {};
+    if (!pet.traitScore || typeof pet.traitScore !== 'object') pet.traitScore = {};
+    return pet.traitScore;
+  }
+  /* 记一次性格印记。返回 {id,name,icon,d,score,gate,shifted,fromName,toName} 或 null */
+  function traitMark(pet, ruleId) {
+    if (!pet || !ruleId) return null;
+    const rule = (typeof D.traitRuleById === 'function') ? D.traitRuleById(ruleId) : null;
+    if (!rule) return null;
+    const map = D.PERSONALITY_MAP || {};
+    const cur = (typeof D.traitOf === 'function') ? D.traitOf(pet) : null;
+    const curId = (cur && cur.id) || rule.trait;
+    const sc = traitScoreOf(pet);
+    sc[rule.trait] = (sc[rule.trait] || 0) + rule.delta;
+    const newScore = sc[rule.trait];
+    const gate = D.TRAIT_SHIFT_GATE || 8;
+    /* 谁分数最高（并列时当前性格优先，免得来回横跳） */
+    let best = curId, bestScore = sc[curId] || 0;
+    Object.keys(sc).forEach(function (k) {
+      if (k === curId) return;
+      if ((sc[k] || 0) > bestScore) { best = k; bestScore = sc[k] || 0; }
+    });
+    let shifted = false, from = null, to = null;
+    if (best !== curId && bestScore - (sc[curId] || 0) >= gate) {
+      shifted = true; from = curId; to = best;
+      pet.trait = best;
+      const keep = (typeof D.TRAIT_SHIFT_KEEP === 'number') ? D.TRAIT_SHIFT_KEEP : 0.5;
+      Object.keys(sc).forEach(function (k) { sc[k] = Math.floor((sc[k] || 0) * keep); });
+    }
+    return {
+      rule: rule, id: rule.trait,
+      name: (map[rule.trait] || {}).name || rule.trait,
+      icon: (map[rule.trait] || {}).emoji || rule.icon || '🎭',
+      d: rule.delta, score: newScore, gate: gate,
+      shifted: shifted, from: from, to: to,
+      fromName: from ? ((map[from] || {}).name || from) : '',
+      toName: to ? ((map[to] || {}).name || to) : ''
+    };
+  }
+  /* 只给日志用的一份精简印记（不含规则对象，省地方） */
+  function traitSnap(mark) {
+    if (!mark) return null;
+    return { id: mark.id, name: mark.name, icon: mark.icon, d: mark.d, score: mark.score, gate: mark.gate };
+  }
+  /* 性格倾向排行：界面上的"它正在变成什么脾气"（按分数从高到低，只留 >0 的） */
+  function traitTendency(pet) {
+    const sc = traitScoreOf(pet);
+    const cur = (typeof D.traitOf === 'function') ? D.traitOf(pet) : null;
+    const curId = cur ? cur.id : '';
+    const map = D.PERSONALITY_MAP || {};
+    return Object.keys(sc).filter(function (k) { return (sc[k] || 0) > 0; })
+      .map(function (k) {
+        const t = map[k] || {};
+        return {
+          id: k, name: t.name || k, emoji: t.emoji || '🎭', color: t.color || '#8AA394',
+          score: sc[k] || 0, current: k === curId,
+          /* 还差多少分能超过当前性格（当前性格自己显示为"正在成型"） */
+          gap: k === curId ? 0 : Math.max(0, (sc[curId] || 0) + (D.TRAIT_SHIFT_GATE || 8) - (sc[k] || 0))
+        };
+      })
+      .sort(function (a, b) { return b.score - a.score; });
+  }
+
   /* ---------------- 护理 ---------------- */
   function stageOf(pet) {
     let st = D.STAGES[0];
@@ -430,6 +558,9 @@ window.Game = (function () {
     const growAdd = Math.round(boost.grow * ((tr && tr.grow) || 1));
     const expAdd = Math.round(boost.exp * ((tr && tr.exp) || 1));
     const before = stageOf(pet);
+    /* v1.33：护理前的原值，用于日志里的「变化前 → 变化后」 */
+    const statBefore = pet.stats[act.stat] || 0;
+    const growBefore = pet.growth;
     S.bag[item]--;
     pet.stats[act.stat] = Math.min(100, (pet.stats[act.stat] || 0) + boost.amount);
     pet.growth += growAdd;
@@ -465,12 +596,199 @@ window.Game = (function () {
     } else {
       S.cur.level = lvlAfter;
     }
+    /* v1.33：记进**它自己的**日志。属性变化带前后值，性格印记一并留档，
+       攒够分换了性格就再补一条醒目的「性格」条目。 */
+    const mark = traitMark(pet, (D.TRAIT_RULE_BY_STAT || {})[act.stat]);
+    logPet(pet, {
+      kind: 'care',
+      text: '你' + act.label + '，用了 1 个' + it.name + '。' + (tr && tr.lines ? tr.lines.care : ''),
+      deltas: [statSnap(act.stat, statBefore, pet.stats[act.stat])],
+      grow: { before: Math.round(growBefore), after: Math.round(pet.growth), d: growAdd },
+      exp: expAdd,
+      trait: traitSnap(mark),
+      shift: (mark && mark.shifted) ? { from: mark.fromName, to: mark.toName } : null
+    });
+    if (after.key !== before.key) {
+      logPet(pet, {
+        kind: 'grow', icon: after.emoji || '🌱',
+        text: '长大了，从「' + before.name + '」进入「' + after.name + '」。'
+      });
+    }
     window.Store.save();
     checkAchievements();
     return {
       ok: true, msg: msg, pet: pet, leveled: lvlAfter > lvlBefore,
       item: item, itemName: it.name, itemEmoji: it.emoji, isAdv: !!it.reqLevel,
-      traitLine: tr && tr.lines ? tr.lines.care : ''
+      traitLine: tr && tr.lines ? tr.lines.care : '',
+      traitShift: (mark && mark.shifted) ? mark : null
+    };
+  }
+
+  /* ---------------- 一键照顾（v1.33） ----------------
+     点一下，把四项状态一次抬到 75 以上。规矩：
+       · 目标线 75：已经够高的状态**不碰**，不浪费道具；
+       · 道具基础优先，基础不够就用高级的顶（同类里从便宜到贵）；
+       · 【原子性】先把四笔账算完，任何一项凑不齐 → **一件道具都不动**，
+         直接把缺口摊开告诉你缺什么。半途而废比失败更让人上头；
+       · 花掉的每件道具照样给成长与经验（和手动护理同一把尺子），不白花。
+     水栖生物的水位恒满，天然跳过（D.isWaterDweller）。
+     oneKeyCare(petId, {dry:true}) 只算不执行 —— 界面靠它显示"要花多少"。 */
+  const ONKEY_TARGET = 75;
+  function oneKeyCare(petId, opts) {
+    opts = opts || {};
+    const pet = S.pets.filter(function (p) { return p.id === petId })[0];
+    if (!pet) return { ok: false, msg: '找不到这只小生物' };
+    if (pet.illness) return { ok: false, msg: pet.name + '正在生病，先治好它再照顾吧' };
+    if (pet.stored) return { ok: false, msg: pet.name + '在保管室里，先把它取出来' };
+    if (pet.dormant) return { ok: false, msg: pet.name + '正在休眠，先治好病它就会醒' };
+
+    const virt = {};
+    Object.keys(S.bag || {}).forEach(function (k) { virt[k] = S.bag[k] || 0; });
+    const steps = [];    /* 每一项要用的道具 */
+    const lack = [];     /* 凑不齐的项 */
+    const fine = [];     /* 本来就够 75 的项 */
+    careActionsFor(pet).forEach(function (actionId) {
+      const act = D.CARE[actionId];
+      if (!act) return;
+      const stat = act.stat;
+      const si = D.STAT_INFO[stat] || { label: stat, emoji: '•' };
+      if (stat === 'water' && isAqua(pet)) return;      /* 池水常满，不用管 */
+      const cur = pet.stats[stat] || 0;
+      const gap = ONKEY_TARGET - cur;
+      if (gap <= 0) { fine.push({ stat: stat, label: si.label, value: Math.round(cur) }); return; }
+      const opt = careOptionsFor(pet, actionId) || { base: [], adv: [] };
+      const order = (opt.base || []).concat(opt.adv || []);
+      const used = [];
+      let remain = gap;
+      for (let i = 0; i < order.length && remain > 0; i++) {
+        const it = order[i];
+        const own = virt[it.id] || 0;
+        const per = (it.boost && it.boost.amount) || 0;
+        if (own <= 0 || per <= 0) continue;
+        const take = Math.min(own, Math.ceil(remain / per));
+        if (take <= 0) continue;
+        virt[it.id] = own - take;
+        remain -= take * per;
+        used.push({ itemId: it.id, name: it.name, emoji: it.emoji, count: take, isAdv: !!it.reqLevel });
+      }
+      if (remain > 0) {
+        lack.push({
+          stat: stat, label: si.label, emoji: si.emoji,
+          value: Math.round(cur), target: ONKEY_TARGET, short: Math.round(remain)
+        });
+        return;
+      }
+      const add = gap - remain;       /* 实际会涨多少（可能超出目标线） */
+      steps.push({
+        actionId: actionId, stat: stat, label: si.label, emoji: si.emoji,
+        before: Math.round(cur), after: Math.round(Math.min(100, cur + add)),
+        used: used
+      });
+    });
+
+    /* 汇总要花什么（界面展示 + 提示语都用它） */
+    const needMap = {};
+    steps.forEach(function (s) {
+      s.used.forEach(function (u) {
+        if (!needMap[u.itemId]) needMap[u.itemId] = { itemId: u.itemId, name: u.name, emoji: u.emoji, count: 0, isAdv: u.isAdv };
+        needMap[u.itemId].count += u.count;
+      });
+    });
+    const needs = Object.keys(needMap).map(function (k) { return needMap[k]; });
+
+    if (!steps.length) {
+      /* 一件都做不了的时候，要分清是哪一种"做不了"：
+         全项缺道具 → lack（界面提示"道具不够，补齐再点"）；
+         全项都够高了 → full（"不用照顾"）。
+         混成同一个 why，界面就会说谎。 */
+      if (lack.length) {
+        return {
+          ok: false, why: 'lack', pet: pet, fine: fine, lack: lack, needs: [],
+          msg: '道具不够：' + lack.map(function (x) {
+            return x.emoji + x.label + '只有 ' + x.value + '，还差 ' + x.short + ' 点';
+          }).join('；') + '。这一次什么都没用掉，放心去补货。'
+        };
+      }
+      return {
+        ok: false, why: 'full', pet: pet, fine: fine, lack: [], needs: [],
+        msg: pet.name + '的状态都在 ' + ONKEY_TARGET + ' 以上，不用照顾啦'
+      };
+    }
+    if (lack.length) {
+      return {
+        ok: false, why: 'lack', pet: pet, fine: fine, lack: lack, needs: needs, steps: steps,
+        msg: '道具不够：' + lack.map(function (x) {
+          return x.emoji + x.label + '只有 ' + x.value + '，还差 ' + x.short + ' 点';
+        }).join('；') + '。这一次什么都没用掉，放心去补货。'
+      };
+    }
+    if (opts.dry) {
+      return { ok: true, dry: true, pet: pet, steps: steps, needs: needs, fine: fine, lack: [] };
+    }
+
+    /* ---- 全部凑齐：一次执行 ---- */
+    const tr = (typeof D.traitOf === 'function') ? D.traitOf(pet) : null;
+    const snaps = [];
+    let growAdd = 0, expAdd = 0;
+    steps.forEach(function (s) {
+      let add = 0;
+      s.used.forEach(function (u) {
+        const it = D.ITEM_MAP[u.itemId] || {};
+        const b = it.boost || {};
+        S.bag[u.itemId] = Math.max(0, (S.bag[u.itemId] || 0) - u.count);
+        const g = Math.round((b.grow || 0) * u.count * ((tr && tr.grow) || 1));
+        const e = Math.round((b.exp || 0) * u.count * ((tr && tr.exp) || 1));
+        pet.growth += g; growAdd += g; expAdd += e;
+        add += (b.amount || 0) * u.count;
+      });
+      const before = pet.stats[s.stat] || 0;
+      pet.stats[s.stat] = Math.min(100, before + add);
+      snaps.push(statSnap(s.stat, before, pet.stats[s.stat]));
+      pet.careToday[s.actionId] = (pet.careToday[s.actionId] || 0) + 1;
+    });
+    pet.careCount += steps.length;
+    pet.lastCare = Date.now();
+    S.stats.careCount += steps.length;
+
+    const lvlBefore = S.cur.level;
+    S.cur.exp += expAdd;
+    const lvlAfter = levelOf(S.cur.exp);
+    let lvlTxt = '';
+    if (lvlAfter > lvlBefore) {
+      S.cur.level = lvlAfter;
+      const rw = levelReward(lvlAfter);
+      S.cur.beans += rw.beans;
+      S.cur.tickets += rw.tickets;
+      lvlTxt = '　🎖️ 升级到 Lv.' + lvlAfter + '！+' + rw.beans + ' 豆 +' + rw.tickets + ' 券';
+      window.Store.pushLog('🎖️ 照顾等级提升到 Lv.' + lvlAfter + '，解锁了更多高级道具！');
+    } else {
+      S.cur.level = lvlAfter;
+    }
+
+    /* 性格印记：被这么好的照顾，往「活泼」偏一点 */
+    const mark = traitMark(pet, 'play');
+    const useTxt = needs.map(function (n) { return n.emoji + n.name + '×' + n.count; }).join('、');
+    logPet(pet, {
+      kind: 'onekey',
+      text: '你按下了「一键照顾」：' + useTxt + '，把' +
+        snaps.map(function (x) { return x.label; }).join('、') + '一次提了上来。' +
+        (tr && tr.lines ? tr.lines.care : ''),
+      deltas: snaps,
+      grow: growAdd ? { before: Math.round(pet.growth - growAdd), after: Math.round(pet.growth), d: growAdd } : null,
+      exp: expAdd,
+      trait: traitSnap(mark),
+      shift: (mark && mark.shifted) ? { from: mark.fromName, to: mark.toName } : null
+    });
+
+    window.Store.save();
+    checkAchievements();
+    const msg = '✨ 一键照顾：用掉 ' + useTxt + '；' +
+      snaps.map(function (x) { return x.icon + x.label + ' ' + x.before + '→' + x.after; }).join('，') +
+      '（经验 +' + expAdd + '）' + lvlTxt;
+    return {
+      ok: true, pet: pet, steps: steps, needs: needs, deltas: snaps,
+      grow: growAdd, exp: expAdd, msg: msg,
+      traitShift: (mark && mark.shifted) ? mark : null
     };
   }
 
@@ -488,6 +806,13 @@ window.Game = (function () {
     if (!pet) return { ok: false, msg: '找不到这只小生物' };
     if (pet.stored) return { ok: false, msg: pet.name + '已经在保管室里了' };
     pet.stored = true;
+    /* v1.33：进保管室也是它的经历 —— 记一条，并给它一点「静静待着」的慵懒印记 */
+    const markStore = traitMark(pet, 'store');
+    logPet(pet, {
+      kind: 'store', text: '住进了保管室，安安静静地歇着（状态静止）。',
+      trait: traitSnap(markStore),
+      shift: (markStore && markStore.shifted) ? { from: markStore.fromName, to: markStore.toName } : null
+    });
     window.Store.save(true);
     window.Store.pushLog('📦 ' + pet.name + ' 住进了保管室，状态已静止。');
     return { ok: true, pet: pet, msg: pet.name + ' 住进了保管室（' + stageOf(pet).name + '），状态已静止。' };
@@ -501,6 +826,7 @@ window.Game = (function () {
     pet.illness = null;
     pet.illnessSince = 0;
     pet.dormant = false;
+    logPet(pet, { kind: 'store', icon: '📭', text: '从保管室回到了场地，重新动起来了。' });
     window.Store.save(true);
     window.Store.pushLog('📭 ' + pet.name + ' 从保管室回到了场地。');
     return { ok: true, pet: pet };
@@ -575,8 +901,15 @@ window.Game = (function () {
     pet.illness = null;
     pet.illnessSince = 0;
     pet.dormant = false;
+    const cleanBefore = pet.stats.clean || 0;
     pet.stats.clean = Math.min(100, pet.stats.clean + 20);
     S.stats.healedCount++;
+    /* v1.33：治好了也记一笔（含清洁值的前后变化） */
+    logPet(pet, {
+      kind: 'heal', icon: D.ITEM_MAP[chosen].emoji || '💉',
+      text: '你用' + D.ITEM_MAP[chosen].name + '治好了它的' + name + '。',
+      deltas: [statSnap('clean', cleanBefore, pet.stats.clean)]
+    });
     S.stats.sickFreeDays = 0;
     window.Store.pushLog('💚 ' + pet.name + ' 的' + name + '治好了。');
     window.Store.save(true);
@@ -643,7 +976,11 @@ window.Game = (function () {
   function renamePet(petId, name) {
     const pet = S.pets.filter(function (p) { return p.id === petId })[0];
     if (!pet || !name) return null;
+    const oldName = pet.name;
     pet.name = name.slice(0, 12);
+    if (pet.name !== oldName) {
+      logPet(pet, { kind: 'rename', text: '你把它改名叫「' + pet.name + '」（原来叫「' + oldName + '」）。' });
+    }
     window.Store.save(true);
     return pet;
   }
@@ -1226,17 +1563,21 @@ window.Game = (function () {
       const t = D.traitOf(p);
       const aqua = isAqua(p);
       const delta = [];
+      const snaps = [];          /* v1.33：日志用的快照（带前后值，不是只有增量） */
       Object.keys(cfg.serve || {}).forEach(function (s) {
         if (s === 'water' && aqua) { p.stats.water = 100; return; }
         const v = cfg.serve[s];
         const before = p.stats[s] || 0;
         p.stats[s] = Math.max(0, Math.min(100, before + v));
         delta.push({ stat: s, v: Math.round(p.stats[s] - before) });
+        snaps.push(statSnap(s, before, p.stats[s]));
       });
+      let growD = 0;
       if (cfg.grow) {
         const g = Math.round(cfg.grow * (t.grow || 1) * boost);
         p.growth += g;
         delta.push({ stat: 'grow', v: g });
+        growD = g;
       }
       /* 小概率意外：好奇的多惹事，胆小的几乎不惹事 */
       let acc = null;
@@ -1247,15 +1588,29 @@ window.Game = (function () {
           const before = p.stats[s] || 0;
           p.stats[s] = Math.max(0, Math.min(100, before + cfg.accident.stat[s]));
           delta.push({ stat: s, v: Math.round(p.stats[s] - before) });
+          snaps.push(statSnap(s, before, p.stats[s]));
         });
       }
       p.lastCare = Date.now();
+      const actText = (typeof D.traitLine === 'function' ? (D.traitLine(p, id) || cfg.verb) : cfg.verb);
       entries.push({
         id: p.id, name: p.name,
         emoji: (speciesById(p.speciesId) || {}).emoji || '🐾',
         trait: t.id, traitName: t.name, traitEmoji: t.emoji,
-        act: (typeof D.traitLine === 'function' ? (D.traitLine(p, id) || cfg.verb) : cfg.verb),
+        act: actText,
         accident: acc, delta: delta
+      });
+      /* v1.33：这一趟进它自己的日志。在哪儿上班，脾气就往那个方向偏一点
+         （食堂→嘴馋、图书馆→好奇、澡堂→慵懒、旅行社→活泼）。 */
+      const tmark = traitMark(p, (D.TRAIT_RULE_BY_BUILD || {})[id]);
+      logPet(p, {
+        kind: 'work',
+        icon: cfg.emoji,
+        text: '在' + b.name + actText + (acc ? '　⚠️ ' + acc.name + '：' + acc.text : ''),
+        deltas: snaps,
+        grow: growD ? { before: Math.round(p.growth - growD), after: Math.round(p.growth), d: growD } : null,
+        trait: traitSnap(tmark),
+        shift: (tmark && tmark.shifted) ? { from: tmark.fromName, to: tmark.toName } : null
       });
     });
     /* 产出（v1.28：稀有出工，产出按效益系数放大） */
@@ -1279,7 +1634,18 @@ window.Game = (function () {
       crewGrow = workGrowOf(boost);
       crewPets.forEach(function (p) {
         unstaffEverywhere(p.id);
+        const gBefore = p.growth;
         p.growth += crewGrow;
+        /* v1.33：出工也进它自己的日志（出力长本事），同样给性格印记 */
+        const cmark = traitMark(p, (D.TRAIT_RULE_BY_BUILD || {})[id]);
+        logPet(p, {
+          kind: 'work',
+          icon: '🛠️',
+          text: '在' + b.name + '出了一趟工，收工下班，长了些本事。',
+          grow: { before: Math.round(gBefore), after: Math.round(p.growth), d: crewGrow },
+          trait: traitSnap(cmark),
+          shift: (cmark && cmark.shifted) ? { from: cmark.fromName, to: cmark.toName } : null
+        });
       });
     }
     const rec = {
@@ -1371,7 +1737,19 @@ window.Game = (function () {
     [guide].concat(party).forEach(function (p) {
       setRest(p);
       unstaffEverywhere(p.id);
+      const gBefore = p.growth;
       p.growth += tripGrow;
+      /* v1.33：出游进它自己的日志；带团跑一趟，脾气往「活泼」偏 */
+      const tmark = traitMark(p, 'work_travel');
+      logPet(p, {
+        kind: 'travel',
+        icon: '🧭',
+        text: (p.id === guide.id ? '当导游带团出游，' : '跟着团出游，') + '走了一整天' +
+          (p.id === guide.id && col ? '，带回一件「' + col.name + '」' : '') + '。',
+        grow: { before: Math.round(gBefore), after: Math.round(p.growth), d: tripGrow },
+        trait: traitSnap(tmark),
+        shift: (tmark && tmark.shifted) ? { from: tmark.fromName, to: tmark.toName } : null
+      });
     });
     markDone('travel:' + id);
     window.Store.save(true);
@@ -1469,6 +1847,14 @@ window.Game = (function () {
     stageOf: stageOf,
     careActionsFor: careActionsFor,
     care: care,
+    /* v1.33 一键照顾 + 小生物日志 + 性格印记 */
+    oneKeyCare: oneKeyCare,
+    ONKEY_TARGET: ONKEY_TARGET,
+    petLogOf: petLogOf,
+    logPet: logPet,
+    traitMark: traitMark,
+    traitScoreOf: traitScoreOf,
+    traitTendency: traitTendency,
     levelOf: levelOf,
     levelReward: levelReward,
     canStore: canStore,

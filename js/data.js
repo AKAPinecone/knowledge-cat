@@ -675,6 +675,84 @@ window.GAME_DATA = (function () {
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
+  /* ---------- 性格印记：事件怎么改变性格（v1.33） ----------
+     v1.27 的规则是「性格孵化时随机、之后一直不变」。可玩家一直在变：
+     有人天天喂，有人只带它去图书馆，而宠物永远一个脾气，日志里也就缺了
+     「它因为你做了什么、慢慢变成了什么」这条线。所以 v1.33 补一层**性格印记**。
+
+     【数据结构】pet.traitScore = { 性格id: 分数 }，一宠一份、互不影响。
+     【触发条件】每发生一次事件，就按下面这张表给「该事件对应的性格」加分。
+     【更新规则】
+       ① 只加分、不自动衰减 —— 记的是"经历"，经历不会消失；
+       ② 每次加分后检查：得分最高的性格若 ≠ 当前性格，且领先当前性格
+          TRAIT_SHIFT_GATE 分以上 → 换性格（写 from→to，落进这只宠物的日志）；
+       ③ 换性格后所有分数按 50% 折算保留（不归零：新脾气的底子还在，
+          下次再攒够会快一点；也避免"刚换完立刻又换回来"的横跳）；
+       ④ 用"领先阈值"而不是"谁高听谁的"：照顾多了分数普遍上涨，
+          不留缓冲就会天天变脸。8 分 ≈ 连续 4 次同类事件才够翻盘。
+
+     【为什么能这么设计】性格不是装饰，它真的改状态衰减、成长、经验、
+     惹祸概率和它爱去哪（见 PERSONALITIES）。所以"性格会变"等于
+     "你的养法会真的改变这只小生物的活法"——这条因果链值得被记下来。 */
+  const TRAIT_RULES = [
+    { id: 'drink',        icon: '💧', name: '喝足了水',   trait: 'curious', delta: 1, note: '护理水分' },
+    { id: 'feed',         icon: '🍯', name: '吃得饱',     trait: 'foodie',  delta: 2, note: '护理营养' },
+    { id: 'clean',        icon: '🛁', name: '洗得干净',   trait: 'lazy',    delta: 2, note: '护理清洁' },
+    { id: 'play',         icon: '🎈', name: '玩得开心',   trait: 'lively',  delta: 2, note: '护理娱乐 / 一键照顾' },
+    { id: 'work_canteen', icon: '🍜', name: '食堂帮厨',   trait: 'foodie',  delta: 2, note: '在食堂出工' },
+    { id: 'work_library', icon: '📖', name: '图书馆当值', trait: 'curious', delta: 2, note: '在图书馆出工' },
+    { id: 'work_bath',    icon: '🛁', name: '澡堂当值',   trait: 'lazy',    delta: 2, note: '在澡堂出工' },
+    { id: 'work_travel',  icon: '🧭', name: '带团出游',   trait: 'lively',  delta: 2, note: '在旅行社出工' },
+    { id: 'sick',         icon: '😷', name: '生了一场病', trait: 'timid',   delta: 2, note: '生病' },
+    { id: 'neglect',      icon: '🕸️', name: '被冷落了',   trait: 'timid',   delta: 2, note: '状态长期归零' },
+    { id: 'store',        icon: '📦', name: '静静待着',   trait: 'lazy',    delta: 1, note: '住进保管室' }
+  ];
+  const TRAIT_RULE_MAP = {};
+  TRAIT_RULES.forEach(function (r) { TRAIT_RULE_MAP[r.id] = r; });
+  function traitRuleById(id) { return TRAIT_RULE_MAP[id] || null; }
+  /* 护理动作 -> 性格印记规则（水→好奇 / 营养→嘴馋 / 清洁→慵懒 / 娱乐→活泼） */
+  const TRAIT_RULE_BY_STAT = { water: 'drink', nutri: 'feed', clean: 'clean', fun: 'play' };
+  /* 建筑 -> 性格印记规则：在哪儿上班，就慢慢变成什么样的脾气 */
+  const TRAIT_RULE_BY_BUILD = {
+    canteen: 'work_canteen', library: 'work_library', bath: 'work_bath', travel: 'work_travel'
+  };
+  /* 换性格需要的"领先分数"（见上面更新规则 ②） */
+  const TRAIT_SHIFT_GATE = 8;
+  /* 换性格后的分数折算率（更新规则 ③） */
+  const TRAIT_SHIFT_KEEP = 0.5;
+
+  /* ---------- 小生物日志（v1.33） ----------
+     每只小生物有自己的日志：pet.log = [条目, ...]，最新在前，互不干扰。
+     条目字段（一条 = 一次事件）：
+       t      时间戳（ms）
+       day    归属日 'YYYY-MM-DD'（界面按 今天 / 昨天 / 更早 分组）
+       at     展示用短时间 'MM-DD HH:MM'
+       kind   事件类型（LOG_KINDS 的 key）
+       icon   条目图标
+       text   事件描述（人话，写"发生了什么"）
+       deltas [{stat,label,icon,before,after,d}] 属性变化，含前后值与增减量
+       grow   {before,after,d} 成长变化（可空）
+       exp    本次获得的照顾经验（可空）
+       trait  {id,name,icon,d,score,gate} 这次的性格印记（可空）
+       shift  {from,to} 这次发生了性格转变（可空）
+     上限 PET_LOG_MAX 条：留最近的一批，既够回看它的日子，又不会把存档撑爆。 */
+  const PET_LOG_MAX = 40;
+  const PET_LOG_SYNC_MAX = 8;      /* 同步码里只带最近几条（见 sync.js 的 slim） */
+  const LOG_KINDS = {
+    birth:   { icon: '🎉', label: '出生' },
+    care:    { icon: '💗', label: '护理' },
+    onekey:  { icon: '✨', label: '一键照顾' },
+    work:    { icon: '👜', label: '打工' },
+    travel:  { icon: '🧭', label: '出游' },
+    sick:    { icon: '😷', label: '生病' },
+    heal:    { icon: '💉', label: '治疗' },
+    grow:    { icon: '🌱', label: '成长' },
+    store:   { icon: '📦', label: '保管室' },
+    neglect: { icon: '🕸️', label: '被冷落' },
+    shift:   { icon: '🎭', label: '性格' },
+    rename:  { icon: '✏️', label: '改名' }
+  };
+
   /* ---------- 扭蛋 ---------- */
   const GACHA = {
     costPerPull: 1,
@@ -1608,7 +1686,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.32',
+    VERSION: 'v1.33',
     WORLD: WORLD,
     ZONES: ZONES,
     ROAM_AVOID: ROAM_AVOID,
@@ -1622,6 +1700,16 @@ window.GAME_DATA = (function () {
     traitOf: traitOf,
     rollTrait: rollTrait,
     traitLine: traitLine,
+    TRAIT_RULES: TRAIT_RULES,
+    TRAIT_RULE_MAP: TRAIT_RULE_MAP,
+    traitRuleById: traitRuleById,
+    TRAIT_RULE_BY_STAT: TRAIT_RULE_BY_STAT,
+    TRAIT_RULE_BY_BUILD: TRAIT_RULE_BY_BUILD,
+    TRAIT_SHIFT_GATE: TRAIT_SHIFT_GATE,
+    TRAIT_SHIFT_KEEP: TRAIT_SHIFT_KEEP,
+    PET_LOG_MAX: PET_LOG_MAX,
+    PET_LOG_SYNC_MAX: PET_LOG_SYNC_MAX,
+    LOG_KINDS: LOG_KINDS,
     careTiersFor: careTiersFor,
     careTierSplit: careTierSplit,
     itemUnlocked: itemUnlocked,
