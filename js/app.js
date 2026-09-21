@@ -818,13 +818,16 @@
     else if (v.type === 'feynman') verifyTag = '🗣️ 费曼卡 ×' + (v.minCards || 1);
     else if (v.type === 'reading') verifyTag = '📖 登记：读哪本 + 读了什么';
     else if (v.type === 'practice') verifyTag = '📚 去练习台完成';
+    else if (v.type === 'writescript') verifyTag = '✍️ 自己写 / 改一篇导游词（≥' + (v.minChars || 120) + ' 字）';
 
     let needTag = [];
     if (t.need && t.need.photo) needTag.push('📸 凭证截图');
     if (t.need && t.need.feynman) needTag.push('🗣️ 费曼卡 ×' + t.need.feynman);
     /* 所有走提交弹窗的任务都需至少提交一样凭证（图片/文件/录音）；自带截图或录音的任务已在其专属标签里体现 */
-    const needsUniversalEvidence = v.type !== 'practice' && !((t.need && t.need.photo) || v.type === 'record');
+    const needsUniversalEvidence = v.type !== 'practice' && v.type !== 'writescript' &&
+      !((t.need && t.need.photo) || v.type === 'record');
     if (needsUniversalEvidence) needTag.push('📎 凭证必交');
+    if (v.type === 'writescript') needTag.push('📎 正文即凭证');
     if (v.type === 'reading') needTag.push('📎 笔记 / 照片选填');
     else if (t.pick === 'book' && t.ctx && t.ctx.bookName) needTag.push('📚 归属：《' + esc(t.ctx.bookName) + '》');
 
@@ -849,8 +852,9 @@
         : (v.type === 'opinion' ? '📸 去凭证'
         : (v.type === 'quiz' ? '✍️ 去登记'
         : (v.type === 'note' ? '📝 去记录'
+        : (v.type === 'writescript' ? '✍️ 去写导游词'
         : (v.type === 'practice' ? '📚 去练习'
-        : '去完成')))));
+        : '去完成'))))));
       side = '<button class="btn btn-primary btn-sm" data-act="task-verify" data-uid="' + t.uid + '">' + label + '</button>';
     }
 
@@ -935,16 +939,18 @@
   }
 
   /* v1.32：地图上的打工标识。
-     在岗（被安排进某栋建筑上班）→ 金色小牌「👜 建筑名」；
-     今天已经出过工、人已下班 → 淡灰小牌「💤 今天已出工」，明天刷新。 */
+     v1.34 起岗位是"留职"的，所以这里的两种状态变了意思：
+       今天还能出工 → 金色小牌「👜 建筑名」；
+       今天已经出过工（岗位还在，明天照常上班）→ 淡灰小牌「💤 建筑名·休」。
+     没有岗位又有出工记录的情况不会出现（收工不撤岗了），兜底留着也无害。 */
   function workBadgeOf(p) {
     const g = window.Game;
     if (!g || typeof g.workplaceOf !== 'function') return '';
     const at = g.workplaceOf(p.id);
+    const tired = (typeof g.isWorkedToday === 'function') && g.isWorkedToday(p);
+    if (at && tired) return '<span class="pp-work rest">💤 <i>' + esc(at.name) + '·休</i></span>';
     if (at) return '<span class="pp-work">👜 <i>' + esc(at.name) + '</i></span>';
-    if (typeof g.isWorkedToday === 'function' && g.isWorkedToday(p)) {
-      return '<span class="pp-work rest">💤 <i>今天已出工</i></span>';
-    }
+    if (tired) return '<span class="pp-work rest">💤 <i>今天已出工</i></span>';
     return '';
   }
 
@@ -1818,7 +1824,7 @@
     });
     if (anyTired) {
       h += '<div class="fh" style="margin:-4px 0 10px">💤 标着「今天已出工」的刚干过活，今天派不了；' +
-        '明天自动刷新（一只小生物每天只出一趟工，修建和打工算同一趟）。</div>';
+        '明天自动刷新（一只小生物每天只出一趟工，修建和打工算同一趟）。已经上岗的不会因为收工掉岗位。</div>';
     }
     const ready = bxState && bxState.animal && bxState.plant && bxState.fungus;
     h += '<button class="btn btn-primary btn-block" data-act="bx-go" data-id="' + id + '"' +
@@ -1840,7 +1846,7 @@
         const sp = window.Game.speciesById(p.speciesId);
         const tired = (typeof window.Game.isWorkedToday === 'function') && window.Game.isWorkedToday(p);
         h += '<div class="staff-chip' + (tired ? ' tired' : '') + '"' +
-          (tired ? ' title="💤 今天已经出过工了，明天再来" ' : '') + '>' +
+          (tired ? ' title="💤 今天已经出过工了，明天自动回来上班（岗位给它留着）" ' : '') + '>' +
           '<span class="sc-face' + (sp.img ? '' : ' pet-emoji') + '">' +
           (sp.img ? '<img src="' + sp.img + '" alt="">' : sp.emoji) + '</span>' +
           '<span class="sc-name">' + esc(p.name) + (tired ? ' 💤' : '') + '</span>' +
@@ -1896,8 +1902,8 @@
         '）。想多带几只的话，先扩建这栋，或者让一只下班。</div>';
     }
     if (poolTired.length) {
-      h += '<div class="fh" style="margin:-4px 0 10px">💤 ' + poolTired.length +
-        ' 只今天已经出过工了，明天自动刷新；收工后它们会自己从岗位上撤下来。</div>';
+      h += '<div class="fh" style="margin:-4px 0 10px">💤 有 ' + poolTired.length +
+        ' 只今天已经出过工了，明天自动刷新；<b>已经上岗的收工后不会掉岗位</b>，明天接着开工不用重新排班。</div>';
     }
     /* v1.27：运营建筑（食堂 / 澡堂 / 图书馆）走倒计时制 */
     if (typeof window.Game.opCfg === 'function' && window.Game.opCfg(id)) {
@@ -2366,11 +2372,14 @@
       body += '<div class="warnbox" style="margin-top:10px">😴 生病超过 24 小时进入了休眠：成长暂停、不会消失，治好就醒。</div>';
     }
 
-    /* v1.28：干完活得歇一歇 —— 状态写在脸上，免得点了「出工」才发现派不出去 */
+    /* v1.28：干完活得歇一歇 —— 状态写在脸上，免得点了「出工」才发现派不出去。
+       v1.34：休息改成按天刷新，这里原来写死的「孵化时间 × 3」早就过期了，改说人话。 */
     const restTxt = (typeof window.Game.restText === 'function') ? window.Game.restText(p) : '';
     if (restTxt) {
+      const at = (typeof window.Game.workplaceOf === 'function') ? window.Game.workplaceOf(p.id) : null;
       body += '<div class="warnbox" style="margin-top:10px">' + esc(restTxt) +
-        '：它刚出过工，歇好了才能再派活。<span class="fh-i">（休息时长 = 该物种孵化时间 × 3）</span></div>';
+        '：它今天已经出过一趟工了。<span class="fh-i">（每天一趟，第二天 0 点自动刷新' +
+        (at ? '；' + esc(at.name) + ' 的岗位给它留着，明天照常上班' : '') + '）</span></div>';
     }
     const workMul = (typeof D.rarityWorkOf === 'function') ? D.rarityWorkOf(sp.rarity) : 1;
     if (workMul > 1 && !restTxt) {
@@ -3231,7 +3240,7 @@
     h += '<div class="hub-card" data-act="sp-open-hub">' +
       '<div class="hub-ico">📜</div>' +
       '<div class="hub-body"><div class="hub-title">导游词</div>' +
-      '<div class="hub-desc">' + spN + ' 篇，照着读 / 背，可录音留痕。点开任选一篇。</div></div>' +
+      '<div class="hub-desc">' + spN + ' 篇范文照着读 / 背，可录音留痕；也能自己动笔写导游词，存在「我的导游词」里反复改。</div></div>' +
       '<div class="hub-go">›</div></div>';
 
     h += '</div>';
@@ -5017,6 +5026,8 @@
     if (v.type === 'practice') {
       return openPracticePanel(task.libId === 'p_interview' ? 'interview' : 'script');
     }
+    /* v1.34 自己写导游词：不进通用验证弹窗，直接进写作台（正文本身就是凭证） */
+    if (v.type === 'writescript') return openScriptWriter(task);
     const isReading = v.type === 'reading';
     const isNote = v.type === 'note';
     vf = {
@@ -5465,11 +5476,14 @@
     if (v.type === 'reading') parts.push('选课本 + 填「今天读了什么」（笔记和照片选填）');
     if (v.type === 'practice') parts.push('在练习台完成对应练习');
     else if (v.type === 'evidence') parts.push('交一个面试练习凭证即可（录音 / 截图 / 文件 任一）');
+    else if (v.type === 'writescript') parts.push('自己动笔写 / 改一篇导游词（≥' + (v.minChars || 120) + ' 字，正文就是凭证）');
     else if (task.pick === 'book') parts.push('选定这套题属于哪一科');
     if (task.need && task.need.photo) parts.push('凭证截图');
     if (task.need && task.need.feynman) parts.push('费曼卡 ×' + task.need.feynman);
-    /* 所有走提交弹窗的任务都需至少提交一样凭证（图片/文件/录音） */
-    if (v.type !== 'practice' && !((task.need && task.need.photo) || v.type === 'record')) parts.push('至少提交一样凭证（图片/文件/录音）');
+    /* 所有走提交弹窗的任务都需至少提交一样凭证（图片/文件/录音）；
+       writescript 的正文即凭证，不用再交，也不进这个弹窗 */
+    if (v.type !== 'practice' && v.type !== 'writescript' &&
+        !((task.need && task.need.photo) || v.type === 'record')) parts.push('至少提交一样凭证（图片/文件/录音）');
     return parts.join('、');
   }
 
@@ -5703,6 +5717,33 @@
         '<div>' + (reciteMode ? '第 13 天起：每天默讲 1 篇导游词' : '前 12 天：每天通读 1 篇导游词') + '</div>' +
         '<div class="hint">点「今天读了这篇」或「今天背了这篇」即完成今日导游词任务。哪一篇完全由你定。</div>' +
         '</div>';
+
+      /* v1.34：我的导游词 —— 自己动笔写的稿子，反复改到考前 */
+      const my = window.Study.myScripts();
+      body += '<div class="practice-evi ws-mine">' +
+        '<div class="practice-evi-head">✍️ 我的导游词（' + my.length + ' 篇）</div>' +
+        '<div class="hint">参考完范文，自己动笔写一篇才是真会讲。写下来的稿子一直在，考前能一遍遍改。</div>' +
+        '<div class="ws-mine-list">';
+      if (!my.length) {
+        body += '<div class="hint" style="margin:6px 0">还没写过自己的导游词。第一篇不用长，先把欢迎词和欢送词写顺。</div>';
+      } else {
+        my.slice(0, 8).forEach(function (s) {
+          body += '<div class="ws-mine-row">' +
+            '<span class="ws-mine-name">' + esc(s.name) + '</span>' +
+            '<span class="ws-mine-meta">' + (s.chars || (s.text || '').length) + ' 字' +
+            (s.writes > 1 ? ' ｜ ' + s.writes + ' 稿' : '') + '</span>' +
+            '<button class="btn btn-sm btn-ghost" data-act="ws-edit" data-sid="' + s.id + '">✍️ 接着改</button>' +
+            '<button class="btn btn-sm btn-ghost" data-act="ws-del" data-sid="' + s.id + '" title="删掉这篇稿子">🗑</button>' +
+            '</div>';
+        });
+        if (my.length > 8) body += '<div class="hint">还有 ' + (my.length - 8) + ' 篇，先显示最近的 8 篇。</div>';
+      }
+      body += '</div>' +
+        '<button class="btn btn-primary" data-act="ws-new">✍️ 新写一篇导游词</button>' +
+        '</div>';
+
+      body += '<div class="practice-hint" style="margin-top:10px"><div>📄 内置范文（12 篇，读 / 背用）</div>' +
+        '<div class="hint">点「阅读 / 背诵」看全文、隐藏自测、写背诵大纲；点「今天读了 / 今天背了」完成今日任务。</div></div>';
       body += '<div class="sp-grid">';
       D.SCRIPTS.forEach(function (sc) {
         const st = S.scripts[sc.id] || { read: 0, recite: 0, mastered: false };
@@ -5740,6 +5781,24 @@
             const sid = b.dataset.sid;
             const sc = D.SCRIPTS.filter(function (x) { return x.id === sid; })[0];
             if (sc) openScriptReader(sc);
+          };
+        });
+        /* v1.34 我的导游词：新写 / 接着改 / 删掉 */
+        $$('[data-act="ws-new"]', m).forEach(function (b) {
+          b.onclick = function () { openScriptWriter(null, ''); };
+        });
+        $$('[data-act="ws-edit"]', m).forEach(function (b) {
+          b.onclick = function () { openScriptWriter(null, b.dataset.sid); };
+        });
+        $$('[data-act="ws-del"]', m).forEach(function (b) {
+          b.onclick = function () {
+            const s = window.Study.myScriptById(b.dataset.sid);
+            if (!s) return;
+            if (!confirm('删掉《' + s.name + '》这篇稿子？删了就找不回来了。')) return;
+            window.Study.removeMyScript(s.id);
+            toast('🗑 已删掉《' + s.name + '》。', 'ok');
+            render();
+            openPracticePanel('script');
           };
         });
         /* 答案展开 */
@@ -5780,6 +5839,184 @@
             openPracticePanel('script');
           };
         });
+      }
+    });
+  }
+
+  /* ---------------- 写 / 修改导游词（v1.34） ----------------
+     两条路进来：① 自建任务的「✍️ 去写导游词」；② 练习台导游词页的「✍️ 我的导游词」。
+     有 task 时保存即结算；没有 task（纯练习台进来）就只存稿。
+     稿子存在 S.myScripts，同一篇能反复改，考前就是自己的独门讲解稿。 */
+  function openScriptWriter(task, presetId) {
+    const v = (task && task.verify) || { minChars: 0 };
+    const minChars = v.minChars || 0;
+    const my = window.Study.myScripts();
+    /* 当前在改哪一篇：'' = 新写一篇 */
+    let curId = presetId || (task && task.ctx && task.ctx.scriptId) || '';
+    if (curId && !window.Study.myScriptById(curId)) curId = '';
+
+    function curScript() { return curId ? window.Study.myScriptById(curId) : null; }
+
+    let body = '<div class="warnbox">' +
+      (task
+        ? '本任务要过验证才发奖：' + verifyText(task) + '。<br>奖励 🎟️ ' + task.reward.tickets + ' / 🌰 ' + task.reward.beans +
+          '，写多少就是多少，不看你写得漂不漂亮。'
+        : '这里是你的导游词草稿本。写下来的稿子会一直存着，考前能一遍遍改。') +
+      '</div>';
+
+    /* ① 选一篇来改 / 新建 */
+    body += '<div class="field"><label>① 写哪一篇？<span class="fh-i">新写一篇，或点下面的稿子接着改</span></label>' +
+      '<div class="ws-pick" id="ws-pick">' +
+      '<button class="ws-card" data-sid=""><span class="ws-emoji">🆕</span>' +
+      '<span class="ws-name">新写一篇</span><span class="ws-meta">从空白开始</span></button>';
+    my.forEach(function (s) {
+      body += '<button class="ws-card" data-sid="' + s.id + '"><span class="ws-emoji">✍️</span>' +
+        '<span class="ws-name">' + esc(s.name) + '</span>' +
+        '<span class="ws-meta">' + (s.chars || (s.text || '').length) + ' 字' +
+        (s.writes > 1 ? ' ｜ 改了 ' + s.writes + ' 稿' : '') + '</span></button>';
+    });
+    body += '</div></div>';
+
+    /* ② 篇名 + 景点（选填） */
+    body += '<div class="field"><label>② 篇名<span class="req">必答</span></label>' +
+      '<input type="text" id="ws-name" maxlength="30" placeholder="例如：昆明市石林风景区（我自己的版本）"></div>';
+    body += '<div class="field"><label>景点 / 团型<span class="opt">选填</span></label>' +
+      '<div class="inline">' +
+        '<div><span style="font-size:11.5px;color:#8AA394">景点</span><input type="text" id="ws-place" maxlength="20" placeholder="昆明"></div>' +
+        '<div><span style="font-size:11.5px;color:#8AA394">团型</span><input type="text" id="ws-group" maxlength="12" placeholder="研学团"></div>' +
+      '</div></div>';
+
+    /* ③ 正文 */
+    body += '<div class="field"><label>③ 导游词正文<span class="req">必答</span>' +
+      '<span class="fh-i">按欢迎词 → 景点 → 欢送词的顺序写，写着写着就顺了</span></label>' +
+      '<textarea id="ws-text" class="ws-text" placeholder="1.欢迎词&#10;各位朋友大家好，我是大家今天的导游……&#10;&#10;2.景点概况&#10;……"></textarea>' +
+      '<div class="fh"><span id="ws-cnt">0 字</span>' +
+      '<span id="ws-hint">' + (minChars ? '这件任务要求至少 ' + minChars + ' 字（不算空格换行）' : '边写边存，写不完明天接着改') + '</span></div></div>';
+
+    /* 参考：内置 12 篇可以对照着看，但只做参考不覆盖 */
+    body += '<div class="field"><label>📚 参考内置范文<span class="opt">选填</span>' +
+      '<span class="fh-i">点开只是看看，不会动你写的内容</span></label>' +
+      '<div class="ws-refs">' +
+      D.SCRIPTS.map(function (sc) {
+        return '<button class="ws-ref" data-ref="' + sc.id + '">' + esc(sc.name) + '</button>';
+      }).join('') +
+      '</div><div id="ws-ref-box"></div></div>';
+
+    body += '<div id="ws-err"></div>';
+
+    const foot = (task
+      ? '<button class="btn btn-ghost" id="ws-save">💾 先存着（不算完成）</button>' +
+        '<button class="btn btn-primary" id="ws-ok">✅ 保存并结算</button>'
+      : '<button class="btn btn-ghost" id="ws-close2">关闭</button>' +
+        '<button class="btn btn-primary" id="ws-ok">💾 保存这篇稿子</button>');
+
+    openModal({
+      title: task ? ('✍️ 写导游词 · ' + esc(task.title)) : '✍️ 我的导游词',
+      body: body, wide: true, dismissable: true,
+      foot: foot,
+      onMount: function (m) {
+        const nameEl = $('#ws-name', m), textEl = $('#ws-text', m), cntEl = $('#ws-cnt', m);
+        if ($('#ws-close2', m)) $('#ws-close2', m).onclick = closeModal;
+
+        function bareLen(s) { return String(s || '').replace(/\s/g, '').length; }
+        function paintCnt() {
+          const n = bareLen(textEl.value);
+          const ok = !minChars || n >= minChars;
+          cntEl.textContent = n + ' 字' + (minChars ? ' / ' + minChars + ' 字起' : '');
+          cntEl.style.color = (minChars && !ok && n > 0) ? '#B03B37' : (ok && n > 0 ? '#2E7A4C' : '');
+          cntEl.style.fontWeight = (n > 0 && ok) ? '600' : '';
+        }
+        textEl.oninput = paintCnt;
+
+        /* 载入某一篇（新写 = 清空） */
+        function loadInto() {
+          const s = curScript();
+          nameEl.value = s ? s.name : '';
+          textEl.value = s ? (s.text || '') : '';
+          $('#ws-place', m).value = s ? (s.place || '') : '';
+          $('#ws-group', m).value = s ? (s.group || '') : '';
+          $$('.ws-card', m).forEach(function (b) {
+            b.classList.toggle('on', (b.dataset.sid || '') === curId);
+          });
+          paintCnt();
+        }
+        $$('.ws-card', m).forEach(function (b) {
+          b.onclick = function () {
+            /* 切走之前把当前输入留在本地（不落盘），避免手一滑丢掉刚写的 */
+            const s = curScript();
+            if (s) { s.name = nameEl.value.trim() || s.name; s.text = textEl.value; }
+            curId = b.dataset.sid || '';
+            loadInto();
+          };
+        });
+        loadInto();
+
+        /* 参考范文：就地展开 */
+        $$('.ws-ref', m).forEach(function (b) {
+          b.onclick = function () {
+            const sc = D.SCRIPTS.filter(function (x) { return x.id === b.dataset.ref; })[0];
+            const box = $('#ws-ref-box', m);
+            if (!sc || !box) return;
+            if (box.dataset.open === sc.id) { box.dataset.open = ''; box.innerHTML = ''; return; }
+            box.dataset.open = sc.id;
+            box.innerHTML = '<div class="ws-ref-head">📄 ' + esc(sc.name) + ' · ' + esc(sc.place) + ' · 约 ' + sc.minutes + ' 分钟</div>' +
+              '<div class="script-flow">' + (sc.nodes || []).map(function (n) { return '<span>' + esc(n) + '</span>'; }).join('') + '</div>' +
+              '<div class="ws-ref-text">' + (sc.content ? esc(sc.content).replace(/\n/g, '<br>') : '<span class="hint">这篇还没录入正文，只能看大纲。</span>') + '</div>';
+          };
+        });
+
+        function collect() {
+          return {
+            id: curId || '',
+            name: String(nameEl.value || '').trim(),
+            place: String($('#ws-place', m).value || '').trim(),
+            group: String($('#ws-group', m).value || '').trim(),
+            text: String(textEl.value || '').trim()
+          };
+        }
+        function showErrs(errs) {
+          $('#ws-err', m).innerHTML = '<div class="errbox">还不能存，先补齐这些：<ul>' +
+            errs.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul></div>';
+        }
+
+        /* 💾 先存着：只落稿，不结算（写一半也能保住） */
+        const saveBtn = $('#ws-save', m);
+        if (saveBtn) saveBtn.onclick = function () {
+          const d = collect();
+          if (!d.name) return showErrs(['先给这篇导游词起个名字']);
+          if (!d.text) return showErrs(['正文还是空的']);
+          const up = window.Study.upsertMyScript(d);
+          if (!up.ok) return showErrs([up.msg || '保存失败']);
+          curId = up.script.id;
+          toast('💾 存住了：《' + up.script.name + '》' + up.script.text.length + ' 字，明天接着改。', 'ok', 4500);
+          render();
+          openScriptWriter(task, curId);
+        };
+
+        /* ✅ 保存并结算（没 task 时就是纯保存） */
+        $('#ws-ok', m).onclick = function () {
+          const d = collect();
+          if (!task) {
+            const errs = [];
+            if (!d.name) errs.push('先给这篇导游词起个名字（景点名就行）');
+            if (!d.text) errs.push('正文还是空的，写点什么吧');
+            if (errs.length) return showErrs(errs);
+            const up = window.Study.upsertMyScript(d);
+            if (!up.ok) return showErrs([up.msg || '保存失败']);
+            toast('✍️ 存下了：《' + up.script.name + '》' + up.script.text.length + ' 字。', 'ok', 4500);
+            render();
+            return openScriptWriter(null, up.script.id);
+          }
+          /* 有 task：交给 Study 统一验证 + 结算（字数按去掉空白算） */
+          const r = window.Study.finish(task.uid, { writing: d });
+          if (!r.ok) return showErrs(r.errs || ['结算失败']);
+          let msg = '✅ 「' + task.title + '」完成：+' + r.gain.tickets + ' 券 / +' + r.gain.beans + ' 豆';
+          (r.extra || []).forEach(function (x) { msg += '　' + x; });
+          toast(msg, 'ok', 6000);
+          confetti(46); playCheer();
+          closeModal();
+          render();
+        };
       }
     });
   }

@@ -82,7 +82,7 @@ window.Study = (function () {
     return best || D.SUBJECTS[0];
   }
 
-  /* 用户自建加餐任务：从既有任务模型（reading/quiz/opinion/feynman/note/online）里选一种，跨天保留 */
+  /* 用户自建加餐任务：从既有任务模型（reading/quiz/opinion/feynman/note/online/writescript）里选一种，跨天保留 */
   function buildUserTask(tpl, day) {
     const uid = 'user_' + tpl.id + '#' + day;
     const type = tpl.type;
@@ -93,8 +93,9 @@ window.Study = (function () {
     else if (type === 'feynman') verify.minCards = tpl.target || 1;
     else if (type === 'note') verify.minChars = tpl.target || 20;
     else if (type === 'online') verify.minChars = tpl.target || 20;
+    else if (type === 'writescript') verify.minChars = tpl.target || 120;
     else if (type === 'reading') verify.minChars = 6;
-    const ICON = { reading: '📖', quiz: '✍️', record: '🎙️', opinion: '🎧', feynman: '🗣️', note: '📝', online: '🖥️' };
+    const ICON = { reading: '📖', quiz: '✍️', record: '🎙️', opinion: '🎧', feynman: '🗣️', note: '📝', online: '🖥️', writescript: '✍️' };
     return {
       uid: uid,
       libId: 'user_' + tpl.id,
@@ -107,6 +108,8 @@ window.Study = (function () {
       core: false, coreLabel: '',
       split: '', pick: type === 'reading' ? 'book' : '',
       verify: verify, need: type === 'opinion' ? { photo: true } : {},
+      /* writescript 不用另交凭证 —— 写出来的那段正文本身就是凭证 */
+      writing: type === 'writescript' ? { scriptId: '' } : null,
       ctx: { scriptId: '', scriptName: '', bookId: '', bookName: '', subjectId: '', subjectName: '' },
       quizCount: 0,
       state: S.study.done[uid] ? 'done' : 'pending',
@@ -376,6 +379,63 @@ window.Study = (function () {
     return st;
   }
 
+  /* ================= 我的导游词（v1.34：自己写 / 修改） =================
+     内置 12 篇（D.SCRIPTS）只读，是参考资料；这里放的是玩家自己动笔写的稿子。
+     一篇稿子从写下到考前都在改，所以「继续修改」不是重新写，而是在同一篇上追加/覆盖。 */
+  function myScripts() {
+    if (!Array.isArray(S.myScripts)) S.myScripts = [];
+    return S.myScripts;
+  }
+  function myScriptById(id) {
+    if (!id) return null;
+    return myScripts().filter(function (x) { return x.id === id; })[0] || null;
+  }
+  /* 新建或更新一篇自己的导游词。传 id 且能找到 = 修改；否则新建。
+     返回 {script, created} —— created=true 表示这是一篇新稿。 */
+  function upsertMyScript(draft) {
+    draft = draft || {};
+    const name = String(draft.name || '').trim();
+    const text = String(draft.text || '').trim();
+    if (!name) return { ok: false, msg: '这篇导游词得有个名字' };
+    if (!text) return { ok: false, msg: '正文还是空的' };
+
+    let sc = myScriptById(draft.id);
+    const created = !sc;
+    if (!sc) {
+      sc = {
+        id: 'my_' + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36),
+        createdAt: Date.now()
+      };
+      myScripts().unshift(sc);
+    }
+    sc.name = name;
+    sc.place = String(draft.place || '').trim();
+    sc.group = String(draft.group || '').trim();
+    sc.text = text;
+    sc.updatedAt = Date.now();
+    sc.chars = text.length;
+    sc.writes = (sc.writes || 0) + 1;   /* 改了几次 —— 用来显示「改了 N 稿」 */
+    window.Store.save(true);
+    return { ok: true, script: sc, created: created };
+  }
+  function removeMyScript(id) {
+    if (!id) return 0;
+    const before = myScripts().length;
+    S.myScripts = myScripts().filter(function (x) { return x.id !== id; });
+    if (S.myScripts.length !== before) { window.Store.save(true); return 1; }
+    return 0;
+  }
+  /* 自己写的稿子也当一天的学习痕迹 —— 同步进证据库，回顾时看得到正文 */
+  function logMyScriptEvidence(uid, script, isNew) {
+    if (!script) return;
+    window.Store.addEvidence({
+      type: 'note', taskId: uid || '',
+      label: (isNew ? '✍️ 新写导游词 · ' : '✍️ 改导游词 · ') + script.name,
+      text: script.text
+    });
+    window.Store.pushLog((isNew ? '✍️ 写了一篇自己的导游词：《' : '✍️ 改了改《') + script.name + '》（' + script.text.length + ' 字）');
+  }
+
   /* =========================================================
    * 结算：验证并发奖
    * proof 结构由 UI 收集：
@@ -458,8 +518,20 @@ window.Study = (function () {
         errs.push('「看法」太短了（至少 ' + (v.minChars || 4) + ' 个字，或改录一段语音代替）。');
       }
     }
-    if (need.photo && !proof.photo) errs.push('缺少凭证截图（在另一个 App 练完导游词，截一张图带过来）');
-    if (need.feynman && (proof.feynmanCount || 0) < need.feynman) {
+    /* v1.34 自己写导游词：正文本身就是凭证，不看别的。
+       字数按「去掉空白后的字符数」算 —— 用空格和换行凑字数没意义。 */
+    if (v.type === 'writescript') {
+      const w = proof.writing || {};
+      const name = String(w.name || '').trim();
+      const text = String(w.text || '').trim();
+      const bare = text.replace(/\s/g, '');
+      if (!name) errs.push('先给这篇导游词起个名字（景点名就行）');
+      if (!bare) errs.push('正文还是空的，写点什么吧');
+      else if (bare.length < (v.minChars || 120)) {
+        errs.push('正文太短了：去掉空格才 ' + bare.length + ' 字，这件任务要求至少 ' + (v.minChars || 120) + ' 字（写不完可以存下来，明天接着改）');
+      }
+    }
+    if (need.photo && !proof.photo) errs.push('缺少凭证截图（在另一个 App 练完导游词，截一张图带过来）');    if (need.feynman && (proof.feynmanCount || 0) < need.feynman) {
       errs.push('本任务需要 ' + need.feynman + ' 张费曼卡，当前 ' + (proof.feynmanCount || 0) + ' 张');
     }
     return errs;
@@ -568,6 +640,20 @@ window.Study = (function () {
         text: String(proof.note).trim()
       });
       S.stats.notes = (S.stats.notes || 0) + 1;
+    }
+
+    /* v1.34 自己写 / 修改导游词：先把稿子存进「我的导游词」，
+       再留一份正文进证据库（这样"今天写了什么"以后翻得到）。 */
+    if (task.verify.type === 'writescript' && proof.writing) {
+      const up = upsertMyScript(proof.writing);
+      if (up.ok) {
+        /* 稿子名字回填到任务上下文，卡面上就能看到今天写的是哪一篇 */
+        task.ctx.scriptId = up.script.id;
+        task.ctx.scriptName = up.script.name;
+        logMyScriptEvidence(uid, up.script, up.created);
+        proof.summary = (proof.summary ? proof.summary + '；' : '') +
+          (up.created ? '新写《' : '修改《') + up.script.name + '》' + up.script.text.length + ' 字';
+      }
     }
 
     S.cur.tickets += tickets;
@@ -724,6 +810,8 @@ window.Study = (function () {
     evidenceFor: evidenceFor,
     finishScriptCore: finishScriptCore,
     scriptPracticeToday: scriptPracticeToday,
+    myScripts: myScripts, myScriptById: myScriptById,
+    upsertMyScript: upsertMyScript, removeMyScript: removeMyScript,
     bookProgressOf: bookProgressOf
   };
 })();

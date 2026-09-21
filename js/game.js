@@ -1045,7 +1045,7 @@ window.Game = (function () {
   }
   function restText(pet) {
     if (!isResting(pet)) return '';
-    return '💤 今天已出过工 · 明天再来';
+    return '💤 今天已出过工 · 明天 0 点刷新';
   }
   /* 出工一趟涨多少成长值：基数在 D.ECONOMY.work.grow，乘上这趟活的效益系数 */
   function workGrowOf(boost) {
@@ -1242,6 +1242,15 @@ window.Game = (function () {
           const g = workGrowOf(workBoostOf(crewMembers));
           crewMembers.forEach(function (p) { p.growth += g; });
           msg += '　🌱 出工的 ' + crewMembers.length + ' 只各涨成长 +' + g;
+          /* v1.34：修建落成也进各自日志（谁出了力、涨了多少都留痕） */
+          crewMembers.forEach(function (p) {
+            logPet(p, {
+              kind: 'grow',
+              icon: '🏗️',
+              text: '在' + (b ? b.name : id) + '出了力，' + (u.lvAfter > 1 ? '扩建到 Lv.' + u.lvAfter : '把它盖好了') + '。',
+              grow: { before: Math.round(p.growth - g), after: Math.round(p.growth), d: g }
+            });
+          });
         }
         window.Store.pushLog('🏗️ ' + msg);
         finished.push({ id: id, name: b ? b.name : id, msg: msg });
@@ -1627,13 +1636,13 @@ window.Game = (function () {
     } else {
       outTxt = '📖 大伙儿的心情与见识';
     }
-    /* v1.32：收工即下班 —— 在岗出力的小生物自动撤出建筑，并结算成长值（出力长本事）。
-       撤岗之后再也没法拿它去别的建筑连着打工（加上 workDay 标记，双保险）。 */
+    /* v1.34：收工不撤岗 —— 岗位保留，今天算"已出过工"，明天自动回来上班，
+       省得每次营业都得重新点一遍排班。想让它彻底不干就在面板上点它下班。
+       撤岗只留给「送养」「没成年」「生病」这类真的不该占着岗位的情况。 */
     let crewGrow = 0;
     if (crewPets.length) {
       crewGrow = workGrowOf(boost);
       crewPets.forEach(function (p) {
-        unstaffEverywhere(p.id);
         const gBefore = p.growth;
         p.growth += crewGrow;
         /* v1.33：出工也进它自己的日志（出力长本事），同样给性格印记 */
@@ -1641,7 +1650,7 @@ window.Game = (function () {
         logPet(p, {
           kind: 'work',
           icon: '🛠️',
-          text: '在' + b.name + '出了一趟工，收工下班，长了些本事。',
+          text: '在' + b.name + '出了一趟工，收工下班，长了些本事。（岗位留着，明天还能来）',
           grow: { before: Math.round(gBefore), after: Math.round(p.growth), d: crewGrow },
           trait: traitSnap(cmark),
           shift: (cmark && cmark.shifted) ? { from: cmark.fromName, to: cmark.toName } : null
@@ -1660,13 +1669,15 @@ window.Game = (function () {
     delete S.build.ops[id];
     window.Store.pushLog(cfg.emoji + ' ' + b.name + cfg.label + '收工：' + guests.length + ' 位客人，' + outTxt +
       (boost > 1.01 ? '（稀有出工 ×' + boost.toFixed(2) + '）' : '') +
-      (crewGrow ? '；出工的 ' + crewPets.length + ' 只下班了，各涨成长 +' + crewGrow : ''));
+      (crewGrow ? '；出工的 ' + crewPets.length + ' 只下班了，各涨成长 +' + crewGrow +
+        '（岗位留着，明天照常上班）' : ''));
     window.Store.save(true);
     return {
       ok: true, id: id, name: b.name, rec: rec, boost: boost,
       msg: cfg.emoji + ' ' + b.name + cfg.label + '收工！' + guests.length + ' 位客人' + cfg.verb + '，' + outTxt +
         (boost > 1.01 ? '　✨ 稀有出工，效益 ×' + boost.toFixed(2) : '') +
-        (crewGrow ? '　🌱 出工的 ' + crewPets.length + ' 只下班，各涨成长 +' + crewGrow + '（今天不能再出工）' : '')
+        (crewGrow ? '　🌱 出工的 ' + crewPets.length + ' 只今天不能再出工，各涨成长 +' + crewGrow +
+          '；岗位给它们留着，明天照常上班' : '')
     };
   }
   /* 离线到点的营业，回来一并结算（advanceOffline 里调） */

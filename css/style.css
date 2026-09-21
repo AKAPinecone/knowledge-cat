@@ -711,6 +711,44 @@ audio{width:100%;margin-top:6px;height:34px;}
 .reader-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
 .reader-actions .btn{flex:1;min-width:130px;}
 
+/* ---------- v1.34 写 / 修改导游词 ---------- */
+.ws-pick{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
+.ws-card{
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;cursor:pointer;
+  background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:10px 12px;
+  text-align:left;transition:all .18s;font-family:inherit;min-width:0;
+}
+.ws-card:hover{border-color:var(--mint);background:#FBFEFC;}
+.ws-card.on{border-color:var(--green);background:#F3FAF5;box-shadow:0 0 0 3px rgba(76,169,107,.14);}
+.ws-card .ws-emoji{font-size:17px;}
+.ws-card .ws-name{font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.ws-card .ws-meta{font-size:11px;color:var(--ink-3);}
+.ws-text{
+  width:100%;min-height:300px;resize:vertical;box-sizing:border-box;
+  border:1.5px solid var(--line);border-radius:13px;padding:14px 16px;
+  font-family:inherit;font-size:16px;line-height:1.95;color:#233a2c;background:#fff;letter-spacing:.2px;
+}
+.ws-text:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(76,169,107,.14);}
+.ws-refs{display:flex;flex-wrap:wrap;gap:6px;}
+.ws-ref{
+  background:#F3FAF5;border:1px solid var(--line);border-radius:999px;
+  padding:5px 11px;font-size:12px;color:var(--green-deep);font-weight:600;
+  cursor:pointer;font-family:inherit;transition:all .16s;
+}
+.ws-ref:hover{border-color:var(--green);background:#EAF7EE;}
+.ws-ref-head{font-size:12.5px;font-weight:700;color:var(--green-deep);margin:10px 0 2px;}
+.ws-ref-text{
+  max-height:34vh;overflow:auto;background:#fff;border:1.5px solid var(--line);
+  border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.9;color:#233a2c;margin-top:6px;
+}
+.ws-mine{margin-top:14px;}
+.ws-mine-list{display:flex;flex-direction:column;gap:7px;margin:8px 0 10px;}
+.ws-mine-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:8px 11px;}
+.ws-mine-name{font-size:13px;font-weight:700;color:var(--ink);flex:1;min-width:120px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ws-mine-meta{font-size:11.5px;color:var(--ink-3);}
+
 .bookpick{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;}
 .bpick{
   display:flex;flex-direction:column;align-items:flex-start;gap:3px;cursor:pointer;
@@ -1149,6 +1187,17 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
   .seg-item audio{height:36px;min-width:0;flex:1 1 100%;}
   .rec-btn{padding:15px;font-size:15px;}
   .script-flow{gap:5px;}
+  /* v1.34 写作台：手机上两列卡片、正文矮一点、稿子行换行 */
+  .ws-pick{grid-template-columns:1fr 1fr;gap:7px;}
+  .ws-card{padding:9px 10px;border-radius:12px;}
+  .ws-card .ws-name{font-size:12.5px;}
+  .ws-card .ws-meta{font-size:10.5px;}
+  .ws-text{min-height:220px;padding:12px 13px;font-size:16px;line-height:1.85;}
+  .ws-ref{padding:4px 10px;font-size:11.5px;}
+  .ws-ref-text{max-height:30vh;font-size:13.5px;padding:10px 12px;}
+  .ws-mine-row{padding:8px 10px;gap:6px;}
+  .ws-mine-name{font-size:12.5px;min-width:100%;}
+  .ws-mine-meta{font-size:11px;}
 
   /* ---------- 说明页表格：缩小字号，允许换行 ---------- */
   .help h3{font-size:14.5px;margin:16px 0 7px;}
@@ -1335,8 +1384,9 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
 @keyframes bubblepop{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.09)}}
 
 /* ---- 地图上的打工标识（v1.32） ----
-   在建筑里上班的挂一面金色小牌（👜 + 建筑名）；今天已经出过工、人不在岗的
-   挂一面淡灰小牌（💤 今天已出工）。挂在脚下，不跟头顶的会话气泡打架。 */
+   在建筑里上班的挂一面金色小牌（👜 + 建筑名）；今天已经出过工、岗位还留着的
+   挂一面淡灰小牌（💤 建筑名·休）—— 明天它会自己回来上班。挂在脚下，
+   不跟头顶的会话气泡打架。 */
 .pp-work{position:absolute;left:50%;bottom:-4px;transform:translate(-50%,100%);z-index:7;
   display:inline-flex;align-items:center;gap:3px;white-space:nowrap;
   font-size:10.5px;font-weight:800;line-height:1.5;letter-spacing:.2px;color:#7A4A0B;
@@ -1345,6 +1395,8 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
 .pp-work i{font-style:normal;}
 .pp-work.rest{color:#5D6B62;background:rgba(255,255,255,.86);border-color:rgba(148,164,154,.55);
   box-shadow:0 1px 4px rgba(40,60,50,.14);font-weight:700;}
+/* 今天已出工：牌子整块淡下去一点，跟"还能出工"的金牌一眼分得开 */
+.pp-work.rest{opacity:.78;}
 /* 草地上的小生物整体缩到 .8，牌子也跟着缩，把字号补回来一点 */
 .wzone-meadow .pp-work{font-size:13px;}
 

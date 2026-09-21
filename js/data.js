@@ -1314,7 +1314,9 @@ window.GAME_DATA = (function () {
     { type: 'opinion', name: '读 / 背导游词（截图+看法）', emoji: '🎧', desc: '在另一个 App 练完导游词，截一张图带过来，再写/录一句「看法」', targetLabel: '看法最少字数', defaultTarget: 8 },
     { type: 'feynman', name: '费曼卡',   emoji: '🗣️', desc: '用大白话讲给没学过的人听，产出卡片', targetLabel: '卡片数', defaultTarget: 1 },
     { type: 'note',    name: '文字登记', emoji: '📝', desc: '写一段今日收获，做完当场结算', targetLabel: '最少字数', defaultTarget: 30 },
-    { type: 'online',  name: '网课',     emoji: '🖥️', desc: '听一节网课，登记今天听了谁的、讲了什么', targetLabel: '最少字数', defaultTarget: 30 }
+    { type: 'online',  name: '网课',     emoji: '🖥️', desc: '听一节网课，登记今天听了谁的、讲了什么', targetLabel: '最少字数', defaultTarget: 30 },
+    /* v1.34：自己写导游词。写出来的稿子进「我的导游词」，下次点开同一篇就是接着改。 */
+    { type: 'writescript', name: '写 / 修改导游词', emoji: '✍️', desc: '自己动笔写一篇导游词，也可以接着改以前写的；稿子存下来，考前就是你的独门讲解', targetLabel: '最少字数', defaultTarget: 120 }
   ];
 
   /* ---------- 成就 ---------- */
@@ -1686,7 +1688,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.33',
+    VERSION: 'v1.34',
     WORLD: WORLD,
     ZONES: ZONES,
     ROAM_AVOID: ROAM_AVOID,

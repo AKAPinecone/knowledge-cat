@@ -103,6 +103,9 @@ window.Store = (function () {
                         等你下一次登记「读到哪」，它会自动变成对象、切到页码制。
                         唯一入口：data.js 的 bookProgressOf() 读、bookSetPos() 写。 */ },
       scripts: {},          /* scriptId -> {read, recite, mastered, lastAt} */
+      myScripts: [],        /* v1.34 自己写的导游词：[{id, name, place, group, text, createdAt, updatedAt, at}]
+                               内置 12 篇在 data.js 的 SCRIPTS 里（只读参考），这里是玩家自己的稿子。
+                               唯一写入口：study.js 的 upsertMyScript()；读：myScripts / myScriptById()。 */
       feynman: [],          /* 费曼卡 */
       evidence: [],         /* 证据索引 */
       notes: [],            /* 我的笔记（文字内联；文件存 IndexedDB，索引在此） */
@@ -188,6 +191,8 @@ window.Store = (function () {
     /* 老存档补自建任务列表 + 刷题累计进度 + 每日签到 + 免题券 */
     if (!s.study || typeof s.study !== 'object') s.study = {};
     if (!Array.isArray(s.study.userTasks)) s.study.userTasks = [];
+    /* v1.34：自己写的导游词。老存档没有这个字段 —— 补一个空数组就行，不迁移、不编造。 */
+    if (!Array.isArray(s.myScripts)) s.myScripts = [];
     if (!s.study.quizAccum || typeof s.study.quizAccum !== 'object') s.study.quizAccum = {};
     if (s.study.dailyRewardDate === undefined) s.study.dailyRewardDate = '';
     if (!s.cur || typeof s.cur !== 'object') s.cur = {};
