@@ -297,7 +297,9 @@ window.Game = (function () {
       passRate: cfg.passRate,
       beansPass: cfg.beansPass,
       beansPerfect: cfg.beansPerfect,
-      bank: (window.QBank ? window.QBank.count() : 0)
+      bank: (window.QBank ? window.QBank.count() : 0),
+      /* v1.36：还没消掉的错题数（答对一次就少一道）。界面拿它显示进度 */
+      unresolved: (window.QBank && window.QBank.unresolved) ? window.QBank.unresolved().length : 0
     };
   }
   /* 开局前检查：题库够不够、今天还有没有额度 */
@@ -334,20 +336,21 @@ window.Game = (function () {
     S.stats.quizCorrect = (S.stats.quizCorrect || 0) + res.correct;
     if (passed) S.stats.quizPassed = (S.stats.quizPassed || 0) + 1;
 
-    /* 答错的题「取消掌握」：之前蒙对过、这次又错了，就该让它回到卷子里 */
-    if (window.QBank && window.QBank.unmarkMastered && Array.isArray(paper)) {
-      res.detail.forEach(function (d) {
-        if (!d.ok && paper[d.i]) window.QBank.unmarkMastered(paper[d.i].qid);
-      });
-    }
+    /* v1.36：挑战赛也走「答对一次就移出错题列表」这条统一规则。
+       以前只有破壳测验会移出（而且只在整卷及格时才移），挑战答对了反而还躺在错题列表里。
+       现在两处共用 QBank.applyResult：答对 → 移出；答错 → 放回卷子。 */
+    const mastery = (window.QBank && window.QBank.applyResult)
+      ? window.QBank.applyResult(paper, res) : { mastered: 0, revived: 0 };
     window.Store.pushLog('🏆 挑战赛 ' + res.correct + '/' + res.total +
       '（' + Math.round(res.rate * 100) + '%）' +
-      (passed ? '，赢下 ' + beans + ' 可可豆。' : '，没到 ' + Math.round(cfg.passRate * 100) + '%，这次没有奖励。'));
+      (passed ? '，赢下 ' + beans + ' 可可豆。' : '，没到 ' + Math.round(cfg.passRate * 100) + '%，这次没有奖励。') +
+      (mastery.mastered > 0 ? '　🎯 答对的 ' + mastery.mastered + ' 道已移出错题列表。' : ''));
     window.Store.save(true);
     checkAchievements();
     return {
       passed: passed, perfect: perfect, beans: beans,
-      left: chalLeft(), best: Math.round(c.best * 100)
+      left: chalLeft(), best: Math.round(c.best * 100),
+      mastery: mastery
     };
   }
 

@@ -19,7 +19,7 @@ window.Study = (function () {
   }
 
   /* 任务库版本：升级后强制重算当天任务，避免老存档里的旧任务结构残留 */
-  const TASK_VER = 10;  /* v10：读书进度改为按「章/节/页码」推进 + 刷题超额奖励（每科每日 30 道达标）；v9：读书进度改为「实际读了几天 / 计划几天」；v8：面试问答训练 → 综合问答训练（标题/标签改名）；v7：面试问答与导游词改为「练习台」模式；导游词不再限定每日具体篇目；面试问答不再登记题量，而是在练习台练够 10 道即完成 */
+  const TASK_VER = 11;  /* v11：投喂单新增「错题整理」（凭证必须是图片或文件，录音不算）；v10：读书进度改为按「章/节/页码」推进 + 刷题超额奖励（每科每日 30 道达标）；v9：读书进度改为「实际读了几天 / 计划几天」；v8：面试问答训练 → 综合问答训练（标题/标签改名）；v7：面试问答与导游词改为「练习台」模式；导游词不再限定每日具体篇目；面试问答不再登记题量，而是在练习台练够 10 道即完成 */
 
   /* 前端回调，由 app.js 挂载 */
   const hooks = {
@@ -531,7 +531,15 @@ window.Study = (function () {
         errs.push('正文太短了：去掉空格才 ' + bare.length + ' 字，这件任务要求至少 ' + (v.minChars || 120) + ' 字（写不完可以存下来，明天接着改）');
       }
     }
-    if (need.photo && !proof.photo) errs.push('缺少凭证截图（在另一个 App 练完导游词，截一张图带过来）');    if (need.feynman && (proof.feynmanCount || 0) < need.feynman) {
+    /* v1.36 错题整理：凭证必须是「图片或文件」—— 笔记是要留下来回头看的，录音代替不了。
+       这里和 app.js submitVerify 两处都拦：万一绕过弹窗直接调 Study.finish 也过不去。 */
+    if (v.type === 'wrongnote') {
+      if (!proof.photo && !proof.file) {
+        errs.push('错题整理要交一份笔记：拍一张手写笔记的照片，或传一个文档（PDF / Word / 图片都行）。录音代替不了它。');
+      }
+    }
+    if (need.photo && !proof.photo) errs.push('缺少凭证截图（在另一个 App 练完导游词，截一张图带过来）');
+    if (need.feynman && (proof.feynmanCount || 0) < need.feynman) {
       errs.push('本任务需要 ' + need.feynman + ' 张费曼卡，当前 ' + (proof.feynmanCount || 0) + ' 张');
     }
     return errs;
@@ -746,7 +754,7 @@ window.Study = (function () {
   }
 
   /* 今日进度：核心「投喂单」+ 加餐。
-     进度条只数核心那几件（阶段一正好 7 件：读书 1 + 四科刷题 4 + 导游词 1 + 面试 1）——
+     进度条只数核心那几件（当前 8 件：读书 1 + 四科刷题 4 + 导游词 1 + 面试 1 + 错题整理 1）——
      加餐做不做都行，不该让人多出一份"今天还差两件"的负罪感。 */
   function todayTaskStats() {
     const tasks = ensureTodayTasks();

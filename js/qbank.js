@@ -417,6 +417,36 @@ window.QBank = (function () {
     return s && s.masteredQuestions ? Object.keys(s.masteredQuestions).length : 0;
   }
 
+  /* v1.36 · 统一的「答对即掌握」规则 —— 破壳测验和挑战赛共用这一条，别在两处各写一遍：
+       · 答对一次 → 记进 masteredQuestions → makePaper 默认就会把它排除，从此不再出现
+                     （这就是「从错题列表中删除」；题本身留在题库里，便于答错时放回来）
+       · 答错     → 取消掌握 → 放回卷子（之前蒙对过、这次又错了，就该回来）
+     入参：paper 是 makePaper() 的产物（每项带 qid），res 是 grade() 的结果。
+     返回 {mastered, revived}，方便界面说清「这次消掉几道 / 放回几道」。 */
+  function applyResult(paper, res) {
+    const s = st();
+    if (!s || !Array.isArray(paper) || !res || !Array.isArray(res.detail)) return { mastered: 0, revived: 0 };
+    s.masteredQuestions = s.masteredQuestions || {};
+    let mastered = 0, revived = 0;
+    res.detail.forEach(function (d) {
+      const p = paper[d.i];
+      if (!p || !p.qid) return;
+      if (d.ok) {
+        if (!s.masteredQuestions[p.qid]) { s.masteredQuestions[p.qid] = Date.now(); mastered++; }
+      } else if (s.masteredQuestions[p.qid]) {
+        delete s.masteredQuestions[p.qid]; revived++;
+      }
+    });
+    if (mastered || revived) window.Store.save(true);
+    return { mastered: mastered, revived: revived };
+  }
+
+  /* 当前还在「错题列表」里的题（没掌握的那些）—— 界面显示"剩几道"用 */
+  function unresolved() {
+    const mastered = (st() && st().masteredQuestions) || {};
+    return all().filter(function (q) { return !mastered[q.id]; });
+  }
+
   /* 本次测验成绩记账 + 存档一份凭证 */
   function recordResult(res, capId, speciesName) {
     const s = st();
@@ -455,6 +485,8 @@ window.QBank = (function () {
     markMastered: markMastered,
     unmarkMastered: unmarkMastered,
     masteredCount: masteredCount,
+    applyResult: applyResult,
+    unresolved: unresolved,
     normalize: normalize,
     normSubject: normSubject,
     subjectName: subjectName,

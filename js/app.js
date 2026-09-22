@@ -715,7 +715,7 @@
     h += '</div>';
 
     /* 顶部：今日投喂单 —— 7 个小格子，这是每天的主线。
-       进度条只数这 7 件；碎片和加餐退到下面当辅助信息。 */
+       进度条只数这几件（当前 8 条）；碎片和加餐退到下面当辅助信息。 */
     h += '<div class="panel feed">';
     h += '<div class="feed-head">';
     h += '<div class="feed-num">' + ts.done + '<small>/ ' + ts.total + '</small></div>';
@@ -819,15 +819,18 @@
     else if (v.type === 'reading') verifyTag = '📖 登记：读哪本 + 读了什么';
     else if (v.type === 'practice') verifyTag = '📚 去练习台完成';
     else if (v.type === 'writescript') verifyTag = '✍️ 自己写 / 改一篇导游词（≥' + (v.minChars || 120) + ' 字）';
+    else if (v.type === 'wrongnote') verifyTag = '📕 交一份错题笔记（图片 / 文件）';
 
     let needTag = [];
     if (t.need && t.need.photo) needTag.push('📸 凭证截图');
     if (t.need && t.need.feynman) needTag.push('🗣️ 费曼卡 ×' + t.need.feynman);
-    /* 所有走提交弹窗的任务都需至少提交一样凭证（图片/文件/录音）；自带截图或录音的任务已在其专属标签里体现 */
-    const needsUniversalEvidence = v.type !== 'practice' && v.type !== 'writescript' &&
+    /* 所有走提交弹窗的任务都需至少提交一样凭证（图片/文件/录音）；自带截图或录音的任务已在其专属标签里体现。
+       v1.36：错题整理只认图片/文件，单独说，不并进「凭证必交」。 */
+    const needsUniversalEvidence = v.type !== 'practice' && v.type !== 'writescript' && v.type !== 'wrongnote' &&
       !((t.need && t.need.photo) || v.type === 'record');
     if (needsUniversalEvidence) needTag.push('📎 凭证必交');
     if (v.type === 'writescript') needTag.push('📎 正文即凭证');
+    if (v.type === 'wrongnote') needTag.push('📎 笔记必交（图片 / 文件）');
     if (v.type === 'reading') needTag.push('📎 笔记 / 照片选填');
     else if (t.pick === 'book' && t.ctx && t.ctx.bookName) needTag.push('📚 归属：《' + esc(t.ctx.bookName) + '》');
 
@@ -847,14 +850,12 @@
     /* 按验证类型给入口按钮 */
     let side = '';
     if (!done) {
-      const label = v.type === 'reading' ? '📖 去精读'
-        : (v.type === 'record' ? '🎙️ 去录音'
-        : (v.type === 'opinion' ? '📸 去凭证'
-        : (v.type === 'quiz' ? '✍️ 去登记'
-        : (v.type === 'note' ? '📝 去记录'
-        : (v.type === 'writescript' ? '✍️ 去写导游词'
-        : (v.type === 'practice' ? '📚 去练习'
-        : '去完成'))))));
+      /* 按验证类型给入口按钮的文案。改成查表，加新类型时不用再数嵌套括号 */
+      const LABELS = {
+        reading: '📖 去精读', record: '🎙️ 去录音', opinion: '📸 去凭证', quiz: '✍️ 去登记',
+        note: '📝 去记录', writescript: '✍️ 去写导游词', wrongnote: '📕 去交笔记', practice: '📚 去练习'
+      };
+      const label = LABELS[v.type] || '去完成';
       side = '<button class="btn btn-primary btn-sm" data-act="task-verify" data-uid="' + t.uid + '">' + label + '</button>';
     }
 
@@ -2811,7 +2812,7 @@
     ];
     let h = '<div class="panel"><div class="panel-head"><h2>🛒 可可豆商店</h2>' +
       '<span class="hint">当前 🌰 ' + Math.floor(S.cur.beans) + ' 可可豆</span></div>' +
-      '<div style="font-size:12.5px;color:#5B7263">照顾小生物改得经验、升级解锁更高级道具。可可豆的来路有六条：<b>投喂单</b>（做完 7 件 + 全清加成）、<b>库伯四象限</b>集齐、<b>照顾等级</b>里程碑、<b>挑战赛</b>通关、<b>食堂开饭 / 旅行社出团</b>（建筑等级越高产得越多）、<b>送养</b>用不上的小生物。护理会消耗道具，所以记得每天把任务做完。</div></div>';
+      '<div style="font-size:12.5px;color:#5B7263">照顾小生物改得经验、升级解锁更高级道具。可可豆的来路有六条：<b>投喂单</b>（做完 8 件 + 全清加成）、<b>库伯四象限</b>集齐、<b>照顾等级</b>里程碑、<b>挑战赛</b>通关、<b>食堂开饭 / 旅行社出团</b>（建筑等级越高产得越多）、<b>送养</b>用不上的小生物。护理会消耗道具，所以记得每天把任务做完。</div></div>';
 
     groups.forEach(function (g) {
       h += '<div class="panel shop-group"><h3>' + g.name + '<span class="hint" style="font-weight:400;color:#8AA394;font-size:12px">' + g.sub + '</span></h3>';
@@ -2854,7 +2855,7 @@
       '<div class="panel-head"><h2>🏆 挑战赛</h2>' +
       '<span class="hint">今日剩余 ' + (chalLeft > 90 ? '不限' : chalLeft + ' / ' + cs.limit + ' 局') + '</span></div>' +
       '<div class="chal-rules">' +
-        '<span class="chal-chip">📕 错题 ' + cs.count + ' 道</span>' +
+        '<span class="chal-chip">📕 待消错题 ' + cs.unresolved + ' / ' + cs.bank + ' 道</span>' +
         '<span class="chal-chip">⏱️ 限时 ' + cs.minutes + ' 分钟</span>' +
         '<span class="chal-chip">🎯 正确率 ' + Math.round(cs.passRate * 100) + '% 达标</span>' +
         '<span class="chal-chip chal-win">🌰 赢 ' + cs.beansPass + ' 可可豆' +
@@ -2862,6 +2863,7 @@
       '</div>' +
       '<div class="chal-note">从错题库里随机抽 ' + cs.count + ' 道（优先出你还没答对的），答对 ' +
         Math.ceil(cs.count * cs.passRate) + ' 道就结算可可豆。答错不扣东西，错题当场给解析——' +
+        '<b>答对的题会当场移出错题列表，以后不再出现</b>；答错了它才会回来。' +
         '冲豆是借口，多练一遍才是真的。</div>' +
       '<div class="chal-foot">' +
         '<span class="chal-meta">打过 ' + cs.plays + ' 局 · 赢 ' + cs.wins + ' 局 · 最好 ' + cs.best +
@@ -3215,6 +3217,8 @@
   /* ---------------- 资料库 ---------------- */
   function viewDocs() {
     const wrongN = window.QBank.all().length;
+    /* v1.36：还剩几道没消掉 —— 答对一次就移出，所以这个数会自己变小 */
+    const leftN = (window.QBank.unresolved ? window.QBank.unresolved().length : wrongN);
     const zhN = (D.INTERVIEW_QA || []).length;
     const spN = (D.SCRIPTS || []).length;
     let h = '<div class="panel">';
@@ -3228,7 +3232,7 @@
     h += '<div class="hub-card" data-act="wrong-open">' +
       '<div class="hub-ico">📕</div>' +
       '<div class="hub-body"><div class="hub-title">错题复习</div>' +
-      '<div class="hub-desc">题库里 ' + wrongN + ' 道错题，随时自测（不只破壳时）。点开就做，不强制逐题。</div></div>' +
+      '<div class="hub-desc">共 ' + wrongN + ' 道，还剩 <b>' + leftN + '</b> 道没消掉。答对一次就自动移出去、以后不再出现——挑战赛和破壳测验都算。点开就做，不强制逐题。</div></div>' +
       '<div class="hub-go">›</div></div>';
 
     h += '<div class="hub-card" data-act="zh-open">' +
@@ -3362,20 +3366,21 @@
     h += '<div class="step"><b>3</b><div>破壳后开始照顾：<b>水分、营养、清洁</b>三条状态会随时间下滑。植物用浇水/施肥/除虫，动物用喂水/喂食/洗澡。<br><span style="color:#2E7D9A">🌊 例外：住在<b>池塘</b>里的水栖生物（海菜花 / 红瘰疣螈 / 云南闭壳龟 / 藻类）<b>永远不会缺水</b>——水位常满，也绝不会渴到生病，你只需照顾它的营养、清洁、娱乐。</span></div></div>';
     h += '<div class="step"><b>4</b><div>某项状态归零超过 2 小时，它就可能<b>生病</b>。要买对症的药水（买错了不生效），病超过 24 小时会进入休眠。</div></div>';
     h += '<div class="step"><b>5</b><div>成长值到 100 / 300 / 700 会进阶：幼体 → 成长 → 成熟 → 圆满，每次进阶都有额外可可豆。</div></div>';
-    h += '<div class="step"><b>6</b><div>成年之后能<b>干活</b>（修建/扩建建筑、在运营建筑上班、出团）。干完一趟活会<b>累</b>：<b>休息时长 = 该物种孵化时间 × 3</b>（普通约 45 分钟、传说约 4 小时），休息期间派不了活——面板上会直接写着「💤 休息中 · 还剩 N 分钟」，排班下拉里也会把休息中的标出来。<br><span style="color:#B8791C">💪 越稀有越能干：普通 ×1.00 / 稀有 ×1.30 / 传说 ×1.70，同一趟活产出更多、干得也更快。</span></div></div>';
+    h += '<div class="step"><b>6</b><div>成年之后能<b>干活</b>（修建/扩建建筑、在运营建筑上班、出团）。<b>一只小生物每天只能出一趟工</b>——修建、打工、出团共用这一趟，干完身上就写着「💤 今天已出工」，<b>第二天 0 点自动回来</b>，<b>岗位给它留着，不用每天重新排班</b>。想主动清空岗位，在建筑面板点「让全部下班」。<br><span style="color:#B8791C">💪 越稀有越能干：普通 ×1.00 / 稀有 ×1.30 / 传说 ×1.70，同一趟活产出更多、干得也更快。</span></div></div>';
     h += '<div class="step"><b>7</b><div>场地有<b>安置限额</b>（苗圃 12 / 温室 12 / 池塘 6，草地敞开不限）。住满之后新破壳的会自动送进<b>保管室</b>，不用你手动挪位置——想让它上场，从保管室「取出」再腾个位子就行。</div></div>';
 
-    h += '<h3>四、每天喂哪 7 样：投喂单 + 加餐</h3>';
-    h += '<p>学习页最上面是<b>「今日投喂单」</b>——每天固定 7 样，进度条只数这 7 件：</p>';
+    h += '<h3>四、每天喂哪 8 样：投喂单 + 加餐</h3>';
+    h += '<p>学习页最上面是<b>「今日投喂单」</b>——每天固定 8 样，进度条只数这 8 件：</p>';
     h += '<table class="mini"><tr><th>#</th><th>喂什么</th><th>怎么算喂到</th></tr>' +
       '<tr><td>1</td><td>📖 读书</td><td>精读任务登记一次（哪一本你定，计划 8 天一本）</td></tr>' +
       '<tr><td>2–5</td><td>✍️ 四科刷题</td><td>法规 / 业务 / 全导 / 地导，每科 30 道，各算一笔</td></tr>' +
       '<tr><td>6</td><td>🎤 导游词</td><td>在「练习台」里任选一篇：前 12 天通读，第 13 天起默讲</td></tr>' +
       '<tr><td>7</td><td>🗣️ 综合问答</td><td>在「练习台」里看参考答案，练够 10 道问答题</td></tr>' +
+      '<tr><td>8</td><td>📕 错题整理</td><td>把今天的错题理一遍，<b>传一份笔记</b>（手写拍照 / 文档都行）——录音不算</td></tr>' +
       '</table>';
-    h += '<p>7 件全喂满，当天额外 <b>+2 券 / +' + feedBonus() + ' 豆</b>，连着喂满 7 天和 30 天还有成就。</p>';
+    h += '<p>8 件全喂满，当天额外 <b>+2 券 / +' + feedBonus() + ' 豆</b>，连着喂满 7 天和 30 天还有成就。</p>';
     h += '<p>刷题不封顶：每科<b>每日 30 道</b>算达标，达标之后<b>每多刷 10 道再多给 6 豆</b>（单科单日封顶 90 豆）——状态好就多刷点，状态差刷够 30 道也不算欠账。</p>';
-    h += '<p>7 件之外是<b>「加餐」</b>：课后练习、章节框架图、合书自测、昨日回照、费曼工作坊、合稿默讲……这些<b>做不做都行</b>，不计入 7 件，少做一件也不会让你"今天没做完"。有精力就加一口，没精力就明天再说。</p>';
+    h += '<p>8 件之外是<b>「加餐」</b>：课后练习、章节框架图、合书自测、昨日回照、费曼工作坊、合稿默讲……这些<b>做不做都行</b>，不计入 8 件，少做一件也不会让你"今天没做完"。有精力就加一口，没精力就明天再说。</p>';
 
     h += '<h3>五、课本精读：登记式，三步走完</h3>';
     h += '<p>精读是一张登记表——<b>能填出这两栏，就说明你今天真的翻过书</b>：</p>';
@@ -3399,7 +3404,7 @@
       '<tr><td>③ 凭证上传</td><td>刷题、网课、模考任务要传一张<b>准题库的完成页/成绩页截图</b>；导游词任务改成<b>截图 + 看法</b>：在另一个 App 练完截一张图带过来，再写/录一句「看法」（看法可录一段音代替打字）。</td></tr>' +
       '<tr><td>④ 输出与成像</td><td>深挖、框架图、法规速记都要写<b>费曼卡</b>或拍框架图（粘贴会被记录）；反思象限用「昨日回照」两句话逼你说出"还是模糊的那一点"。</td></tr></table>';
     h += '<div class="warnbox">⚠️ 坦白说：如果你铁了心要作弊，总能找到办法（比如随便传张旧截图）。但这个链路的目标是<b>让作弊比学习更麻烦</b>，同时又不至于让"今天只学了 15 分钟"变成一件有负担的事。真正能约束你的只有一个东西：11 月 21 日那天考场上只有你一个人。</div>';
-    h += '<div class="hintbox" style="margin-top:10px">📌 另外：<b>这里没有错题本</b>。你另一个 App 已经在管错题了，这个游戏不再碰它。反思象限换成「昨日回照」，就写两句话，不抄题、不整理。</div>';
+    h += '<div class="hintbox" style="margin-top:10px">📌 关于错题：<b>这里不用你抄题。</b>错题本来就躺在「资料库 → 错题复习」里（题库就是你导进来的那些），<b>答对一次它自己就移出去</b>，以后不再出现——挑战赛和破壳测验都算。投喂单里那条「📕 错题整理」要的只是一份笔记：今天哪些是真没记住、哪些是看错题、哪些是没读完题干，理完拍张照或存成文档传上来就行。<b>整理的是「为什么错」，不是把题抄一遍。</b></div>';
     h += '<div class="hintbox" style="margin-top:10px">⚑ <b>题目有问题就当场标一下</b>：做题时题干下面有一行「⚑ 这道题有问题？」，点开选个原因（内容不完整 / 答案不对 / 选项重复……）就存下了，不打断做题。所有标记汇总在「我的 → ⚑ 题目举报」，改完题可以一键清空，也可以「复制全部举报」拿出去对照着改。</div>';
 
     h += '<h3>七、破壳测验（小生物出生前的关卡）</h3>';
@@ -3433,7 +3438,7 @@
       h += '<tr><td><b>' + p.tag + ' ' + p.name + '</b></td><td>' + p.days + ' 天</td><td>' + esc(p.detail) + '</td></tr>';
     });
     h += '</table>';
-    h += '<p>阶段一每天固定的 7 件是：精读 1 次 + 四科各 30 道 + 导游词 1 篇 + 综合问答 10 道。导游词不指定具体篇目，你在「练习台」里任选一篇：前 12 天通读，第 13 天起默讲。阶段二、三同样保持这 7 件主线，只是导游词的要求随天数自动切换。</p>';
+    h += '<p>阶段一每天固定的 8 件是：精读 1 次 + 四科各 30 道 + 导游词 1 篇 + 综合问答 10 道 + 错题整理 1 次。导游词不指定具体篇目，你在「练习台」里任选一篇：前 12 天通读，第 13 天起默讲。阶段二、三同样保持这 8 件主线，只是导游词的要求随天数自动切换。</p>';
     h += '<div class="hintbox">📖 <b>读哪本由你定。</b>精读登记的第一步就是四选一，进度按本记录，每本 8 天。上来先读法规读不下去？那就先读导游业务或全导，顺序不影响结果。</div>';
 
     h += '<h3>十、12 篇导游词（2025 云南考区科目五 · 中文类）</h3>';
@@ -3450,7 +3455,7 @@
     h += '<div class="step"><b>2</b><div>精读点「📖 去精读」：选一本、填今天读到哪儿，交了就完事。笔记想写两句就写，不想写就空着。</div></div>';
     h += '<div class="step"><b>3</b><div>点「📝 去记录 / ✍️ 去登记」：写一段今日收获、登记题量，或者传截图。做完当场结算——做了就是做了，奖励马上发。</div></div>';
     h += '<div class="step"><b>4</b><div>导游词点「📸 去凭证」：在另一个 App 里通读/背诵，截一张图带过来，再写/录一句「看法」。结算后拿券和豆。</div></div>';
-    h += '<div class="step"><b>5</b><div>7 件全喂满会额外给 +2 券 / +' + feedBonus() + ' 豆。用挣来的资源去扭蛋、养小生物——它们会催你明天再来。</div></div>';
+    h += '<div class="step"><b>5</b><div>8 件全喂满会额外给 +2 券 / +' + feedBonus() + ' 豆。用挣来的资源去扭蛋、养小生物——它们会催你明天再来。</div></div>';
     h += '<div class="step"><b>6</b><div>孵化好了先别急着点破壳——会弹 <b>1 道题</b>的破壳测验（答错可再答一次、看解析）。答对了它才出来。</div></div>';
 
     h += '<h3>十二、换设备 / 换浏览器怎么办</h3>';
@@ -4317,6 +4322,14 @@
       '<span>历史最好 <b>' + rw.best + '%</b></span>' +
       '</div>';
 
+    /* v1.36：这一局消掉几道错题 —— 答对即移出，以后不再出现；答错的放回卷子 */
+    const myN = (rw.mastery && rw.mastery.mastered) || 0;
+    const rvN = (rw.mastery && rw.mastery.revived) || 0;
+    if (myN || rvN) {
+      h += '<div class="okbox" style="margin-top:12px">🎯 答对的 <b>' + myN + '</b> 道已移出错题列表，以后不再出现' +
+        (rvN ? '；答错的 ' + rvN + ' 道放回了卷子，下次还会碰到。' : '。') + '</div>';
+    }
+
     /* 错题回顾：挑战赛最值钱的东西其实在这儿，不在那几十颗豆 */
     const wrong = r.detail.filter(function (d) { return !d.ok; });
     if (wrong.length) {
@@ -4503,15 +4516,20 @@
     /* 记账：统计 + 存档一条凭证 */
     window.QBank.recordResult(res, qz.capId, qz.sp.name);
 
+    /* v1.36：答对一题就消一题 —— 不再要求「整卷及格」才记掌握。
+       需求原话是「只要答对一次即自动从错题列表中删除」，所以按题判，跟整卷过没过无关。
+       规则本体统一在 QBank.applyResult（挑战赛走同一个函数）。 */
+    const mastery = (window.QBank && window.QBank.applyResult)
+      ? window.QBank.applyResult(qz.paper, res) : { mastered: 0, revived: 0 };
+    qz.mastery = mastery;
     if (res.passed) {
-      const masteredIds = [];
-      qz.paper.forEach(function (p, i) { if (res.detail[i].ok) masteredIds.push(p.qid); });
-      const masteredN = window.QBank.markMastered(masteredIds);
       window.Game.markQuizPassed(qz.capId, res);
       confetti(qz.sp.rarity >= 2 ? 50 : 24);
-      if (masteredN > 0) window.Store.pushLog('🎯 破壳测验答对 ' + masteredN + ' 题，已加入“已掌握”，以后不会再出现。');
     } else if (timeout) {
       toast('⏰ 时间到，已自动交卷。', 'warn');
+    }
+    if (mastery.mastered > 0) {
+      window.Store.pushLog('🎯 破壳测验答对 ' + mastery.mastered + ' 题，已移出错题列表，以后不会再出现。');
     }
     renderQuizResult(mask);
   }
@@ -4537,9 +4555,9 @@
         : '还差 ' + (r.line - r.correct) + ' 题，它得再等等') +
       '</div></div>';
 
-    if (r.passed) {
-      const okIds = qz.paper.filter(function (_, i) { return r.detail[i].ok; }).map(function (p) { return p.qid; });
-      h += '<div class="okbox" style="margin-top:12px">🎯 答对 ' + okIds.length + ' 题已加入“已掌握”，以后破壳测验里不会再出现。</div>';
+    const myN = (qz.mastery && qz.mastery.mastered) || 0;
+    if (myN > 0) {
+      h += '<div class="okbox" style="margin-top:12px">🎯 答对的 ' + myN + ' 题已移出错题列表，以后不会再出现。</div>';
     }
 
     const wrong = r.detail.filter(function (d) { return !d.ok; });
@@ -4747,7 +4765,16 @@
   /* 通用凭证上传区：图片 / 文件 / 录音，三选一即可。
      required=true 用于「提交弹窗」任务（强制至少一样）；required=false 用于练习台（鼓励不强制）。
      target 须含 {photo, file, audios:[]}，与提交弹窗的 vf 共用结构。 */
-  function evidenceZoneHTML(prefix, required) {
+  /* 通用凭证上传区：图片 / 文件 / 录音，三选一即可。
+     required=true 用于「提交弹窗」任务（强制至少一样）；required=false 用于练习台（鼓励不强制）。
+     opts.hint  自定义下面那句说明（错题整理要讲清楚「录音不算」）
+     opts.noRec 不渲染录音按钮（该任务录音不合格时，不该给一个点了也过不去的按钮）
+     target 须含 {photo, file, audios:[]}，与提交弹窗的 vf 共用结构。 */
+  function evidenceZoneHTML(prefix, required, opts) {
+    const o = opts || {};
+    const hint = o.hint || (required
+      ? '做了就是做了——传张图、传个文件（PDF / 文档截图都行）、或录段音，随便一样就能结算。'
+      : '顺手留个痕迹：传张图、传个文件、或录段音都行，不强制。');
     return '<div class="field"><label>📎 提交凭证' + (required ? '<span class="req">必交</span>' : '<span class="fh-i">选填</span>') + '</label>' +
       '<div class="evi-zone">' +
         '<div class="photo-drop" id="' + prefix + '-drop">传一张图，或把图片拖进来</div>' +
@@ -4755,13 +4782,11 @@
         '<input type="file" id="' + prefix + '-file" class="hidden">' +
         '<div class="evi-btns">' +
           '<button type="button" class="btn btn-sm" id="' + prefix + '-pickfile">📄 传一个文件</button>' +
-          '<button type="button" class="btn btn-sm rec-btn" id="' + prefix + '-rec">🎙️ 录一段音</button>' +
+          (o.noRec ? '' : '<button type="button" class="btn btn-sm rec-btn" id="' + prefix + '-rec">🎙️ 录一段音</button>') +
         '</div>' +
         '<div id="' + prefix + '-prev" class="evi-prev"></div>' +
       '</div>' +
-      '<div class="hintbox">' + (required
-        ? '做了就是做了——传张图、传个文件（PDF / 文档截图都行）、或录段音，随便一样就能结算。'
-        : '顺手留个痕迹：传张图、传个文件、或录段音都行，不强制。') + '</div></div>';
+      '<div class="hintbox">' + hint + '</div></div>';
   }
 
   function wireEvidence(prefix, m, target) {
@@ -5179,10 +5204,21 @@
     }
 
     /* 通用凭证门槛：所有走提交弹窗的任务，至少提交一样凭证（图片/文件/录音）。
-       已自带必交截图(need.photo)或录音(record)的任务不重复加区，但同样受提交时「至少一样」约束。 */
+       已自带必交截图(need.photo)或录音(record)的任务不重复加区，但同样受提交时「至少一样」约束。
+       v1.36：错题整理只认图片/文件（笔记要留下来回看），所以那一档不给录音按钮、说明也换一句。 */
     const needEvidenceDedicated = !!need.photo || v.type === 'record';
     if (!needEvidenceDedicated) {
-      body += evidenceZoneHTML('vf-u', true);
+      body += evidenceZoneHTML('vf-u', true, v.type === 'wrongnote' ? {
+        noRec: true,
+        hint: '错题整理要交一份「笔记」：拍一张手写笔记的照片，或传一个整理好的文档（PDF / Word / 图片都行）。录音代替不了它——笔记是要留下来回头看的。'
+      } : null);
+    }
+
+    /* v1.36：错题整理给一个直达错题库的入口 —— 要整理的东西就在那儿 */
+    if (v.type === 'wrongnote') {
+      body += '<div class="okbox" style="margin-top:4px">📕 <b>错题都在「资料库 → 错题复习」里。</b>' +
+        '不用手动删——在挑战赛或破壳测验里答对一次，它自己就移出去了，以后不再出现。' +
+        '<div style="margin-top:8px"><button type="button" class="btn btn-sm" id="vf-wrongopen">📕 打开错题库看看</button></div></div>';
     }
 
     body += '<div id="vf-err"></div>';
@@ -5307,6 +5343,10 @@
         if (!needEvidenceDedicated) {
           wireEvidence('vf-u', m, vf);
         }
+
+        /* v1.36 错题整理：直达错题库（先关窗，免得遮罩压住题库面板） */
+        const wo = $('#vf-wrongopen', m);
+        if (wo) wo.onclick = function () { closeModal(); openWrongQuiz(); };
 
         /* 选课本：精读 / 课后练习共用 */
         if (task.pick === 'book' || isReading) {
@@ -5477,12 +5517,13 @@
     if (v.type === 'practice') parts.push('在练习台完成对应练习');
     else if (v.type === 'evidence') parts.push('交一个面试练习凭证即可（录音 / 截图 / 文件 任一）');
     else if (v.type === 'writescript') parts.push('自己动笔写 / 改一篇导游词（≥' + (v.minChars || 120) + ' 字，正文就是凭证）');
+    else if (v.type === 'wrongnote') parts.push('交一份错题笔记：拍一张手写笔记的照片，或传一个整理好的文档（录音不算）');
     else if (task.pick === 'book') parts.push('选定这套题属于哪一科');
     if (task.need && task.need.photo) parts.push('凭证截图');
     if (task.need && task.need.feynman) parts.push('费曼卡 ×' + task.need.feynman);
     /* 所有走提交弹窗的任务都需至少提交一样凭证（图片/文件/录音）；
-       writescript 的正文即凭证，不用再交，也不进这个弹窗 */
-    if (v.type !== 'practice' && v.type !== 'writescript' &&
+       writescript 的正文即凭证、wrongnote 只认图片/文件，都不用这句话 */
+    if (v.type !== 'practice' && v.type !== 'writescript' && v.type !== 'wrongnote' &&
         !((task.need && task.need.photo) || v.type === 'record')) parts.push('至少提交一样凭证（图片/文件/录音）');
     return parts.join('、');
   }
@@ -5566,9 +5607,16 @@
     /* 截图（精读的笔记照片是选填，不拦） */
     if ((task.need && task.need.photo) && !vf.photo) errs.push('缺少凭证截图');
 
-    /* 通用凭证门槛：所有提交弹窗的任务，至少提交一样凭证（图片 / 文件 / 录音） */
-    const hasEvidence = !!(vf.photo || vf.file || (vf.audios && vf.audios.length));
-    if (!hasEvidence) errs.push('请至少提交一样凭证：传一张图、传一个文件、或录一段音');
+    /* 通用凭证门槛：所有提交弹窗的任务，至少提交一样凭证（图片 / 文件 / 录音）。
+       v1.36：错题整理只认「图片 / 文件」—— 录音代替不了笔记，所以单独一条规则。
+       Study.validate 里还有一份同样的判断（双保险，防绕过 UI 直接调 finish）。 */
+    const hasFileEv = !!(vf.photo || vf.file);
+    const hasEvidence = hasFileEv || !!(vf.audios && vf.audios.length);
+    if (v.type === 'wrongnote') {
+      if (!hasFileEv) errs.push('错题整理要交一份笔记：拍一张手写笔记的照片，或传一个文档（PDF / Word / 图片都行）。录音代替不了它。');
+    } else if (!hasEvidence) {
+      errs.push('请至少提交一样凭证：传一张图、传一个文件、或录一段音');
+    }
 
     /* 前置校验：交给 Study.validate 复核（文字登记 / 题量 / 录音 / 看法 / 费曼卡 / 精读登记 / 选书） */
     const proof = {
@@ -5619,8 +5667,17 @@
     if (fmCards.length) summary.push('费曼卡 ' + fmCards.length + ' 张');
     if (opinion && opinion.text) summary.push('写了看法 ' + opinion.text.length + ' 字');
     if (vf.audios && vf.audios.length) summary.push((v.type === 'opinion' ? '看法录音 ' : '录音 ') + vf.audios.length + ' 段 / ' + fmtClock(recTotal));
-    if (vf.photo) summary.push(v.type === 'reading' ? '已存笔记照片' : (v.type === 'opinion' ? '已存导游词练习截图' : '已存截图'));
-    if (vf.file) summary.push('已存文件：' + vf.file.name);
+    if (vf.photo) {
+      summary.push(v.type === 'reading' ? '已存笔记照片'
+        : v.type === 'opinion' ? '已存导游词练习截图'
+        : v.type === 'wrongnote' ? '已交错题笔记（照片）'
+        : '已存截图');
+    }
+    if (vf.file) {
+      summary.push(v.type === 'wrongnote'
+        ? ('已交错题笔记（文件：' + vf.file.name + '）')
+        : ('已存文件：' + vf.file.name));
+    }
     if (reading && reading.bookId) {
       const bk = D.SUBJECTS.filter(function (x) { return x.id === reading.bookId })[0];
       if (bk) {

@@ -62,7 +62,7 @@ window.Store = (function () {
       pity: 0,
       saves: [],                   /* 存档槽：每项是一枚可带走的快照（含存档码） */
       save: { lastAt: 0, sinceTake: 0, lastTakeAt: 0, autoCount: 0 },  /* 存档统计 + 唠叨计数 */
-      masteredQuestions: {},  /* 破壳测验里已答对的题 id -> timestamp；不再重复出现 */
+      masteredQuestions: {},  /* 已答对的题 id -> timestamp（= 错题列表里「已消掉」的名单）。v1.36 起挑战赛和破壳测验都写它；QBank.makePaper 默认排除，所以答对一次就不再出现。 */
       /* 挑战赛（v1.23）：date 变了就当天清零；best 是历史最高正确率（0~1） */
       challenge: { date: '', used: 0, plays: 0, wins: 0, best: 0, beans: 0 },
       study: {

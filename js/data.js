@@ -10,7 +10,7 @@ window.GAME_DATA = (function () {
     {
       id: 1, name: '全刷夯基', days: 35, tag: 'Step 1',
       motto: '每天喂满 7 样：读书 1 + 四科各 30 道 + 导游词 1 + 综合问答 10 道。',
-      detail: '每天的投喂单固定 7 件：精读课本 1 次（哪本你定，一本 8 天）、四科各刷 30 道、导游词通读 1 篇、综合问答 10 道。这 7 件之外还有"加餐"——课后练习、章节框架、合书自测，有精力就做，没有也没人扣你分。',
+      detail: '每天的投喂单固定 8 件：精读课本 1 次（哪本你定，一本 8 天）、四科各刷 30 道、导游词通读 1 篇、综合问答 10 道、错题整理 1 次。这 8 件之外还有"加餐"——课后练习、章节框架、合书自测，有精力就做，没有也没人扣你分。',
       focus: '不求全懂，只求全覆盖。先把四科的"地图"画进脑子里。'
     },
     {
@@ -813,7 +813,7 @@ window.GAME_DATA = (function () {
       一半（见 DECAY_PER_MIN）；护理道具的恢复量没动，所以整体等于变宽松。） */
   const ECONOMY = {
     level:   { base: 18, perLv: 7 },            /* 照顾等级升级奖励 = base + perLv × 新等级 */
-    feed:    { fullBonus: 75 },                 /* 投喂单 7 件全清，一次给 🌰 */
+    feed:    { fullBonus: 75 },                 /* 投喂单全清（当前 8 件全做完），一次给 🌰 */
     kolb:    { bonus: 35 },                     /* 库伯四象限当日集齐给 🌰 */
     canteen: { base: 9,  perLv: 4 },            /* 食堂每份饭 = base + perLv × 食堂等级 */
     travel:  { base: 20, perLv: 12, rand: 14 }, /* 旅行社每次出团 = base + perLv × 等级 + [0,rand) 随机 */
@@ -1172,9 +1172,9 @@ window.GAME_DATA = (function () {
    * split: 'subject' 这条任务会按四科拆成四条独立任务，各算各的
    * pick:  'book'    结算时由你自己决定这道题属于哪一本课本
    *
-   * core: true  = 每日投喂单的固定 7 件之一（进度条只数这 7 件）
+   * core: true  = 每日投喂单的固定项之一（进度条只数这些，当前 8 条）
    * coreLabel   = 进度条上那个小格子的名字（四科刷题填 '{subject}'，会换成"法规/业务/全导/地导"）
-   * 没有 core 的 = 加餐：做不做都行，不计入 7 件，也不影响当天"全清"。
+   * 没有 core 的 = 加餐：做不做都行，不计入投喂单，也不影响当天"全清"。
    */
   const TASK_LIBRARY = [
     /* ============ 阶段一 ============ */
@@ -1208,8 +1208,17 @@ window.GAME_DATA = (function () {
       reward: { tickets: 1, beans: 24 },
       verify: { type: 'evidence' }
     },
+    {
+      /* v1.36：错题整理。凭证必须是「图片或文件」—— 笔记是要留下来回头看的，
+         录音代替不了。校验见 study.js validate + app.js submitVerify（两处都拦）。 */
+      id: 'p1_wrongnote', phase: [1, 2, 3], title: '错题整理', core: true, coreLabel: '错题',
+      kolb: 'RO', icon: '📕',
+      desc: '把今天错的题理一遍：哪些是真没记住、哪些是看错题、哪些干脆是没读完题干。理完把笔记传上来（手写拍照、或整理成文档都行）—— 这一份笔记就是今天的凭证。不用抄题：错题本身就躺在「资料库 → 错题复习」里，答对一次它自己就移出去了。',
+      reward: { tickets: 1, beans: 30 },
+      verify: { type: 'wrongnote' }
+    },
 
-    /* ===== 加餐：不计入每日 7 件，做不做都行 ===== */
+    /* ===== 加餐：不计入每日投喂单，做不做都行 ===== */
     {
       id: 'p1_exercise', phase: [1], title: '课后练习 · 今日章节配套习题', kolb: 'AE', icon: '📝',
       pick: 'book',
@@ -1362,8 +1371,8 @@ window.GAME_DATA = (function () {
     { id: 'ach_mock_10',    name: '十次模考',   desc: '完成 10 次模考',            reward: { tickets: 3, beans: 120 }, check: function (s) { return s.stats.mockCount >= 10; } },
     { id: 'ach_species_20', name: '物种图谱',   desc: '收集 20 个不同物种',        reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.uniqueSpecies >= 20; } },
     { id: 'ach_kolb_7',     name: '完整学习圈', desc: '7 天集齐库伯四象限',        reward: { tickets: 5, beans: 180 }, check: function (s) { return s.stats.kolbFullDays >= 7; } },
-    { id: 'ach_feed_7',     name: '七日喂饱',   desc: '7 天把投喂单的 7 件全喂满', reward: { tickets: 3, beans: 100 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 7; } },
-    { id: 'ach_feed_30',    name: '喂猫成瘾',   desc: '30 天把投喂单的 7 件全喂满', reward: { tickets: 8, beans: 300 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 30; } },
+    { id: 'ach_feed_7',     name: '七日喂饱',   desc: '7 天把投喂单全部喂满', reward: { tickets: 3, beans: 100 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 7; } },
+    { id: 'ach_feed_30',    name: '喂猫成瘾',   desc: '30 天把投喂单全部喂满', reward: { tickets: 8, beans: 300 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 30; } },
     { id: 'ach_phase1_clear', name: '全刷完成', desc: '走完 35 天全刷阶段',        reward: { tickets: 6, beans: 250 }, check: function (s) { return s.stats.daysPassed >= 35; } },
     { id: 'ach_no_sick_7',  name: '零生病周',   desc: '连续 7 天没有生物生病',     reward: { tickets: 2, beans: 80 }, check: function (s) { return s.stats.noSickStreak >= 7; } }
   ];
@@ -1696,7 +1705,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.35',
+    VERSION: 'v1.36',
     WORLD: WORLD,
     ZONES: ZONES,
     ROAM_AVOID: ROAM_AVOID,
