@@ -465,6 +465,9 @@
         renderTop();
       }
       renderTop();
+      /* v1.37：地图名牌上的倒计时 / 工地进度只改文字，不重绘地图 ——
+         倒计时要是进 gardenSignature，地图每 8 秒重建一次，手指下的地图会被抽走。 */
+      if (curTab === 'garden') tickWorldTimers();
       /* 乐园页含可拖动的地图：正在拖、或开着弹窗时不重绘，免得把手指下的地图抽走；
          内容指纹没变也不重绘，省得每 8 秒抖一下。 */
       if (curTab === 'garden') {
@@ -571,6 +574,25 @@
       if (bar) {
         const pct = (nextExp === null) ? 100 : Math.min(100, Math.round((curExp - prevExp) / (nextExp - prevExp) * 100));
         bar.style.width = pct + '%';
+      }
+    }
+
+    /* v1.37：现实时钟 —— 顶栏那个一直在走的时间，还有"现在是哪个时段 / 有没有早鸟加成"。
+       时钟一律读 data.js 的 D.clockText()，跟早鸟判定同源，不会两边对不上。 */
+    const clockV = $('#chip-clock-v');
+    if (clockV) {
+      clockV.textContent = (typeof D.clockText === 'function') ? D.clockText(new Date()) : '';
+      const slot = (typeof D.timeSlotOf === 'function') ? D.timeSlotOf(new Date()) : null;
+      const eb = (typeof D.earlyBirdOf === 'function') ? D.earlyBirdOf(new Date()) : null;
+      const ck = $('#chip-clock-k');
+      if (ck) ck.textContent = eb && eb.on ? '🌅' : ((slot && slot.emoji) || '🕐');
+      const chip = $('#chip-clock');
+      if (chip) {
+        chip.classList.toggle('early', !!(eb && eb.on));
+        chip.title = (slot ? slot.emoji + ' ' + slot.name + '（' + slot.hint + '）' : '现在的时间') +
+          '　' + ((eb && eb.on)
+            ? '· 早鸟加成中：12:00 前交任务，豆 ×' + eb.mul
+            : '· 早鸟时段（12:00 前）已过，明天早上再来');
       }
     }
 
@@ -972,27 +994,35 @@
      投影得单独抬高一截，否则看着就像悬在半空。这里给容器打个标记。 */
   function artKindCls(sp) { return sp.img ? '' : ' pet-emoji'; }
 
+  /* v1.37：名字挂在脚底下 —— 之前地图上只有一堆头像，谁是谁全靠认脸。
+     名字是**地图专用**的（列表卡片里本来就写着名字，不用再说一遍），
+     所以放在这儿而不是 petFaceHtml 里。 */
+  function petNameHtml(p) {
+    return '<span class="pp-name">' + esc(p.name) + '</span>';
+  }
+
   function pottedPetHtml(p, zoneId) {
     const sp = window.Game.speciesById(p.speciesId);
     /* v1.29：真菌田 / 植物田都是直接种地里，不套花盆 */
     const inBed = zoneId === 'plantfield' || zoneId === 'fungusfield';
     return '<div class="park-pet potted' + (inBed ? ' no-pot' : '') + (p.illness ? ' sick' : '') + (p.dormant ? ' dormant' : '') + artKindCls(sp) +
       '" data-act="pet-open" data-id="' + p.id + '">' +
-      petFaceHtml(p) + (inBed ? '' : '<span class="pp-pot">' + potSvg() + '</span>') + '</div>';
+      petFaceHtml(p) + (inBed ? '' : '<span class="pp-pot">' + potSvg() + '</span>') +
+      petNameHtml(p) + '</div>';
   }
 
   function pondPetHtml(p) {
     const sp = window.Game.speciesById(p.speciesId);
     return '<div class="park-pet pond-pet' + (p.illness ? ' sick' : '') + artKindCls(sp) +
       '" data-act="pet-open" data-id="' + p.id + '">' +
-      petFaceHtml(p) + '</div>';
+      petFaceHtml(p) + petNameHtml(p) + '</div>';
   }
 
   function walkerPetHtml(p) {
     const sp = window.Game.speciesById(p.speciesId);
     return '<div class="park-pet walker' + (p.illness ? ' sick' : '') + (p.dormant ? ' dormant' : '') + artKindCls(sp) +
       '" data-act="pet-open" data-id="' + p.id + '" data-pet="' + p.id + '">' +
-      petFaceHtml(p) + '</div>';
+      petFaceHtml(p) + petNameHtml(p) + '</div>';
   }
 
   /* 场景排：温室 / 孵化室（v1.20 起孵化仓改用 incubatorBodyHtml 的两个板块，这里不再需要） */
@@ -1038,6 +1068,52 @@
     if (!z) return '';
     return '<span class="wzone-tag wzone-tag-' + z.id + '">' + z.emoji + ' ' + z.name +
       (z.roam ? '' : ' <i>' + count + '/' + z.cap + '</i>') + '</span>';
+  }
+
+  /* ---- 建筑名牌上的倒计时（v1.37）----
+     松果问「这栋还有多久干完」——以前得点进去看面板才知道。
+     现在名牌下面直接挂一行字：营业中/出团中 · 还剩 N 分。
+     只显示"正在干活"和"今天已经出过团"两种确定信息，其他的保持安静。 */
+  function wbTimerOf(id) {
+    if (typeof window.Game.opCfg !== 'function') return null;
+    const ocfg = window.Game.opCfg(id);
+    if (!ocfg) return null;
+    const st = window.Game.opStatus(id);
+    if (st.on) {
+      return {
+        text: (ocfg.kind === 'travel' ? '🧭 出团中 · 还剩 ' : '⏳ 营业中 · 还剩 ') + st.minutes + ' 分',
+        cls: ' on'
+      };
+    }
+    if (ocfg.kind === 'travel' && window.Game.doneToday('travel:' + id)) {
+      return { text: '🧭 今天出过团了', cls: ' done' };
+    }
+    return { text: '⏳ 待开工', cls: '' };
+  }
+  /* 定时把名牌上的倒计时改一次字（只动 textContent，不重绘地图）。
+     地图页不在前台、或者在拖地图时直接跳过，别打扰手指。 */
+  function tickWorldTimers() {
+    const nodes = document.querySelectorAll('.wb-timer[data-op]');
+    for (let i = 0; i < nodes.length; i++) {
+      const el = nodes[i];
+      const id = el.getAttribute('data-op');
+      const wt = wbTimerOf(id);
+      if (!wt) continue;
+      if (el.textContent !== wt.text) el.textContent = wt.text;
+      const cls = 'wb-timer' + wt.cls;
+      if (el.className !== cls) el.className = cls;
+    }
+    /* 建造中的名牌也一起走字（原本只在重绘时更新，看着像卡住了） */
+    const bnodes = document.querySelectorAll('.wb-name[data-build]');
+    for (let j = 0; j < bnodes.length; j++) {
+      const bid = bnodes[j].getAttribute('data-build');
+      const uc = window.Game.buildProgress(bid);
+      if (!uc.on) continue;
+      const pct = Math.round(uc.p * 100);
+      const minLeft = Math.max(1, Math.ceil(uc.remain / 60000));
+      const txt = (window.Game.buildingById(bid) || {}).name + ' · ' + pct + '%（约' + minLeft + '分钟）';
+      if (bnodes[j].textContent !== txt) bnodes[j].textContent = txt;
+    }
   }
 
   function worldMapHtml() {
@@ -1102,16 +1178,23 @@
       const built = window.Game.isBuilt(b.id);
       const uc = window.Game.buildProgress(b.id);
       if (built) {
+        /* v1.37：名牌下面挂一条倒计时（营业中 / 出团中 · 还剩 N 分）。
+           它由 tickWorldTimers() 定时改字，**不进 gardenSignature** ——
+           倒计时要是进了指纹，地图每 8 秒重绘一次，手指下的地图会被抽走。 */
+        const wt = wbTimerOf(b.id);
         h += '<button class="wbuilding built" data-act="build-open" data-id="' + b.id +
           '" style="' + box + '" title="' + esc(b.name) + '">' +
-          '<span class="wb-name wb-name-lv">' + b.emoji + ' ' + b.name + ' Lv.' + window.Game.buildLv(b.id) + '</span></button>';
+          '<span class="wb-name wb-name-lv">' + b.emoji + ' ' + b.name + ' Lv.' + window.Game.buildLv(b.id) + '</span>' +
+          (wt ? '<span class="wb-timer' + wt.cls + '" data-op="' + b.id + '">' + esc(wt.text) + '</span>' : '') +
+          '</button>';
       } else if (uc.on) {
         const pct = Math.round(uc.p * 100);
         const minLeft = Math.max(1, Math.ceil(uc.remain / 60000));
         h += '<button class="wbuilding plot under" data-act="build-open" data-id="' + b.id +
           '" style="' + box + '" title="' + esc(b.name) + ' 建造中">' +
           '<span class="wb-progress"><i style="width:' + pct + '%"></i></span>' +
-          '<span class="wb-name">' + b.name + ' · ' + pct + '%（约' + minLeft + '分钟）</span></button>';
+          '<span class="wb-name" data-build="' + b.id + '">' + b.name + ' · ' + pct +
+          '%（约' + minLeft + '分钟）</span></button>';
       } else if (nb && nb.id === b.id) {
         h += '<button class="wbuilding plot" data-act="build-open" data-id="' + b.id +
           '" style="' + box + '" title="在这里盖' + esc(b.name) + '">' +
@@ -1910,8 +1993,9 @@
     if (typeof window.Game.opCfg === 'function' && window.Game.opCfg(id)) {
       h += opBoxHtml(id);
     }
+    /* v1.37：旅行社不再从这里出团 —— 它有自己的倒计时开工按钮（见 opBoxHtml）。
+       这里只留「查看陈列」这种纯查看的入口。 */
     const ACTS = {
-      travel: { k: 'travel', label: '🧭 出团', tip: '第 1 只当导游，带同伴出游，回来带土特产和收藏品' },
       museum: { k: 'museum', label: '🏛️ 查看陈列', tip: '看旅行收藏品和成就奖杯' }
     };
     const a = ACTS[id];
@@ -1932,6 +2016,9 @@
     const cfg = window.Game.opCfg(id);
     const stt = window.Game.opStatus(id);
     const capN = window.Game.opGuestCap(id);
+    /* v1.37：旅行社也走这一套（kind:'travel'），但它没有"客人"，
+       是导游带同伴出门 —— 文案与人数那几处要分开写。 */
+    const isTrip = cfg.kind === 'travel';
     let h = '<div class="op-box' + (stt.on ? ' running' : '') + '">';
     /* 这一轮要花什么 */
     const costBits = [];
@@ -1942,25 +2029,39 @@
     });
     h += '<div class="op-meta">' +
       '<span>⏱️ 一轮 ' + cfg.minutes + ' 分钟</span>' +
-      '<span>👥 接待 ' + capN + ' 位</span>' +
+      (isTrip ? '<span>🧭 第 1 只当导游，带同伴一起走</span>'
+              : '<span>👥 接待 ' + capN + ' 位</span>') +
       (costBits.length ? '<span>🧺 ' + costBits.join('、') + '</span>' : '<span>🧺 不耗物资</span>') +
-      '<span>💪 劳力：' + (cfg.labor || 1) + ' 只在岗出力（需求 -' + (cfg.laborNeed || 6) + '）</span>' +
+      '<span>💪 劳力：' + (cfg.labor || 1) + ' 只在岗出力' +
+      (isTrip ? '（各掉 ' + (cfg.laborNeed || 8) + ' 点状态）' : '（需求 -' + (cfg.laborNeed || 6) + '）') + '</span>' +
       '</div>';
     if (stt.on) {
       h += '<div class="bar bar-lg" style="margin:10px 0 6px"><i style="width:' +
         Math.round(stt.p * 100) + '%;background:linear-gradient(90deg,#F0C36D,#E9A13B)"></i></div>';
-      h += '<div class="op-run">营业中 · 还剩约 ' + stt.minutes + ' 分钟（' + stt.guests + ' 位客人在里面）</div>';
+      h += '<div class="op-run">' + (isTrip ? '🧭 出团中 · 还剩约 ' + stt.minutes + ' 分钟'
+        : '营业中 · 还剩约 ' + stt.minutes + ' 分钟（' + stt.guests + ' 位客人在里面）') + '</div>';
       const names = (stt.st.guests || []).map(function (pid) {
         const p = window.Game.petById(pid);
         return p ? p.name : '';
       }).filter(Boolean);
       if (names.length) h += '<div class="op-guests">' + esc(names.join('、')) + '</div>';
+      else if (isTrip) {
+        const crewNames = (stt.st.crew || []).map(function (pid) {
+          const p = window.Game.petById(pid);
+          return p ? p.name : '';
+        }).filter(Boolean);
+        if (crewNames.length) h += '<div class="op-guests">🧭 同行的：' + esc(crewNames.join('、')) + '</div>';
+      }
     } else {
-      h += '<button class="btn btn-primary btn-block" data-act="op-start" data-id="' + id + '">' +
-        cfg.emoji + ' ' + cfg.label + '</button>';
-      h += '<div class="bx-tip">开工要物资 + 在岗小生物的劳力；收工时给来光顾的小生物' +
-        esc(cfg.verb === '吃了顿热乎的' ? '管饱' : (cfg.verb === '泡了个热水澡' ? '洗干净' : '补心情')) +
-        '，并记进下面的小日志。</div>';
+      const tripDone = isTrip && window.Game.doneToday('travel:' + id);
+      h += '<button class="btn btn-primary btn-block" data-act="op-start" data-id="' + id + '"' +
+        (tripDone ? ' disabled' : '') + '>' +
+        cfg.emoji + ' ' + cfg.label + (tripDone ? '（今天已经出过团了）' : '') + '</button>';
+      h += '<div class="bx-tip">' + (isTrip
+        ? '开工要点：至少 1 只导游 + 1 只同伴在岗（第 1 只当导游）。走的这几只各掉 ' + (cfg.laborNeed || 8) + ' 点状态，当天下班但岗位保留；约 ' + Math.round((cfg.minutes || 120) / 60) + ' 小时后回来，带回可可豆、土特产和收藏品。'
+        : '开工要物资 + 在岗小生物的劳力；收工时给来光顾的小生物' +
+          esc(cfg.verb === '吃了顿热乎的' ? '管饱' : (cfg.verb === '泡了个热水澡' ? '洗干净' : '补心情')) +
+          '，并记进下面的小日志。') + '</div>';
     }
     h += '</div>';
 
@@ -2329,7 +2430,7 @@
     const gate = (D.TRAIT_SHIFT_GATE || 8);
     const top = tend.slice(0, 4);
     let h = '<div class="tend-card">' +
-      '<div class="tend-head">🎭 性格倾向<span>你做的事会慢慢改变它的脾气</span></div>';
+      '<div class="tend-head">🎭 性格倾向<span>它自己经历的事会慢慢改变它的脾气</span></div>';
     top.forEach(function (t) {
       const pct = Math.min(100, Math.round((t.score / (gate * 2)) * 100));
       h += '<div class="tend-row' + (t.current ? ' cur' : '') + '">' +
@@ -2877,22 +2978,53 @@
   }
 
   /* ---------------- 成就页 ---------------- */
+  /* v1.37：成就页按 4 条线分组显示。
+     以前 100 多条摊在一个大格子里，一眼看过去全是锁，看不出"我该往哪儿使劲"；
+     分组之后每块都能单独看进度，也能立刻看出哪条线快拿到下一个了。 */
+  const ACH_CATS = [
+    { id: 'study', icon: '📚', name: '学习', note: '投喂单、打卡、错题、挑战赛' },
+    { id: 'pet',   icon: '🐾', name: '乐园', note: '扭蛋孵化、照顾、养大' },
+    { id: 'build', icon: '🏛️', name: '建筑', note: '出工、出团、收藏品' },
+    { id: 'time',  icon: '🌅', name: '作息', note: '早鸟、连续天数' }
+  ];
   function viewAch() {
-    const got = D.ACHIEVEMENTS.filter(function (a) { return S.achievements[a.id]; }).length;
+    const won = function (a) { return !!S.achievements[a.id]; };
+    const got = D.ACHIEVEMENTS.filter(won).length;
+    const total = D.ACHIEVEMENTS.length || 1;
     let h = '<div class="panel"><div class="panel-head"><h2>🏆 成就</h2>' +
       '<span class="hint">已达成 ' + got + ' / ' + D.ACHIEVEMENTS.length + '</span></div>' +
-      '<div class="bar bar-lg"><i style="width:' + Math.round(got / D.ACHIEVEMENTS.length * 100) + '%;background:linear-gradient(90deg,#F0C069,#E3A33C)"></i></div></div>';
-    h += '<div class="panel"><div class="ach-grid">';
-    D.ACHIEVEMENTS.forEach(function (a) {
-      const on = !!S.achievements[a.id];
-      h += '<div class="ach' + (on ? ' got' : '') + '">' +
-        '<div class="ach-ico">' + (on ? '🏅' : '🔒') + '</div>' +
-        '<div><div class="ach-name">' + esc(a.name) + '</div>' +
-        '<div class="ach-desc">' + esc(a.desc) + '</div>' +
-        '<div class="ach-rw">🎟️ +' + a.reward.tickets + '　🌰 +' + a.reward.beans + (on ? '　' + fmtWhen(S.achievements[a.id]) : '') + '</div>' +
-        '</div></div>';
+      '<div class="bar bar-lg"><i style="width:' + Math.round(got / total * 100) + '%;background:linear-gradient(90deg,#F0C069,#E3A33C)"></i></div>' +
+      '<div class="fh" style="margin-top:8px">成就做成了「前密后疏」的阶梯：刚开始几乎每天都能拿到一个，' +
+      '越往后越需要积累。每一类下面都能看到自己离下一个还差多少。</div></div>';
+    ACH_CATS.forEach(function (c) {
+      const list = D.ACHIEVEMENTS.filter(function (a) { return (a.cat || 'pet') === c.id; });
+      if (!list.length) return;
+      const cg = list.filter(won).length;
+      /* 已达成：全部展开；没达成：只露出**前 3 个还没拿到的**，别一次糊一屏锁 */
+      const locked = list.filter(function (a) { return !won(a); });
+      const shown = list.filter(won).concat(locked.slice(0, 3));
+      h += '<div class="panel"><div class="panel-head"><h2>' + c.icon + ' ' + c.name + '</h2>' +
+        '<span class="hint">' + cg + ' / ' + list.length + ' · ' + c.note + '</span></div>' +
+        '<div class="bar"><i style="width:' + Math.round(cg / (list.length || 1) * 100) + '%"></i></div>';
+      h += '<div class="ach-grid">';
+      shown.forEach(function (a) {
+        const on = won(a);
+        h += '<div class="ach' + (on ? ' got' : '') + '">' +
+          '<div class="ach-ico">' + (on ? '🏅' : '🔒') + '</div>' +
+          '<div><div class="ach-name">' + esc(a.name) + '</div>' +
+          '<div class="ach-desc">' + esc(a.desc) + '</div>' +
+          '<div class="ach-rw">🎟️ +' + a.reward.tickets + '　🌰 +' + a.reward.beans + (on ? '　' + fmtWhen(S.achievements[a.id]) : '') + '</div>' +
+          '</div></div>';
+      });
+      h += '</div>';
+      if (locked.length > 3) {
+        h += '<div class="fh" style="margin-top:8px">这一类后面还有 ' + (locked.length - 3) +
+          ' 个更远的成就，拿到了就会出现在这里。</div>';
+      } else if (!locked.length) {
+        h += '<div class="fh" style="margin-top:8px">🎉 这一类全部达成了。</div>';
+      }
+      h += '</div>';
     });
-    h += '</div></div>';
     return h;
   }
 
@@ -3359,6 +3491,10 @@
       '<tr><td>🌰 可可豆</td><td>升级里程碑、成就、学习任务奖励</td><td>买清水/营养液/饲料/药水，扩展托位，买加速沙漏</td></tr>' +
       '<tr><td>🎖️ 照顾等级</td><td>照顾小生物得经验</td><td>升级解锁更高级照顾道具（环绕音响 / 猫爬架 / 高蛋白营养液 / 营养大餐）</td></tr></table>';
     h += '<p>注意：胶囊券<b>不能买</b>，只能靠学习挣。所以每一次扭蛋，都是你真的学过。</p>';
+    /* v1.37：现实时钟 + 早鸟 */
+    h += '<div class="hintbox">🌅 <b>顶栏那个一直在走的时间是真的。</b>你的任务如果在 <b>12:00 之前</b>交，可可豆 <b>×1.5</b>（券不变）——' +
+      '早上那一段是你一天里最不容易被打断的时间，值得多给一点。过了 12 点照样能交、照样发奖，只是没有这份加成。' +
+      '顶栏时钟在早鸟时段是暖金色的，一眼就能看出"现在交划不划算"。</div>';
 
     h += '<h3>三、养一只小生物的全流程</h3>';
     h += '<div class="step"><b>1</b><div>扭蛋拿到<b>胶囊</b>。胶囊里是植物 / 真菌 / 藻类，就去<b>温室</b>；是动物，就去<b>孵化仓</b>。放错地方不孵化。</div></div>';
@@ -3451,14 +3587,37 @@
     h += '<p style="font-size:12.5px;color:#8AA394">说明：这份名单和讲解顺序来自云南省 2025 年科目五考试大纲（中文类 12 个景点）。考试形式通常是抽取若干景点后选择一个讲解，所以 12 篇都要准备。导游词正文请以官方指定教材或云南省文旅培训中心的材料为准，本游戏只负责排进度和逼你开口。</p>';
 
     h += '<h3>十一、每天怎么用</h3>';
-    h += '<div class="step"><b>1</b><div>打开「今日投喂」，最上面就是投喂单的 7 个格子——今天喂了几样，一眼看得见。下面「加餐」区是额外的，不用管它。</div></div>';
+    h += '<div class="step"><b>1</b><div>打开「今日投喂」，最上面就是投喂单的 8 个格子——今天喂了几样，一眼看得见。下面「加餐」区是额外的，不用管它。</div></div>';
     h += '<div class="step"><b>2</b><div>精读点「📖 去精读」：选一本、填今天读到哪儿，交了就完事。笔记想写两句就写，不想写就空着。</div></div>';
     h += '<div class="step"><b>3</b><div>点「📝 去记录 / ✍️ 去登记」：写一段今日收获、登记题量，或者传截图。做完当场结算——做了就是做了，奖励马上发。</div></div>';
     h += '<div class="step"><b>4</b><div>导游词点「📸 去凭证」：在另一个 App 里通读/背诵，截一张图带过来，再写/录一句「看法」。结算后拿券和豆。</div></div>';
     h += '<div class="step"><b>5</b><div>8 件全喂满会额外给 +2 券 / +' + feedBonus() + ' 豆。用挣来的资源去扭蛋、养小生物——它们会催你明天再来。</div></div>';
     h += '<div class="step"><b>6</b><div>孵化好了先别急着点破壳——会弹 <b>1 道题</b>的破壳测验（答错可再答一次、看解析）。答对了它才出来。</div></div>';
 
-    h += '<h3>十二、换设备 / 换浏览器怎么办</h3>';
+    /* v1.37：乐园侧的三件事 —— 建筑倒计时 / 小生物的性格与名字 / 成就阶梯 */
+    h += '<h3>十二、乐园：建筑的在干活、名字在脚下、性格靠它自己长</h3>';
+    h += '<p><b>建筑在不在干活，名牌上写着。</b>已经建成的建筑，名牌下面有一行小字：<b>「⏳ 营业中 · 还剩 N 分」</b>（旅行社是「🧭 出团中 · 还剩 N 分」）。' +
+      '金色的就是在干活，灰白的「⏳ 待开工」就是闲着。建造中的工地也会一直显示「还差百分之几、约几分钟」。</p>';
+    h += '<table class="mini"><tr><th>建筑</th><th>一轮/一趟</th><th>你得到什么</th></tr>' +
+      '<tr><td>🍲 食堂</td><td>30 分钟</td><td>饭钱收入：按光顾人数给可可豆</td></tr>' +
+      '<tr><td>🛁 澡堂</td><td>25 分钟</td><td>营养液（烧热水要清水，比别的多花一点）</td></tr>' +
+      '<tr><td>📚 图书馆</td><td>40 分钟</td><td>借阅收入（可可豆）+ 一点成长值</td></tr>' +
+      '<tr><td>🏛️ 博物馆</td><td>45 分钟</td><td>门票收入（可可豆）+ 一点成长值</td></tr>' +
+      '<tr><td>🧭 旅行社</td><td><b>2 小时</b></td><td>可可豆 + 土特产 + 收藏品（第 1 只当导游，带同伴走）</td></tr></table>';
+    h += '<div class="hintbox">⏳ 旅行社不再是"点一下立刻回来"了 —— 它现在是一次真的行程：出发 → 挂着倒计时 → 到点回来结算。' +
+      '出发时就把体力扣掉，所以中途关页面不会白赚一趟；<b>离线回来也会自动结算</b>，醒来东西就在那儿。</div>';
+    h += '<p><b>每只小生物的名字挂在它脚底下。</b>地图上不用再认脸了；如果它还兼着班，金色小牌会跟在名字下面，' +
+      '写着在哪栋建筑上班。</p>';
+    h += '<div class="warnbox">🎭 <b>性格是怎么变的：它自己经历的事说了算，不是你照顾它。</b>在食堂帮过厨的会变得嘴馋，在图书馆当值的会变得好奇，' +
+      '在澡堂当班的会变得慵懒，在博物馆看展的会变得好奇，带团出游回来会变得活泼；生病、被冷落、在保管室待久了也会留下痕迹。' +
+      '每次出门回来还有小概率撞上一件小事（追一阵风、捡到半块饼、泡到水凉了……），这些也原样记进<b>它自己的日志</b>。' +
+      '攒够分它就会真的换脾气 —— 性格会实打实改变它的状态衰减、成长、惹祸概率和爱去哪。</div>';
+    h += '<p><b>怎么回看一只小生物的日子</b>：点地图上的它 → 「📓 它的日志」。里面按「今天 / 昨天 / 更早」分组，' +
+      '每条都写着当天发生了什么、状态从多少变成多少、性格往哪偏了一点。</p>';
+    h += '<p><b>成就做成了"前密后疏"的阶梯。</b>几乎每天或隔天就能拿到一个（投喂单 1 / 2 / 3 / 5 / 7 天各有一个，连着打卡也有 2 / 3 / 5 天），' +
+      '越往后越需要积累。成就页按<b>学习 / 乐园 / 建筑 / 作息</b>四条线分组，每条线单独显示进度，没拿到的只露出最近三个 —— 不用盯着一屏锁发呆。</p>';
+
+    h += '<h3>十三、换设备 / 换浏览器怎么办</h3>';
     h += '<p><b>登录一次，处处同步</b>：点顶栏的云朵 ☁️，用一个邮箱登录（收 6 位验证码即可）。之后进度自动上云——手机、电脑、iPad、任何浏览器，打开就是最新进度，什么都不用管。</p>';
     h += '<div class="step"><b>1</b><div>主设备：点顶栏 ☁️ → 填邮箱 → 收验证码 → 登录。</div></div>';
     h += '<div class="step"><b>2</b><div>其他设备：打开同一个游戏，点 ☁️ → 用<b>同一个邮箱</b>登录一次。</div></div>';
@@ -3551,6 +3710,10 @@
         toast('👋 来光顾的是：' + esc(r.guestNames.join('、')), 'ok', 6000);
       }
       if (bxPaint) bxPaint(); else render();
+      /* v1.37：开工是从弹窗里点的，`bxPaint()` 只重画弹窗，地图上那块名牌还停在「待开工」，
+         要等 8 秒轮询才跟上。这里顺手把倒计时文字刷一遍 —— tickWorldTimers 只改 textContent，
+         不重绘地图，所以不会打断手指下的拖动。 */
+      tickWorldTimers();
       renderTop();
       return;
     }

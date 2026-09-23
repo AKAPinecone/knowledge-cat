@@ -88,6 +88,9 @@ window.Store = (function () {
         booksDone: 0, scriptsMastered: 0, feynmanCards: 0,
         mockCount: 0, fullFeedDays: 0,
         kolbFullDays: 0, daysPassed: 0, noSickStreak: 0, sickFreeDays: 0,
+        /* v1.37：出工次数（打工/出团各算一次）与早鸟完成次数 —— 成就阶梯用。
+           老存档由 migrate 的 stats 补全逻辑自动填 0，不用单独迁移。 */
+        worksDone: 0, earlyFinishes: 0,
         evidenceCount: 0,
         quizAttempts: 0, quizPassed: 0, quizAnswered: 0, quizCorrect: 0
       },

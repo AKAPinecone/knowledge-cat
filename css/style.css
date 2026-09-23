@@ -86,6 +86,12 @@ h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:.2px;}
 .chip .chip-v{font-weight:700;color:var(--green-deep);font-variant-numeric:tabular-nums;}
 .chip-dday{background:linear-gradient(135deg,#FFF6E6,#FDF0D8);border-color:#F0DDB4;}
 .chip-dday .chip-v{color:#B8791C;font-size:14px;}
+/* v1.37：现实时钟。12:00 前（早鸟时段）整块点亮成暖金色，过点了就退回素色 ——
+   不用文字提醒，扫一眼颜色就知道"现在交任务划不划算"。 */
+.chip-clock .chip-v{font-variant-numeric:tabular-nums;}
+.chip-clock.early{background:linear-gradient(135deg,#FFF6E6,#FCEBC6);border-color:#EBCF93;
+  box-shadow:0 1px 8px rgba(227,163,60,.28);}
+.chip-clock.early .chip-k,.chip-clock.early .chip-v{color:#B8791C;}
 
 .wallet{margin-left:auto;display:flex;gap:10px;position:relative;z-index:1;}
 .cur{
@@ -1387,7 +1393,18 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
    在建筑里上班的挂一面金色小牌（👜 + 建筑名）；今天已经出过工、岗位还留着的
    挂一面淡灰小牌（💤 建筑名·休）—— 明天它会自己回来上班。挂在脚下，
    不跟头顶的会话气泡打架。 */
-.pp-work{position:absolute;left:50%;bottom:-4px;transform:translate(-50%,100%);z-index:7;
+/* ---- 脚底下的名字（v1.37）----
+   原来地图上只有一堆头像，谁是谁全靠认脸；现在名字直接挂在脚底下。
+   它是**第一行**，打工小牌挪到第二行（见下面的 .pp-work 偏移量）。 */
+.pp-name{position:absolute;left:50%;bottom:-4px;transform:translate(-50%,100%);z-index:7;
+  max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:10.5px;font-weight:700;line-height:1.6;letter-spacing:.2px;text-align:center;
+  color:#fff;background:rgba(38,48,42,.55);border-radius:999px;padding:0 7px;
+  text-shadow:0 1px 1px rgba(0,0,0,.3);pointer-events:none;}
+/* 草地上的小生物整体缩到 .8，牌子也跟着缩，把字号补回来一点 */
+.wzone-meadow .pp-name{font-size:12px;max-width:96px;}
+
+.pp-work{position:absolute;left:50%;bottom:-4px;transform:translate(-50%,calc(100% + 18px));z-index:7;
   display:inline-flex;align-items:center;gap:3px;white-space:nowrap;
   font-size:10.5px;font-weight:800;line-height:1.5;letter-spacing:.2px;color:#7A4A0B;
   background:linear-gradient(180deg,#FFEAB0,#FFD166);border:1px solid rgba(210,148,28,.72);
@@ -1397,7 +1414,6 @@ table.mini th{background:var(--panel-3);color:var(--ink-2);font-weight:600;}
   box-shadow:0 1px 4px rgba(40,60,50,.14);font-weight:700;}
 /* 今天已出工：牌子整块淡下去一点，跟"还能出工"的金牌一眼分得开 */
 .pp-work.rest{opacity:.78;}
-/* 草地上的小生物整体缩到 .8，牌子也跟着缩，把字号补回来一点 */
 .wzone-meadow .pp-work{font-size:13px;}
 
 /* ---- 生物弹窗 ---- */
@@ -1850,6 +1866,15 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
   border:1px solid rgba(124,193,118,.6);border-radius:999px;padding:1px 7px;white-space:nowrap;
   box-shadow:0 2px 6px rgba(20,50,30,.12);}
 .wb-name-lv{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);white-space:nowrap;}
+/* v1.37：名牌下面那行倒计时（营业中 / 出团中 · 还剩 N 分）。
+   平时是灰白的「⏳ 待开工」，真在干活时才变成金色 —— 一眼就能扫到哪栋还在跑。 */
+.wb-timer{position:absolute;left:50%;bottom:-6px;transform:translate(-50%,calc(100% + 3px));z-index:3;
+  white-space:nowrap;font-size:10px;font-weight:800;line-height:1.65;letter-spacing:.2px;padding:0 7px;
+  color:#6B5A2E;background:rgba(255,255,255,.84);border:1px solid rgba(178,158,108,.5);
+  border-radius:999px;box-shadow:0 1px 3px rgba(40,30,10,.14);pointer-events:none;}
+.wb-timer.on{color:#7A4A0B;background:linear-gradient(180deg,#FFEAB0,#FFD166);
+  border-color:rgba(210,148,28,.72);box-shadow:0 2px 5px rgba(70,45,10,.2);}
+.wb-timer.done{color:#5D6B62;background:rgba(255,255,255,.76);border-color:rgba(148,164,154,.5);}
 .wbuilding.built:hover{transform:translate(-50%,-50%) scale(1.04);}
 .wbuilding.built:active{transform:translate(-50%,-50%) scale(.97);}
 /* v1.31：占位/选中/范围提示框一律不画——建筑画在底图里，热区保持透明，

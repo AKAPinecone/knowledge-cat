@@ -675,47 +675,116 @@ window.GAME_DATA = (function () {
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
-  /* ---------- 性格印记：事件怎么改变性格（v1.33） ----------
-     v1.27 的规则是「性格孵化时随机、之后一直不变」。可玩家一直在变：
-     有人天天喂，有人只带它去图书馆，而宠物永远一个脾气，日志里也就缺了
-     「它因为你做了什么、慢慢变成了什么」这条线。所以 v1.33 补一层**性格印记**。
+  /* ---------- 性格印记：经历怎么改变性格（v1.33 起，v1.37 改口径） ----------
+     v1.27 的性格是「孵化时随机、之后一直不变」；v1.33 补了一层**性格印记**，
+     让经历真的能改脾气。但 v1.33 的触发源里混了「你照顾它」——
+     喝足了水→好奇、吃得饱→嘴馋、洗得干净→慵懒、玩得开心→活泼。
+
+     v1.37 把护理那四条整个摘掉。理由：护理是**你在养它**，不是它在过日子。
+     一只天天被喂的猫不该因此变得"嘴馋"；真去食堂帮过厨的才该。
+     现在触发源只剩「它自己参与的活动与经历」：
+
+       ① 参与的活动 —— 在食堂帮厨 → 嘴馋，在图书馆当值 → 好奇，
+          在澡堂当班 → 慵懒，在博物馆看展 → 好奇，带团出游 → 活泼（带团最重，+3）；
+       ② 遭遇到的事 —— 生病、被冷落、在保管室静静待着；
+       ③ **随机经历**（TRAIT_EVENTS）—— 每次它出门回来，有小概率撞上一件小事。
+          这些事会原样写进**它自己的日志**：翻日志就能看见"它今天遇上了什么"，
+          性格变化只是顺带的结果。
 
      【数据结构】pet.traitScore = { 性格id: 分数 }，一宠一份、互不影响。
-     【触发条件】每发生一次事件，就按下面这张表给「该事件对应的性格」加分。
      【更新规则】
        ① 只加分、不自动衰减 —— 记的是"经历"，经历不会消失；
        ② 每次加分后检查：得分最高的性格若 ≠ 当前性格，且领先当前性格
           TRAIT_SHIFT_GATE 分以上 → 换性格（写 from→to，落进这只宠物的日志）；
        ③ 换性格后所有分数按 50% 折算保留（不归零：新脾气的底子还在，
           下次再攒够会快一点；也避免"刚换完立刻又换回来"的横跳）；
-       ④ 用"领先阈值"而不是"谁高听谁的"：照顾多了分数普遍上涨，
-          不留缓冲就会天天变脸。8 分 ≈ 连续 4 次同类事件才够翻盘。
+       ④ 用"领先阈值"而不是"谁高听谁的"：经历多了分数普遍上涨，
+          不留缓冲就会天天变脸。8 分 ≈ 连续 4 次同类经历才够翻盘。
 
      【为什么能这么设计】性格不是装饰，它真的改状态衰减、成长、经验、
      惹祸概率和它爱去哪（见 PERSONALITIES）。所以"性格会变"等于
-     "你的养法会真的改变这只小生物的活法"——这条因果链值得被记下来。 */
+     "它在乐园里怎么过日子，就会慢慢变成什么脾气"——这条因果链值得被记下来。 */
   const TRAIT_RULES = [
-    { id: 'drink',        icon: '💧', name: '喝足了水',   trait: 'curious', delta: 1, note: '护理水分' },
-    { id: 'feed',         icon: '🍯', name: '吃得饱',     trait: 'foodie',  delta: 2, note: '护理营养' },
-    { id: 'clean',        icon: '🛁', name: '洗得干净',   trait: 'lazy',    delta: 2, note: '护理清洁' },
-    { id: 'play',         icon: '🎈', name: '玩得开心',   trait: 'lively',  delta: 2, note: '护理娱乐 / 一键照顾' },
-    { id: 'work_canteen', icon: '🍜', name: '食堂帮厨',   trait: 'foodie',  delta: 2, note: '在食堂出工' },
-    { id: 'work_library', icon: '📖', name: '图书馆当值', trait: 'curious', delta: 2, note: '在图书馆出工' },
-    { id: 'work_bath',    icon: '🛁', name: '澡堂当值',   trait: 'lazy',    delta: 2, note: '在澡堂出工' },
-    { id: 'work_travel',  icon: '🧭', name: '带团出游',   trait: 'lively',  delta: 2, note: '在旅行社出工' },
-    { id: 'sick',         icon: '😷', name: '生了一场病', trait: 'timid',   delta: 2, note: '生病' },
-    { id: 'neglect',      icon: '🕸️', name: '被冷落了',   trait: 'timid',   delta: 2, note: '状态长期归零' },
-    { id: 'store',        icon: '📦', name: '静静待着',   trait: 'lazy',    delta: 1, note: '住进保管室' }
+    /* ① 参与的活动：在哪栋建筑出力 / 光顾，脾气就往那个方向偏一点 */
+    { id: 'work_canteen', icon: '🍜', name: '食堂帮厨',   trait: 'foodie',  delta: 2, from: 'build' },
+    { id: 'work_library', icon: '📖', name: '图书馆当值', trait: 'curious', delta: 2, from: 'build' },
+    { id: 'work_bath',    icon: '🛁', name: '澡堂当值',   trait: 'lazy',    delta: 2, from: 'build' },
+    { id: 'work_museum',  icon: '🏛️', name: '博物馆看展', trait: 'curious', delta: 2, from: 'build' },
+    { id: 'work_travel',  icon: '🧭', name: '带团出游',   trait: 'lively',  delta: 3, from: 'build' },
+    /* ② 遭遇：乐园里真实会发生的事（真遇到才会，不是玩家点出来的） */
+    { id: 'sick',         icon: '😷', name: '生了一场病', trait: 'timid',   delta: 2, from: 'life' },
+    { id: 'neglect',      icon: '🕸️', name: '被冷落了',   trait: 'timid',   delta: 2, from: 'life' },
+    { id: 'store',        icon: '📦', name: '静静待着',   trait: 'lazy',    delta: 1, from: 'life' }
   ];
   const TRAIT_RULE_MAP = {};
   TRAIT_RULES.forEach(function (r) { TRAIT_RULE_MAP[r.id] = r; });
   function traitRuleById(id) { return TRAIT_RULE_MAP[id] || null; }
-  /* 护理动作 -> 性格印记规则（水→好奇 / 营养→嘴馋 / 清洁→慵懒 / 娱乐→活泼） */
-  const TRAIT_RULE_BY_STAT = { water: 'drink', nutri: 'feed', clean: 'clean', fun: 'play' };
-  /* 建筑 -> 性格印记规则：在哪儿上班，就慢慢变成什么样的脾气 */
+  /* 建筑 -> 性格印记规则：在哪儿出力 / 光顾，就慢慢变成什么样的脾气。
+     v1.37 起五栋建筑全覆盖（补上 museum），并且**不再有护理那一支**。 */
   const TRAIT_RULE_BY_BUILD = {
-    canteen: 'work_canteen', library: 'work_library', bath: 'work_bath', travel: 'work_travel'
+    canteen: 'work_canteen', library: 'work_library', bath: 'work_bath',
+    museum: 'work_museum', travel: 'work_travel'
   };
+
+  /* ---------- 随机经历（v1.37）----------
+     每次小生物从建筑收工 / 出团回来，有小概率撞上一件小事。
+     它自带 trait + delta（不用在 TRAIT_RULES 里另开规则），会原样写进**它自己的日志**，
+     并且和别的事件一样参与性格累积。delta 一律 1：随机经历是"添一笔"，
+     真正的分量在「它反复去干什么」（那些是 2~3 分）。
+
+     where 限定只在哪些建筑收工时可能发生；不写 = 哪儿都可能。
+     同一只每天最多撞上 TRAIT_EVENT_MAX 件（在 game.js 里控），免得日志被刷屏。 */
+  const TRAIT_EVENT_MAX = 2;
+  const TRAIT_EVENTS = [
+    /* 好奇 */
+    { id: 'exp_rock',   icon: '🪨', trait: 'curious', delta: 1, where: ['library', 'museum'],
+      text: ['把角落里的石头翻过来，蹲着数了半天虫子。', '盯着一块地砖的花纹看出了神。'] },
+    { id: 'exp_walk',   icon: '🔎', trait: 'curious', delta: 1,
+      text: ['顺着一条没走过的路一直走到尽头，才想起来该回去了。', '跟着一只没见过的虫子走了很远。'] },
+    { id: 'exp_book',   icon: '📖', trait: 'curious', delta: 1, where: ['library'],
+      text: ['从书架最底层抽出一本没人碰过的册子，蹲着看完了。'] },
+    /* 活泼 */
+    { id: 'exp_wind',   icon: '🤸', trait: 'lively', delta: 1,
+      text: ['追着一阵风跑了一条街。', '在门口的斜坡上冲上冲下，来回跑了好几趟。'] },
+    { id: 'exp_puddle', icon: '💦', trait: 'lively', delta: 1,
+      text: ['一脚踩进水洼，溅了自己一身，居然还挺高兴。'] },
+    { id: 'exp_laugh',  icon: '🎈', trait: 'lively', delta: 1, where: ['canteen', 'bath'],
+      text: ['笑得停不下来，把旁边的都带笑了。'] },
+    /* 嘴馋 */
+    { id: 'exp_cake',   icon: '🤤', trait: 'foodie', delta: 1, where: ['canteen'],
+      text: ['在后厨门口捡到半块饼，左右看了看，迅速解决。'] },
+    { id: 'exp_sweet',  icon: '🍯', trait: 'foodie', delta: 1, where: ['canteen'],
+      text: ['循着一股甜味一路找到后厨，被拦了下来。'] },
+    { id: 'exp_carrot', icon: '🥕', trait: 'foodie', delta: 1,
+      text: ['把别人剩下的半根胡萝卜叼走了，藏在窝里。'] },
+    /* 慵懒 */
+    { id: 'exp_pond',   icon: '😴', trait: 'lazy', delta: 1,
+      text: ['在池塘边蹲了一下午，什么也没干。', '找到一块晒得到太阳的石头，摊在上面没动。'] },
+    { id: 'exp_chair',  icon: '🛋️', trait: 'lazy', delta: 1, where: ['library'],
+      text: ['在图书馆的摇椅上睡到闭馆，最后是被人叫醒的。'] },
+    { id: 'exp_soak',   icon: '🧖', trait: 'lazy', delta: 1, where: ['bath'],
+      text: ['泡到水都凉了还不想起来。'] },
+    /* 胆小 */
+    { id: 'exp_bag',    icon: '🐚', trait: 'timid', delta: 1,
+      text: ['被一阵塑料袋的响声吓得躲到花盆后面，过了好一会儿才探出头。'] },
+    { id: 'exp_step',   icon: '👀', trait: 'timid', delta: 1,
+      text: ['听到陌生的脚步声经过，一动不动地等了很久。'] },
+    { id: 'exp_echo',   icon: '🏛️', trait: 'timid', delta: 1, where: ['museum'],
+      text: ['在空荡荡的展厅里贴着墙根走，回声一响就停下。'] }
+  ];
+
+  /* 摇一件随机经历：whereId 传建筑 id（'canteen' / 'travel' …），
+     只在「哪儿都行」和「指定这栋」里抽。抽不到就返回 null。 */
+  function rollTraitEvent(whereId) {
+    const pool = TRAIT_EVENTS.filter(function (e) {
+      return !e.where || e.where.indexOf(whereId) >= 0;
+    });
+    if (!pool.length) return null;
+    const e = pool[Math.floor(Math.random() * pool.length)];
+    const txt = (e.text && e.text.length) ? e.text[Math.floor(Math.random() * e.text.length)] : '';
+    return { event: e, text: txt };
+  }
+
   /* 换性格需要的"领先分数"（见上面更新规则 ②） */
   const TRAIT_SHIFT_GATE = 8;
   /* 换性格后的分数折算率（更新规则 ③） */
@@ -750,7 +819,9 @@ window.GAME_DATA = (function () {
     store:   { icon: '📦', label: '保管室' },
     neglect: { icon: '🕸️', label: '被冷落' },
     shift:   { icon: '🎭', label: '性格' },
-    rename:  { icon: '✏️', label: '改名' }
+    rename:  { icon: '✏️', label: '改名' },
+    /* v1.37：随机经历（出门一趟撞见的小事）——「经历」这一类的日志 */
+    life:    { icon: '🎈', label: '经历' }
   };
 
   /* ---------- 扭蛋 ---------- */
@@ -793,6 +864,49 @@ window.GAME_DATA = (function () {
     beansPerfect: 60    /* 满分再额外加这么多 🌰（v1.24：50 → 60） */
   };
 
+  /* ---------- 现实时间系统（v1.37）----------
+     游戏里的"一天"本来就跟着真实日期走（每日重置 / 投喂单刷新），
+     v1.37 把它细化到**时段**：一天分六段，顶栏挂一个走真实时间的时钟，
+     并且**12:00 之前结算的学习任务有早鸟加成**。
+
+     为什么只给早鸟加成，而不做成一条"早晚都有的曲线"：
+     松果是上班族 + ADHD，一天里真正能坐下来的就那么几段。
+     与其"什么时候学都给一样多"，不如把奖励压在上午 —— 让"今天早点做完"
+     变成一件有即时回报的事，而不是拖到晚上再补。
+
+     加成的落点**只有学习任务**（study.finish 里结算的豆），
+     乐园侧的建筑产出不吃这个系数：那是放置玩法，跟作息无关。
+     豆乘倍率（向上取整），券不动 —— 券是稀缺货币，乘 1.5 会失控。 */
+  const EARLY = { untilHour: 12, mul: 1.5 };
+  const TIME_SLOTS = [
+    { id: 'dawn',      name: '清晨', emoji: '🌅', from: 5,  to: 8,  early: true,  hint: '一天里最清醒的时候' },
+    { id: 'morning',   name: '上午', emoji: '☀️', from: 8,  to: 12, early: true,  hint: '12 点前完成有早鸟加成' },
+    { id: 'noon',      name: '午间', emoji: '🍱', from: 12, to: 14, early: false, hint: '饭后小憩，能刷几道是几道' },
+    { id: 'afternoon', name: '下午', emoji: '🌤️', from: 14, to: 18, early: false, hint: '下班前的缝隙时间' },
+    { id: 'evening',   name: '傍晚', emoji: '🌆', from: 18, to: 22, early: false, hint: '一天里最长的一段' },
+    { id: 'night',     name: '深夜', emoji: '🌙', from: 22, to: 5,  early: false, hint: '该睡了，明天早点开始更划算' }
+  ];
+  function timeSlotOf(d) {
+    const h = (d || new Date()).getHours();
+    for (let i = 0; i < TIME_SLOTS.length; i++) {
+      const s = TIME_SLOTS[i];
+      /* from < to 是常规时段；from > to 是跨零点的深夜 */
+      if (s.from < s.to ? (h >= s.from && h < s.to) : (h >= s.from || h < s.to)) return s;
+    }
+    return TIME_SLOTS[TIME_SLOTS.length - 1];
+  }
+  /* 早鸟：12:00 之前。返回 { on, mul, label, until } */
+  function earlyBirdOf(d) {
+    const dt = d || new Date();
+    const on = dt.getHours() < EARLY.untilHour;
+    return { on: on, mul: on ? EARLY.mul : 1, label: on ? '早鸟加成' : '', until: EARLY.untilHour };
+  }
+  /* 真实时钟 'HH:MM'（顶栏那个一直在走的表） */
+  function clockText(d) {
+    const dt = d || new Date();
+    return String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
+  }
+
   /* ---------- 经济参数总表（v1.24） ----------
      跟可可豆有关的系数全部集中在这里，改平衡只动这一块。
      dev/economy-audit.js 直接读这张表算「每日收支」，数字只此一份，不用两头对。
@@ -815,8 +929,17 @@ window.GAME_DATA = (function () {
     level:   { base: 18, perLv: 7 },            /* 照顾等级升级奖励 = base + perLv × 新等级 */
     feed:    { fullBonus: 75 },                 /* 投喂单全清（当前 8 件全做完），一次给 🌰 */
     kolb:    { bonus: 35 },                     /* 库伯四象限当日集齐给 🌰 */
-    canteen: { base: 9,  perLv: 4 },            /* 食堂每份饭 = base + perLv × 食堂等级 */
-    travel:  { base: 20, perLv: 12, rand: 14 }, /* 旅行社每次出团 = base + perLv × 等级 + [0,rand) 随机 */
+    /* ---- 五栋建筑的产出系数（v1.37 重新标定，见下面「建筑收支」那段说明） ----
+       前四个都是「每轮 = (base + perLv × 等级) × 光顾人数」（四舍五入）；旅行社是「每次出团」。
+       豆一律乘稀有度效益系数 boost（在岗那几只是否稀有）。
+       ⚠️ v1.37 修正：这四个以前只有 canteen 被 game.js 读，library/museum/bath 是**死配置**
+       （beans 分支写死读 canteen、澡堂硬编码 1+lv）。现在 opFinish 按建筑 id 各读各的 ——
+       改这里的数才真的会生效，逐栋平衡也才成立。 */
+    canteen: { base: 9,  perLv: 4 },            /* 食堂每份饭 = base + perLv × 食堂等级（要买清水+饲料） */
+    bath:    { base: 1,  perLv: 0.6 },          /* 澡堂每轮营养液 = (base + perLv × 等级) × 人数 */
+    library: { base: 3,  perLv: 2 },            /* 图书馆每轮借阅收入 = (base + perLv × 等级) × 人数（不耗物资） */
+    museum:  { base: 2,  perLv: 2 },            /* 博物馆每轮门票 = (base + perLv × 等级) × 人数（不耗物资） */
+    travel:  { base: 30, perLv: 16, rand: 18 }, /* 旅行社每次出团 = base + perLv × 等级 + [0,rand) 随机 */
     adopt:   { 1: 22, 2: 55, 3: 130 },          /* 送养谢礼基数（稀有度 1/2/3） */
     adoptStageMul: { baby: 0.5, teen: 0.8, adult: 1.2, elite: 1.8 }, /* 送养阶段系数 */
     /* 出工一趟涨多少成长值（v1.32）：在岗打工收工后按这个基数给在岗的小生物加成长，
@@ -826,6 +949,25 @@ window.GAME_DATA = (function () {
        每多 step 道 → +beans 豆，封顶 cap（防止"刷题=刷豆"把别的玩法饿死）。 */
     quizExtra: { step: 10, beans: 6, cap: 90 }
   };
+
+  /* ---------- 建筑收支对照（v1.37 标定）----------
+     原则：**每栋建筑的净收益必须为正**，而且量级要挨着 ——
+     不然玩家会只开一栋、另外四栋形同虚设（v1.36 之前的实况：
+     图书馆 gain:'none' 一分豆不产，博物馆干脆没有运营，两栋都是摆设）。
+
+     投入口径：物资按商店标价折算成豆（清水 2 / 饲料 4），状态消耗按
+     「一天自然衰减 24 点/项」折算（≈ 每 4 点状态值 1 个基础道具）。
+     产出口径：豆按面值，营养液按标价 6 豆折算。
+
+     建筑      Lv1 投入      Lv1 产出        Lv1 净    Lv5 净   单轮时长
+     食堂      18 豆        39 豆          +21      +161     30 分
+     澡堂      12 豆        约30 豆(营养液)  +18      +140     25 分
+     图书馆    0            15 豆          +15      +91      40 分
+     博物馆    0            12 豆          +12      +84      45 分
+     旅行社    ≈11 豆等值    约55 豆        约+44    +108     120 分
+
+     「零投入」的两栋故意给得最少 —— 不花物资就该赚得最慢，
+     但它们各带一份成长值（不花道具就能长本事），整体仍划算。 */
 
   /* ---------- 题库（这就是那个「端口」） ----------
      往里加题有两种方式，效果一样：
@@ -1336,45 +1478,155 @@ window.GAME_DATA = (function () {
     { type: 'writescript', name: '写 / 修改导游词', emoji: '✍️', desc: '自己动笔写一篇导游词，也可以接着改以前写的；稿子存下来，考前就是你的独门讲解', targetLabel: '最少字数', defaultTarget: 120 }
   ];
 
-  /* ---------- 成就 ---------- */
-  const ACHIEVEMENTS = [
-    { id: 'ach_first_egg',  name: '第一颗胶囊', desc: '扭到你的第一颗胶囊',       reward: { tickets: 1, beans: 20 }, check: function (s) { return s.stats.totalPulls >= 1; } },
-    { id: 'ach_first_pet',  name: '破壳而出',   desc: '孵化出第一只小生物',       reward: { tickets: 1, beans: 30 }, check: function (s) { return s.stats.totalHatched >= 1; } },
-    { id: 'ach_hatch_10',   name: '乐园初成',   desc: '累计孵化 10 只',           reward: { tickets: 2, beans: 60 }, check: function (s) { return s.stats.totalHatched >= 10; } },
-    { id: 'ach_hatch_30',   name: '云雾缭绕',   desc: '累计孵化 30 只',           reward: { tickets: 4, beans: 120 }, check: function (s) { return s.stats.totalHatched >= 30; } },
-    { id: 'ach_species_6',  name: '多样性样本', desc: '收集 6 个不同物种',         reward: { tickets: 2, beans: 50 }, check: function (s) { return s.stats.uniqueSpecies >= 6; } },
-    { id: 'ach_species_12', name: '基因库',     desc: '收集 12 个不同物种',       reward: { tickets: 4, beans: 120 }, check: function (s) { return s.stats.uniqueSpecies >= 12; } },
-    { id: 'ach_legend',     name: '传说降临',   desc: '获得一只传说级生物',       reward: { tickets: 3, beans: 80 }, check: function (s) { return s.stats.legendOwned >= 1; } },
-    { id: 'ach_care_50',    name: '勤劳园丁',   desc: '累计护理 50 次',           reward: { tickets: 1, beans: 40 }, check: function (s) { return s.stats.careCount >= 50; } },
-    { id: 'ach_care_300',   name: '乐园守护者', desc: '累计护理 300 次',          reward: { tickets: 4, beans: 150 }, check: function (s) { return s.stats.careCount >= 300; } },
-    { id: 'ach_heal_5',     name: '妙手回春',   desc: '治好 5 次生病',            reward: { tickets: 2, beans: 50 }, check: function (s) { return s.stats.healedCount >= 5; } },
-    { id: 'ach_adult_3',    name: '养到成熟',   desc: '3 只生物成长到"成熟"',     reward: { tickets: 2, beans: 60 }, check: function (s) { return s.stats.adultCount >= 3; } },
-    { id: 'ach_elite_1',    name: '圆满之证',   desc: '1 只生物成长到"圆满"',     reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.eliteCount >= 1; } },
+  /* ---------- 成就（v1.37 扩阶梯）----------
+     目标（松果原话）：**几乎每天、或者隔两天就能拿到一个，但也不能太没难度。**
 
-    /* 学习向成就 */
-    { id: 'ach_streak_3',   name: '三天之约',   desc: '连续打卡 3 天',            reward: { tickets: 1, beans: 30 }, check: function (s) { return s.stats.bestStreak >= 3; } },
-    { id: 'ach_streak_7',   name: '一周不辍',   desc: '连续打卡 7 天',            reward: { tickets: 2, beans: 60 }, check: function (s) { return s.stats.bestStreak >= 7; } },
-    { id: 'ach_streak_21',  name: '习惯成型',   desc: '连续打卡 21 天',           reward: { tickets: 5, beans: 150 }, check: function (s) { return s.stats.bestStreak >= 21; } },
-    { id: 'ach_streak_45',  name: '铁人',       desc: '连续打卡 45 天',           reward: { tickets: 8, beans: 300 }, check: function (s) { return s.stats.bestStreak >= 45; } },
-    { id: 'ach_note_10',   name: '随手笔记',   desc: '累计写下 10 条学习笔记',   reward: { tickets: 1, beans: 40 }, check: function (s) { return (s.stats.notes || 0) >= 10; } },
-    { id: 'ach_note_50',   name: '笔记成习',   desc: '累计写下 50 条学习笔记',   reward: { tickets: 3, beans: 120 }, check: function (s) { return (s.stats.notes || 0) >= 50; } },
-    { id: 'ach_note_200',  name: '笔记等身',   desc: '累计写下 200 条学习笔记',  reward: { tickets: 8, beans: 300 }, check: function (s) { return (s.stats.notes || 0) >= 200; } },
-    { id: 'ach_q_1000',     name: '千题斩',     desc: '累计刷题 1000 道',         reward: { tickets: 2, beans: 80 }, check: function (s) { return s.stats.questions >= 1000; } },
-    { id: 'ach_q_5000',     name: '五千题',     desc: '累计刷题 5000 道',         reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.questions >= 5000; } },
-    { id: 'ach_q_10000',    name: '题海归来',   desc: '累计刷题 10000 道',        reward: { tickets: 10, beans: 400 }, check: function (s) { return s.stats.questions >= 10000; } },
-    { id: 'ach_book_1',     name: '第一本书',   desc: '完成 1 本书的精读计划',     reward: { tickets: 2, beans: 60 }, check: function (s) { return s.stats.booksDone >= 1; } },
-    { id: 'ach_book_4',     name: '四书通关',   desc: '四本课本全部读完一遍',     reward: { tickets: 6, beans: 250 }, check: function (s) { return s.stats.booksDone >= 4; } },
-    { id: 'ach_script_6',   name: '口若悬河',   desc: '背下 6 篇导游词',           reward: { tickets: 3, beans: 100 }, check: function (s) { return s.stats.scriptsMastered >= 6; } },
-    { id: 'ach_script_12',  name: '十二景在心', desc: '12 篇导游词全部背下',       reward: { tickets: 8, beans: 300 }, check: function (s) { return s.stats.scriptsMastered >= 12; } },
-    { id: 'ach_feynman_20', name: '费曼学徒',   desc: '产出 20 张费曼卡',          reward: { tickets: 2, beans: 70 }, check: function (s) { return s.stats.feynmanCards >= 20; } },
-    { id: 'ach_feynman_60', name: '费曼讲师',   desc: '产出 60 张费曼卡',          reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.feynmanCards >= 60; } },
-    { id: 'ach_mock_10',    name: '十次模考',   desc: '完成 10 次模考',            reward: { tickets: 3, beans: 120 }, check: function (s) { return s.stats.mockCount >= 10; } },
-    { id: 'ach_species_20', name: '物种图谱',   desc: '收集 20 个不同物种',        reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.uniqueSpecies >= 20; } },
-    { id: 'ach_kolb_7',     name: '完整学习圈', desc: '7 天集齐库伯四象限',        reward: { tickets: 5, beans: 180 }, check: function (s) { return s.stats.kolbFullDays >= 7; } },
-    { id: 'ach_feed_7',     name: '七日喂饱',   desc: '7 天把投喂单全部喂满', reward: { tickets: 3, beans: 100 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 7; } },
-    { id: 'ach_feed_30',    name: '喂猫成瘾',   desc: '30 天把投喂单全部喂满', reward: { tickets: 8, beans: 300 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 30; } },
-    { id: 'ach_phase1_clear', name: '全刷完成', desc: '走完 35 天全刷阶段',        reward: { tickets: 6, beans: 250 }, check: function (s) { return s.stats.daysPassed >= 35; } },
-    { id: 'ach_no_sick_7',  name: '零生病周',   desc: '连续 7 天没有生物生病',     reward: { tickets: 2, beans: 80 }, check: function (s) { return s.stats.noSickStreak >= 7; } }
+     做法：每条线都做成"前密后疏"的阶梯，而不是只有一个大目标。
+     最能保证"每天一个"的是**投喂单满天数**（每天把 8 件做完就 +1 天）：
+       1 / 2 / 3 / 5 / 7 / 10 / 14 / 21 / 30 / 45 / 60 / 90 天
+     前 5 天几乎天天有成就，一周之后变成"隔几天来一个"，三个月后要靠别的线补。
+
+     其余阶梯：连续打卡(2~60)、累计护理(1~800)、错题消除(1~400)、
+     挑战赛局数(1~180)、出工次数(1~180)、出团次数(1~35)、收藏品(1~12)、
+     早鸟完成(1~60)、建筑等级。
+
+     cat 只用于成就页分组显示：pet 乐园 / study 学习 / build 建筑 / time 作息。 */
+  const ACHIEVEMENTS = [
+    /* ===== 乐园 · 扭蛋与孵化 ===== */
+    { id: 'ach_first_egg',  cat: 'pet', name: '第一颗胶囊', desc: '扭到你的第一颗胶囊', reward: { tickets: 1, beans: 20 }, check: function (s) { return s.stats.totalPulls >= 1; } },
+    { id: 'ach_first_pet',  cat: 'pet', name: '破壳而出',   desc: '孵化出第一只小生物', reward: { tickets: 1, beans: 30 }, check: function (s) { return s.stats.totalHatched >= 1; } },
+    { id: 'ach_hatch_3',    cat: 'pet', name: '三只小家伙', desc: '累计孵化 3 只',      reward: { tickets: 1, beans: 25 }, check: function (s) { return s.stats.totalHatched >= 3; } },
+    { id: 'ach_hatch_10',   cat: 'pet', name: '乐园初成',   desc: '累计孵化 10 只',      reward: { tickets: 2, beans: 60 }, check: function (s) { return s.stats.totalHatched >= 10; } },
+    { id: 'ach_hatch_30',   cat: 'pet', name: '云雾缭绕',   desc: '累计孵化 30 只',      reward: { tickets: 4, beans: 120 }, check: function (s) { return s.stats.totalHatched >= 30; } },
+    { id: 'ach_species_3',  cat: 'pet', name: '三种花样',   desc: '收集 3 个不同物种',   reward: { tickets: 1, beans: 25 }, check: function (s) { return s.stats.uniqueSpecies >= 3; } },
+    { id: 'ach_species_6',  cat: 'pet', name: '多样性样本', desc: '收集 6 个不同物种',   reward: { tickets: 2, beans: 50 }, check: function (s) { return s.stats.uniqueSpecies >= 6; } },
+    { id: 'ach_species_12', cat: 'pet', name: '基因库',     desc: '收集 12 个不同物种',  reward: { tickets: 4, beans: 120 }, check: function (s) { return s.stats.uniqueSpecies >= 12; } },
+    { id: 'ach_species_20', cat: 'pet', name: '物种图谱',   desc: '收集 20 个不同物种',  reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.uniqueSpecies >= 20; } },
+    { id: 'ach_legend',     cat: 'pet', name: '传说降临',   desc: '获得一只传说级生物',  reward: { tickets: 3, beans: 80 }, check: function (s) { return s.stats.legendOwned >= 1; } },
+
+    /* ===== 乐园 · 照顾与成长（护理阶梯，前密后疏）===== */
+    { id: 'ach_care_1',     cat: 'pet', name: '第一次照顾', desc: '完成第 1 次照顾',      reward: { tickets: 1, beans: 20 }, check: function (s) { return s.stats.careCount >= 1; } },
+    { id: 'ach_care_10',    cat: 'pet', name: '上手了',     desc: '累计照顾 10 次',       reward: { tickets: 1, beans: 25 }, check: function (s) { return s.stats.careCount >= 10; } },
+    { id: 'ach_care_30',    cat: 'pet', name: '熟手',       desc: '累计照顾 30 次',       reward: { tickets: 1, beans: 30 }, check: function (s) { return s.stats.careCount >= 30; } },
+    { id: 'ach_care_50',    cat: 'pet', name: '勤劳园丁',   desc: '累计照顾 50 次',       reward: { tickets: 1, beans: 40 }, check: function (s) { return s.stats.careCount >= 50; } },
+    { id: 'ach_care_100',   cat: 'pet', name: '日复一日',   desc: '累计照顾 100 次',      reward: { tickets: 2, beans: 70 }, check: function (s) { return s.stats.careCount >= 100; } },
+    { id: 'ach_care_200',   cat: 'pet', name: '两百次',     desc: '累计照顾 200 次',      reward: { tickets: 3, beans: 110 }, check: function (s) { return s.stats.careCount >= 200; } },
+    { id: 'ach_care_300',   cat: 'pet', name: '乐园守护者', desc: '累计照顾 300 次',      reward: { tickets: 4, beans: 150 }, check: function (s) { return s.stats.careCount >= 300; } },
+    { id: 'ach_care_500',   cat: 'pet', name: '风雨无阻',   desc: '累计照顾 500 次',      reward: { tickets: 5, beans: 220 }, check: function (s) { return s.stats.careCount >= 500; } },
+    { id: 'ach_care_800',   cat: 'pet', name: '乐园即日常', desc: '累计照顾 800 次',      reward: { tickets: 8, beans: 320 }, check: function (s) { return s.stats.careCount >= 800; } },
+    { id: 'ach_heal_1',     cat: 'pet', name: '第一次用药', desc: '治好 1 次生病',        reward: { tickets: 1, beans: 20 }, check: function (s) { return s.stats.healedCount >= 1; } },
+    { id: 'ach_heal_5',     cat: 'pet', name: '妙手回春',   desc: '治好 5 次生病',        reward: { tickets: 2, beans: 50 }, check: function (s) { return s.stats.healedCount >= 5; } },
+    { id: 'ach_heal_20',    cat: 'pet', name: '全职医生',   desc: '治好 20 次生病',       reward: { tickets: 4, beans: 130 }, check: function (s) { return s.stats.healedCount >= 20; } },
+    { id: 'ach_adult_1',    cat: 'pet', name: '养大了',     desc: '1 只生物成长到"成熟"', reward: { tickets: 1, beans: 30 }, check: function (s) { return s.stats.adultCount >= 1; } },
+    { id: 'ach_adult_3',    cat: 'pet', name: '养到成熟',   desc: '3 只生物成长到"成熟"', reward: { tickets: 2, beans: 60 }, check: function (s) { return s.stats.adultCount >= 3; } },
+    { id: 'ach_elite_1',    cat: 'pet', name: '圆满之证',   desc: '1 只生物成长到"圆满"', reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.eliteCount >= 1; } },
+
+    /* ===== 学习 · 投喂单（每天满 8 件就 +1 天，是最稳的"每天一个"来源）===== */
+    { id: 'ach_feed_1',     cat: 'study', name: '开饭第一天',  desc: '投喂单全部喂满 1 天',  reward: { tickets: 1, beans: 20 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 1; } },
+    { id: 'ach_feed_2',     cat: 'study', name: '连着两天',    desc: '投喂单全部喂满 2 天',  reward: { tickets: 1, beans: 25 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 2; } },
+    { id: 'ach_feed_3',     cat: 'study', name: '三天不断',    desc: '投喂单全部喂满 3 天',  reward: { tickets: 1, beans: 30 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 3; } },
+    { id: 'ach_feed_5',     cat: 'study', name: '五日账清',    desc: '投喂单全部喂满 5 天',  reward: { tickets: 1, beans: 35 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 5; } },
+    { id: 'ach_feed_7',     cat: 'study', name: '七日喂饱',    desc: '投喂单全部喂满 7 天',  reward: { tickets: 3, beans: 100 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 7; } },
+    { id: 'ach_feed_10',    cat: 'study', name: '十天不缺',    desc: '投喂单全部喂满 10 天', reward: { tickets: 2, beans: 60 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 10; } },
+    { id: 'ach_feed_14',    cat: 'study', name: '半月没落下',  desc: '投喂单全部喂满 14 天', reward: { tickets: 3, beans: 90 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 14; } },
+    { id: 'ach_feed_21',    cat: 'study', name: '三周满勤',    desc: '投喂单全部喂满 21 天', reward: { tickets: 4, beans: 140 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 21; } },
+    { id: 'ach_feed_30',    cat: 'study', name: '喂猫成瘾',    desc: '投喂单全部喂满 30 天', reward: { tickets: 8, beans: 300 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 30; } },
+    { id: 'ach_feed_45',    cat: 'study', name: '一个半月',    desc: '投喂单全部喂满 45 天', reward: { tickets: 6, beans: 220 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 45; } },
+    { id: 'ach_feed_60',    cat: 'study', name: '两月不辍',    desc: '投喂单全部喂满 60 天', reward: { tickets: 8, beans: 300 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 60; } },
+    { id: 'ach_feed_90',    cat: 'study', name: '整季满勤',    desc: '投喂单全部喂满 90 天', reward: { tickets: 10, beans: 450 }, check: function (s) { return (s.stats.fullFeedDays || 0) >= 90; } },
+
+    /* ===== 学习 · 打卡 / 笔记 / 题量 ===== */
+    { id: 'ach_streak_2',   cat: 'study', name: '连续第二天', desc: '连续打卡 2 天',  reward: { tickets: 1, beans: 20 }, check: function (s) { return s.stats.bestStreak >= 2; } },
+    { id: 'ach_streak_3',   cat: 'study', name: '三天之约',   desc: '连续打卡 3 天',  reward: { tickets: 1, beans: 30 }, check: function (s) { return s.stats.bestStreak >= 3; } },
+    { id: 'ach_streak_5',   cat: 'study', name: '第五天',     desc: '连续打卡 5 天',  reward: { tickets: 1, beans: 35 }, check: function (s) { return s.stats.bestStreak >= 5; } },
+    { id: 'ach_streak_7',   cat: 'study', name: '一周不辍',   desc: '连续打卡 7 天',  reward: { tickets: 2, beans: 60 }, check: function (s) { return s.stats.bestStreak >= 7; } },
+    { id: 'ach_streak_10',  cat: 'study', name: '十天',       desc: '连续打卡 10 天', reward: { tickets: 2, beans: 70 }, check: function (s) { return s.stats.bestStreak >= 10; } },
+    { id: 'ach_streak_15',  cat: 'study', name: '半个月',     desc: '连续打卡 15 天', reward: { tickets: 3, beans: 90 }, check: function (s) { return s.stats.bestStreak >= 15; } },
+    { id: 'ach_streak_21',  cat: 'study', name: '习惯成型',   desc: '连续打卡 21 天', reward: { tickets: 5, beans: 150 }, check: function (s) { return s.stats.bestStreak >= 21; } },
+    { id: 'ach_streak_30',  cat: 'study', name: '满月',       desc: '连续打卡 30 天', reward: { tickets: 5, beans: 180 }, check: function (s) { return s.stats.bestStreak >= 30; } },
+    { id: 'ach_streak_45',  cat: 'study', name: '铁人',       desc: '连续打卡 45 天', reward: { tickets: 8, beans: 300 }, check: function (s) { return s.stats.bestStreak >= 45; } },
+    { id: 'ach_streak_60',  cat: 'study', name: '两个月不断', desc: '连续打卡 60 天', reward: { tickets: 10, beans: 400 }, check: function (s) { return s.stats.bestStreak >= 60; } },
+    { id: 'ach_note_1',    cat: 'study', name: '第一条笔记', desc: '写下第 1 条学习笔记',  reward: { tickets: 1, beans: 20 }, check: function (s) { return (s.stats.notes || 0) >= 1; } },
+    { id: 'ach_note_10',   cat: 'study', name: '随手笔记',   desc: '累计写下 10 条学习笔记', reward: { tickets: 1, beans: 40 }, check: function (s) { return (s.stats.notes || 0) >= 10; } },
+    { id: 'ach_note_30',   cat: 'study', name: '笔记不空',   desc: '累计写下 30 条学习笔记', reward: { tickets: 2, beans: 80 }, check: function (s) { return (s.stats.notes || 0) >= 30; } },
+    { id: 'ach_note_50',   cat: 'study', name: '笔记成习',   desc: '累计写下 50 条学习笔记', reward: { tickets: 3, beans: 120 }, check: function (s) { return (s.stats.notes || 0) >= 50; } },
+    { id: 'ach_note_100',  cat: 'study', name: '笔记百条',   desc: '累计写下 100 条学习笔记', reward: { tickets: 4, beans: 170 }, check: function (s) { return (s.stats.notes || 0) >= 100; } },
+    { id: 'ach_note_200',  cat: 'study', name: '笔记等身',   desc: '累计写下 200 条学习笔记', reward: { tickets: 8, beans: 300 }, check: function (s) { return (s.stats.notes || 0) >= 200; } },
+    { id: 'ach_q_100',      cat: 'study', name: '一百题',    desc: '累计刷题 100 道',   reward: { tickets: 1, beans: 25 }, check: function (s) { return s.stats.questions >= 100; } },
+    { id: 'ach_q_300',      cat: 'study', name: '三百题',    desc: '累计刷题 300 道',   reward: { tickets: 1, beans: 35 }, check: function (s) { return s.stats.questions >= 300; } },
+    { id: 'ach_q_1000',     cat: 'study', name: '千题斩',    desc: '累计刷题 1000 道',  reward: { tickets: 2, beans: 80 }, check: function (s) { return s.stats.questions >= 1000; } },
+    { id: 'ach_q_2000',     cat: 'study', name: '两千题',    desc: '累计刷题 2000 道',  reward: { tickets: 3, beans: 130 }, check: function (s) { return s.stats.questions >= 2000; } },
+    { id: 'ach_q_5000',     cat: 'study', name: '五千题',    desc: '累计刷题 5000 道',  reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.questions >= 5000; } },
+    { id: 'ach_q_10000',    cat: 'study', name: '题海归来',  desc: '累计刷题 10000 道', reward: { tickets: 10, beans: 400 }, check: function (s) { return s.stats.questions >= 10000; } },
+
+    /* ===== 学习 · 书 / 导游词 / 费曼 / 模考 / 库伯 ===== */
+    { id: 'ach_book_1',     cat: 'study', name: '第一本书',   desc: '完成 1 本书的精读计划', reward: { tickets: 2, beans: 60 }, check: function (s) { return s.stats.booksDone >= 1; } },
+    { id: 'ach_book_2',     cat: 'study', name: '两本读完',   desc: '完成 2 本书的精读计划', reward: { tickets: 3, beans: 120 }, check: function (s) { return s.stats.booksDone >= 2; } },
+    { id: 'ach_book_4',     cat: 'study', name: '四书通关',   desc: '四本课本全部读完一遍',  reward: { tickets: 6, beans: 250 }, check: function (s) { return s.stats.booksDone >= 4; } },
+    { id: 'ach_script_1',   cat: 'study', name: '第一篇讲解', desc: '背下第 1 篇导游词',     reward: { tickets: 1, beans: 30 }, check: function (s) { return s.stats.scriptsMastered >= 1; } },
+    { id: 'ach_script_3',   cat: 'study', name: '三篇在手',   desc: '背下 3 篇导游词',       reward: { tickets: 2, beans: 60 }, check: function (s) { return s.stats.scriptsMastered >= 3; } },
+    { id: 'ach_script_6',   cat: 'study', name: '口若悬河',   desc: '背下 6 篇导游词',       reward: { tickets: 3, beans: 100 }, check: function (s) { return s.stats.scriptsMastered >= 6; } },
+    { id: 'ach_script_9',   cat: 'study', name: '九篇',       desc: '背下 9 篇导游词',       reward: { tickets: 4, beans: 160 }, check: function (s) { return s.stats.scriptsMastered >= 9; } },
+    { id: 'ach_script_12',  cat: 'study', name: '十二景在心', desc: '12 篇导游词全部背下',   reward: { tickets: 8, beans: 300 }, check: function (s) { return s.stats.scriptsMastered >= 12; } },
+    { id: 'ach_feynman_1',  cat: 'study', name: '第一张费曼卡', desc: '产出第 1 张费曼卡',  reward: { tickets: 1, beans: 20 }, check: function (s) { return s.stats.feynmanCards >= 1; } },
+    { id: 'ach_feynman_20', cat: 'study', name: '费曼学徒',   desc: '产出 20 张费曼卡',      reward: { tickets: 2, beans: 70 }, check: function (s) { return s.stats.feynmanCards >= 20; } },
+    { id: 'ach_feynman_60', cat: 'study', name: '费曼讲师',   desc: '产出 60 张费曼卡',      reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.feynmanCards >= 60; } },
+    { id: 'ach_mock_1',     cat: 'study', name: '第一次模考', desc: '完成 1 次模考',         reward: { tickets: 1, beans: 25 }, check: function (s) { return s.stats.mockCount >= 1; } },
+    { id: 'ach_mock_5',     cat: 'study', name: '五次模考',   desc: '完成 5 次模考',         reward: { tickets: 2, beans: 80 }, check: function (s) { return s.stats.mockCount >= 5; } },
+    { id: 'ach_mock_10',    cat: 'study', name: '十次模考',   desc: '完成 10 次模考',        reward: { tickets: 3, beans: 120 }, check: function (s) { return s.stats.mockCount >= 10; } },
+    { id: 'ach_kolb_1',     cat: 'study', name: '走完一圈',   desc: '1 天集齐库伯四象限',    reward: { tickets: 1, beans: 30 }, check: function (s) { return s.stats.kolbFullDays >= 1; } },
+    { id: 'ach_kolb_3',     cat: 'study', name: '三圈闭合',   desc: '3 天集齐库伯四象限',    reward: { tickets: 2, beans: 60 }, check: function (s) { return s.stats.kolbFullDays >= 3; } },
+    { id: 'ach_kolb_7',     cat: 'study', name: '完整学习圈', desc: '7 天集齐库伯四象限',    reward: { tickets: 5, beans: 180 }, check: function (s) { return s.stats.kolbFullDays >= 7; } },
+    { id: 'ach_kolb_21',    cat: 'study', name: '学习圈成习', desc: '21 天集齐库伯四象限',   reward: { tickets: 6, beans: 240 }, check: function (s) { return s.stats.kolbFullDays >= 21; } },
+    { id: 'ach_phase1_clear', cat: 'study', name: '全刷完成', desc: '走完 35 天全刷阶段',     reward: { tickets: 6, beans: 250 }, check: function (s) { return s.stats.daysPassed >= 35; } },
+    { id: 'ach_no_sick_3',  cat: 'study', name: '三天没病',   desc: '连续 3 天没有生物生病', reward: { tickets: 1, beans: 30 }, check: function (s) { return s.stats.noSickStreak >= 3; } },
+    { id: 'ach_no_sick_7',  cat: 'study', name: '零生病周',   desc: '连续 7 天没有生物生病', reward: { tickets: 2, beans: 80 }, check: function (s) { return s.stats.noSickStreak >= 7; } },
+    { id: 'ach_no_sick_21', cat: 'study', name: '三周无病',   desc: '连续 21 天没有生物生病', reward: { tickets: 5, beans: 200 }, check: function (s) { return s.stats.noSickStreak >= 21; } },
+
+    /* ===== 学习 · 错题（v1.36 起答对即移出，这里按"消掉了多少"给）===== */
+    { id: 'ach_master_1',   cat: 'study', name: '消掉第一道', desc: '答对并移出 1 道错题',   reward: { tickets: 1, beans: 20 }, check: function (s) { return Object.keys(s.masteredQuestions || {}).length >= 1; } },
+    { id: 'ach_master_10',  cat: 'study', name: '十道清账',   desc: '累计移出 10 道错题',    reward: { tickets: 1, beans: 40 }, check: function (s) { return Object.keys(s.masteredQuestions || {}).length >= 10; } },
+    { id: 'ach_master_30',  cat: 'study', name: '三十道',     desc: '累计移出 30 道错题',    reward: { tickets: 2, beans: 70 }, check: function (s) { return Object.keys(s.masteredQuestions || {}).length >= 30; } },
+    { id: 'ach_master_60',  cat: 'study', name: '错题过半',   desc: '累计移出 60 道错题',    reward: { tickets: 3, beans: 110 }, check: function (s) { return Object.keys(s.masteredQuestions || {}).length >= 60; } },
+    { id: 'ach_master_120', cat: 'study', name: '一百二十道', desc: '累计移出 120 道错题',   reward: { tickets: 4, beans: 160 }, check: function (s) { return Object.keys(s.masteredQuestions || {}).length >= 120; } },
+    { id: 'ach_master_250', cat: 'study', name: '错题库清空', desc: '累计移出 250 道错题',   reward: { tickets: 8, beans: 320 }, check: function (s) { return Object.keys(s.masteredQuestions || {}).length >= 250; } },
+
+    /* ===== 学习 · 挑战赛 ===== */
+    { id: 'ach_chal_1',     cat: 'study', name: '第一局挑战', desc: '打完第 1 局挑战赛',  reward: { tickets: 1, beans: 20 }, check: function (s) { return ((s.challenge || {}).plays || 0) >= 1; } },
+    { id: 'ach_chal_5',     cat: 'study', name: '打了五局',   desc: '累计打完 5 局挑战赛', reward: { tickets: 1, beans: 35 }, check: function (s) { return ((s.challenge || {}).plays || 0) >= 5; } },
+    { id: 'ach_chal_15',    cat: 'study', name: '十五局',     desc: '累计打完 15 局挑战赛', reward: { tickets: 2, beans: 70 }, check: function (s) { return ((s.challenge || {}).plays || 0) >= 15; } },
+    { id: 'ach_chal_40',    cat: 'study', name: '四十局',     desc: '累计打完 40 局挑战赛', reward: { tickets: 3, beans: 120 }, check: function (s) { return ((s.challenge || {}).plays || 0) >= 40; } },
+    { id: 'ach_chal_90',    cat: 'study', name: '九十局',     desc: '累计打完 90 局挑战赛', reward: { tickets: 5, beans: 200 }, check: function (s) { return ((s.challenge || {}).plays || 0) >= 90; } },
+    { id: 'ach_chal_180',   cat: 'study', name: '题场常客',   desc: '累计打完 180 局挑战赛', reward: { tickets: 8, beans: 320 }, check: function (s) { return ((s.challenge || {}).plays || 0) >= 180; } },
+
+    /* ===== 建筑 · 修建 / 出工 / 出团 / 收藏品 ===== */
+    { id: 'ach_built_1',    cat: 'build', name: '第一栋房子', desc: '建成第 1 栋建筑',      reward: { tickets: 1, beans: 40 }, check: function (s) { return (s.build.built || []).length >= 1; } },
+    { id: 'ach_built_3',    cat: 'build', name: '乐园渐成',   desc: '建成 3 栋建筑',        reward: { tickets: 2, beans: 80 }, check: function (s) { return (s.build.built || []).length >= 3; } },
+    { id: 'ach_built_all',  cat: 'build', name: '五栋齐活',   desc: '把五栋建筑全部建成',    reward: { tickets: 6, beans: 260 }, check: function (s) { return (s.build.built || []).length >= 5; } },
+    { id: 'ach_blv_3',      cat: 'build', name: '扩建到 Lv.3', desc: '有一栋建筑升到 Lv.3',  reward: { tickets: 2, beans: 70 }, check: function (s) { const lv = s.build.lv || {}; return Object.keys(lv).some(function (k) { return lv[k] >= 3; }); } },
+    { id: 'ach_blv_5',      cat: 'build', name: '扩建到 Lv.5', desc: '有一栋建筑升到 Lv.5',  reward: { tickets: 4, beans: 150 }, check: function (s) { const lv = s.build.lv || {}; return Object.keys(lv).some(function (k) { return lv[k] >= 5; }); } },
+    { id: 'ach_work_1',     cat: 'build', name: '开张第一天',  desc: '建筑营业收工 1 次',    reward: { tickets: 1, beans: 25 }, check: function (s) { return (s.stats.worksDone || 0) >= 1; } },
+    { id: 'ach_work_10',    cat: 'build', name: '十次营业',    desc: '建筑营业收工 10 次',   reward: { tickets: 1, beans: 40 }, check: function (s) { return (s.stats.worksDone || 0) >= 10; } },
+    { id: 'ach_work_40',    cat: 'build', name: '四十次营业',  desc: '建筑营业收工 40 次',   reward: { tickets: 2, beans: 90 }, check: function (s) { return (s.stats.worksDone || 0) >= 40; } },
+    { id: 'ach_work_100',   cat: 'build', name: '经营有方',    desc: '建筑营业收工 100 次',  reward: { tickets: 4, beans: 160 }, check: function (s) { return (s.stats.worksDone || 0) >= 100; } },
+    { id: 'ach_work_250',   cat: 'build', name: '乐园支柱',    desc: '建筑营业收工 250 次',  reward: { tickets: 7, beans: 280 }, check: function (s) { return (s.stats.worksDone || 0) >= 250; } },
+    { id: 'ach_trip_1',     cat: 'build', name: '第一次出团',  desc: '送出第 1 个旅行团',    reward: { tickets: 1, beans: 35 }, check: function (s) { return (s.build.trips || []).length >= 1; } },
+    { id: 'ach_trip_3',     cat: 'build', name: '跑了三趟',    desc: '累计送出 3 个旅行团',  reward: { tickets: 1, beans: 50 }, check: function (s) { return (s.build.trips || []).length >= 3; } },
+    { id: 'ach_trip_8',     cat: 'build', name: '熟门熟路',    desc: '累计送出 8 个旅行团',  reward: { tickets: 2, beans: 90 }, check: function (s) { return (s.build.trips || []).length >= 8; } },
+    { id: 'ach_trip_18',    cat: 'build', name: '十八趟',      desc: '累计送出 18 个旅行团', reward: { tickets: 3, beans: 140 }, check: function (s) { return (s.build.trips || []).length >= 18; } },
+    { id: 'ach_trip_35',    cat: 'build', name: '把云南走遍',  desc: '累计送出 35 个旅行团', reward: { tickets: 5, beans: 220 }, check: function (s) { return (s.build.trips || []).length >= 35; } },
+    { id: 'ach_col_1',      cat: 'build', name: '第一件收藏',  desc: '带回第 1 件旅行收藏品', reward: { tickets: 1, beans: 30 }, check: function (s) { return (s.build.collection || []).length >= 1; } },
+    { id: 'ach_col_4',      cat: 'build', name: '摆满一格',    desc: '带回 4 件旅行收藏品',   reward: { tickets: 2, beans: 70 }, check: function (s) { return (s.build.collection || []).length >= 4; } },
+    { id: 'ach_col_8',      cat: 'build', name: '半个展厅',    desc: '带回 8 件旅行收藏品',   reward: { tickets: 3, beans: 130 }, check: function (s) { return (s.build.collection || []).length >= 8; } },
+    { id: 'ach_col_12',     cat: 'build', name: '十二件收齐',  desc: '12 件旅行收藏品全部收齐', reward: { tickets: 6, beans: 260 }, check: function (s) { return (s.build.collection || []).length >= 12; } },
+    { id: 'ach_trait_1',    cat: 'build', name: '脾气有来处',  desc: '有一只小生物的性情被经历改变过', reward: { tickets: 1, beans: 40 }, check: function (s) { return (s.pets || []).some(function (p) { return Object.keys(p.traitScore || {}).length > 0; }); } },
+
+    /* ===== 作息 · 早鸟（12:00 前完成）===== */
+    { id: 'ach_early_1',    cat: 'time', name: '早起第一件', desc: '12:00 前完成 1 件任务',  reward: { tickets: 1, beans: 25 }, check: function (s) { return (s.stats.earlyFinishes || 0) >= 1; } },
+    { id: 'ach_early_3',    cat: 'time', name: '连着早起',   desc: '12:00 前完成 3 件任务',  reward: { tickets: 1, beans: 40 }, check: function (s) { return (s.stats.earlyFinishes || 0) >= 3; } },
+    { id: 'ach_early_10',   cat: 'time', name: '十个早鸟',   desc: '12:00 前完成 10 件任务', reward: { tickets: 2, beans: 80 }, check: function (s) { return (s.stats.earlyFinishes || 0) >= 10; } },
+    { id: 'ach_early_25',   cat: 'time', name: '习惯早起',   desc: '12:00 前完成 25 件任务', reward: { tickets: 3, beans: 140 }, check: function (s) { return (s.stats.earlyFinishes || 0) >= 25; } },
+    { id: 'ach_early_60',   cat: 'time', name: '晨型人格',   desc: '12:00 前完成 60 件任务', reward: { tickets: 6, beans: 240 }, check: function (s) { return (s.stats.earlyFinishes || 0) >= 60; } }
   ];
 
   /* ---------- 库伯学习圈说明 ---------- */
@@ -1539,6 +1791,8 @@ window.GAME_DATA = (function () {
 
   /* ---------- 运营建筑：倒计时制（v1.27） ----------
      食堂 / 澡堂 / 图书馆不再是「点一下当天就没了」，改成一次真正的营业：
+       v1.37 起博物馆（开放参观）和旅行社（出团 2 小时）也并进这套容器，
+       所以「营业中 → 倒计时 → 收工结算 → 离线回来自动收工」五栋共用一条链路。
        ① 开工：消耗指定物品（按人头上算）+ 在岗小生物的劳力（需求值下降）
        ② 倒计时：这段时间内建筑「营业中」，谁也开不了第二次
        ③ 收工：产出照旧，并且**给前来光顾的小生物提供对应服务**
@@ -1568,7 +1822,8 @@ window.GAME_DATA = (function () {
       minutes: 25,
       labor: 1,
       laborNeed: 6,
-      costPerGuest: { water: 1 },                 /* 烧热水要水 */
+      costPerGuest: { water: 2 },                 /* 烧一池热水要 2 份清水（v1.37：1 → 2，
+                                                     原来澡堂投入太低、净收益压过食堂，两栋不均衡） */
       guestsBase: 2, guestsPerLv: 1,
       want: 'clean',
       serve: { clean: 28, fun: 6 },
@@ -1590,11 +1845,51 @@ window.GAME_DATA = (function () {
       want: 'fun',
       serve: { fun: 30 }, grow: 6,                /* 图书馆额外给点成长值 */
       verb: '安静看了一下午书',
-      gain: 'none',
+      gain: 'beans',                              /* v1.37：原来 gain:'none' —— 图书馆一分豆都不产，
+                                                     是五栋里唯一的纯支出项。现在给「借阅收入」（系数见 ECONOMY.library） */
       accident: {
         chance: 0.08, name: '啃坏了书角',
         stat: { fun: -6, clean: -4 },
         text: '看着看着把书角啃了个缺口，心虚地装睡。'
+      }
+    },
+    museum: {
+      id: 'museum', label: '开放参观', emoji: '🏛️',
+      minutes: 45,
+      labor: 1,
+      laborNeed: 4,
+      costPerGuest: {},                           /* 展厅不耗物资，只花人力 */
+      guestsBase: 2, guestsPerLv: 1,
+      want: 'fun',
+      serve: { fun: 22 }, grow: 4,                /* 看展长见识，给点成长值 */
+      verb: '在展厅里转了一圈',
+      gain: 'beans',                              /* 门票收入，系数见 ECONOMY.museum */
+      accident: {
+        chance: 0.07, name: '碰倒了展签',
+        stat: { fun: -5 },
+        text: '看得太投入，胳膊肘把展签蹭倒了，赶紧扶正。'
+      }
+    },
+    /* 旅行社（v1.37）：从「点一下立刻出团」改成真正的 2 小时行程。
+       它借 OPS 这套倒计时容器，所以营业中 / 离线回来自动结算 / 小日志全都白拿。
+       kind:'travel' 是个开关 —— opStart / opFinish 见到它就转去走 travelStart / travelFinish，
+       因为出团不是「接待客人」，而是「一队人出门两天份的消耗 + 带回土特产」。 */
+    travel: {
+      id: 'travel', kind: 'travel', label: '出团', emoji: '🧭',
+      minutes: 120,
+      labor: 2,                                   /* 1 只导游 + 至少 1 只同伴 */
+      laborNeed: 8,                               /* 每位出团者四项需求各降这么多（原来 -14/项，是「走一整天」的口径；
+                                                     改成 2 小时后按 8 点算，约等于三分之二天的自然衰减） */
+      costPerGuest: {},                           /* 出团不花物资 */
+      guestsBase: 0, guestsPerLv: 0,
+      want: 'fun',
+      serve: {},
+      verb: '出了趟远门',
+      gain: 'travel',
+      accident: {
+        chance: 0.1, name: '走散了',
+        stat: { fun: -8, clean: -6 },
+        text: '在景区里走散了，找了半小时才归队。'
       }
     }
   };
@@ -1705,7 +2000,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.36',
+    VERSION: 'v1.37',
     WORLD: WORLD,
     ZONES: ZONES,
     ROAM_AVOID: ROAM_AVOID,
@@ -1722,8 +2017,12 @@ window.GAME_DATA = (function () {
     TRAIT_RULES: TRAIT_RULES,
     TRAIT_RULE_MAP: TRAIT_RULE_MAP,
     traitRuleById: traitRuleById,
-    TRAIT_RULE_BY_STAT: TRAIT_RULE_BY_STAT,
+    /* v1.37：护理 → 性格的那张映射表（按状态维度 drink/feed/clean/play 触发）已整个删掉
+       —— 性格只由它自己的经历改。老存档里那几条攒下的分数原样留着，不迁移、不清零。 */
     TRAIT_RULE_BY_BUILD: TRAIT_RULE_BY_BUILD,
+    TRAIT_EVENTS: TRAIT_EVENTS,
+    TRAIT_EVENT_MAX: TRAIT_EVENT_MAX,
+    rollTraitEvent: rollTraitEvent,
     TRAIT_SHIFT_GATE: TRAIT_SHIFT_GATE,
     TRAIT_SHIFT_KEEP: TRAIT_SHIFT_KEEP,
     PET_LOG_MAX: PET_LOG_MAX,
@@ -1779,6 +2078,11 @@ window.GAME_DATA = (function () {
     GACHA: GACHA,
     HATCH_QUIZ: HATCH_QUIZ,
     CHALLENGE: CHALLENGE,
+    EARLY: EARLY,
+    TIME_SLOTS: TIME_SLOTS,
+    timeSlotOf: timeSlotOf,
+    earlyBirdOf: earlyBirdOf,
+    clockText: clockText,
     ECONOMY: ECONOMY,
     QUESTION_BANK: QUESTION_BANK,
     BOOKS: BOOKS,

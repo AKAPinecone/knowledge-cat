@@ -602,6 +602,19 @@ window.Study = (function () {
         (quizBonus >= qec.cap ? '（已到上限 ' + qec.cap + ' 豆/科/天）' : ''));
     }
 
+    /* v1.37：早鸟奖励 —— 12:00 之前做完的任务，豆 ×1.5（券不动）。
+       松果是上班族，早上那一段是他一天里最不被打断的时间，值得多给一点；
+       反过来，晚上补完也不算"没做完"，只是没有这份加成。
+       时钟只在 data.js 里算（D.earlyBirdOf），顶栏也读同一个函数，保证两边一致。 */
+    const eb = (typeof D.earlyBirdOf === 'function') ? D.earlyBirdOf(new Date()) : null;
+    const earlyOn = !!(eb && eb.on);
+    const earlyBonus = earlyOn ? Math.round(beans * (eb.mul - 1)) : 0;
+    const beansFinal = beans + earlyBonus;
+    if (earlyOn) {
+      S.stats.earlyFinishes = (S.stats.earlyFinishes || 0) + 1;
+      extra.push('🌅 早鸟时段（' + (eb.label || '12:00 前') + '）：豆 ×' + eb.mul + '，这次多给 ' + earlyBonus + ' 豆');
+    }
+
     /* 选书的任务：把今天的选择写回任务上下文
        精读走的是 reading 类型（书是必答的第一栏），课后练习走 pick:'book'。 */
     const choseBook = (task.verify.type === 'reading')
@@ -665,8 +678,8 @@ window.Study = (function () {
     }
 
     S.cur.tickets += tickets;
-    S.cur.beans += beans;
-    S.study.done[uid] = { at: Date.now(), detail: proof.summary || '', tickets: tickets, beans: beans, kolb: task.kolb };
+    S.cur.beans += beansFinal;
+    S.study.done[uid] = { at: Date.now(), detail: proof.summary || '', tickets: tickets, beans: beansFinal, kolb: task.kolb };
     task.state = 'done';
     task.at = Date.now();
     S.study.kolbToday[task.kolb] = (S.study.kolbToday[task.kolb] || 0) + 1;
@@ -739,7 +752,8 @@ window.Study = (function () {
 
     return {
       ok: true,
-      gain: { tickets: tickets, beans: beans },
+      gain: { tickets: tickets, beans: beansFinal },
+      earlyBird: earlyOn ? { mul: eb.mul, bonus: earlyBonus, label: eb.label } : null,
       extra: extra,
       kolb: task.kolb,
       feedBonus: feedBonusGiven

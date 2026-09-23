@@ -410,17 +410,18 @@ window.Game = (function () {
     if (!pet.traitScore || typeof pet.traitScore !== 'object') pet.traitScore = {};
     return pet.traitScore;
   }
-  /* 记一次性格印记。返回 {id,name,icon,d,score,gate,shifted,fromName,toName} 或 null */
-  function traitMark(pet, ruleId) {
-    if (!pet || !ruleId) return null;
-    const rule = (typeof D.traitRuleById === 'function') ? D.traitRuleById(ruleId) : null;
-    if (!rule) return null;
+  /* 底层：直接给某个性格加分，顺带判定换不换脾气。
+     返回 {id,name,icon,d,score,gate,shifted,from,to,fromName,toName} 或 null。
+     v1.37 拆出这一层，是因为「随机经历」（D.TRAIT_EVENTS）自带 trait/delta，
+     不需要在 TRAIT_RULES 里另开一条规则 —— 它直接调这里。 */
+  function traitApply(pet, traitId, delta, icon) {
+    if (!pet || !traitId) return null;
     const map = D.PERSONALITY_MAP || {};
     const cur = (typeof D.traitOf === 'function') ? D.traitOf(pet) : null;
-    const curId = (cur && cur.id) || rule.trait;
+    const curId = (cur && cur.id) || traitId;
     const sc = traitScoreOf(pet);
-    sc[rule.trait] = (sc[rule.trait] || 0) + rule.delta;
-    const newScore = sc[rule.trait];
+    sc[traitId] = (sc[traitId] || 0) + (delta || 1);
+    const newScore = sc[traitId];
     const gate = D.TRAIT_SHIFT_GATE || 8;
     /* 谁分数最高（并列时当前性格优先，免得来回横跳） */
     let best = curId, bestScore = sc[curId] || 0;
@@ -435,15 +436,49 @@ window.Game = (function () {
       const keep = (typeof D.TRAIT_SHIFT_KEEP === 'number') ? D.TRAIT_SHIFT_KEEP : 0.5;
       Object.keys(sc).forEach(function (k) { sc[k] = Math.floor((sc[k] || 0) * keep); });
     }
+    const em = (map[traitId] || {}).emoji || icon || '🎭';
     return {
-      rule: rule, id: rule.trait,
-      name: (map[rule.trait] || {}).name || rule.trait,
-      icon: (map[rule.trait] || {}).emoji || rule.icon || '🎭',
-      d: rule.delta, score: newScore, gate: gate,
+      id: traitId,
+      name: (map[traitId] || {}).name || traitId,
+      icon: em, emoji: em,
+      d: delta || 1, score: newScore, gate: gate,
       shifted: shifted, from: from, to: to,
       fromName: from ? ((map[from] || {}).name || from) : '',
       toName: to ? ((map[to] || {}).name || to) : ''
     };
+  }
+  /* 按 TRAIT_RULES 里的规则记一次性格印记 */
+  function traitMark(pet, ruleId) {
+    if (!pet || !ruleId) return null;
+    const rule = (typeof D.traitRuleById === 'function') ? D.traitRuleById(ruleId) : null;
+    if (!rule) return null;
+    const m = traitApply(pet, rule.trait, rule.delta, rule.icon);
+    if (m) m.rule = rule;
+    return m;
+  }
+  /* 随机经历（v1.37）：它出门一趟回来，有概率撞上一件小事，写进它自己的日志并改脾气。
+     每只每天最多 D.TRAIT_EVENT_MAX 件，免得日志被刷屏。
+     whereId = 建筑 id（'canteen' / 'travel' …），决定能抽到哪些事。 */
+  function traitEventFor(pet, whereId) {
+    if (!pet) return null;
+    if (typeof D.rollTraitEvent !== 'function') return null;
+    const max = D.TRAIT_EVENT_MAX || 2;
+    const day = dayKeyAt(Date.now());
+    if (!pet.traitEventDay || pet.traitEventDay.day !== day) pet.traitEventDay = { day: day, n: 0 };
+    if (pet.traitEventDay.n >= max) return null;
+    const roll = D.rollTraitEvent(whereId);
+    if (!roll || !roll.event) return null;
+    const ev = roll.event;
+    pet.traitEventDay.n++;
+    const mark = traitApply(pet, ev.trait, ev.delta, ev.icon);
+    logPet(pet, {
+      kind: 'life',
+      icon: ev.icon || '🎈',
+      text: '出门一趟，' + (roll.text || '遇见了一点小事') + '',
+      trait: traitSnap(mark),
+      shift: (mark && mark.shifted) ? { from: mark.fromName, to: mark.toName } : null
+    });
+    return { ev: ev, text: roll.text, mark: mark };
   }
   /* 只给日志用的一份精简印记（不含规则对象，省地方） */
   function traitSnap(mark) {
@@ -599,9 +634,11 @@ window.Game = (function () {
     } else {
       S.cur.level = lvlAfter;
     }
-    /* v1.33：记进**它自己的**日志。属性变化带前后值，性格印记一并留档，
-       攒够分换了性格就再补一条醒目的「性格」条目。 */
-    const mark = traitMark(pet, (D.TRAIT_RULE_BY_STAT || {})[act.stat]);
+    /* v1.33：记进**它自己的**日志。属性变化带前后值。
+       v1.37：护理**不再**给性格印记 —— 你喂它不该把它喂成"嘴馋"，
+       性格改由它自己参与的活动与经历驱动（见 TRAIT_RULES 的注释）。
+       这里保留 mark = null，让日志结构与别处一致。 */
+    const mark = null;
     logPet(pet, {
       kind: 'care',
       text: '你' + act.label + '，用了 1 个' + it.name + '。' + (tr && tr.lines ? tr.lines.care : ''),
@@ -768,8 +805,9 @@ window.Game = (function () {
       S.cur.level = lvlAfter;
     }
 
-    /* 性格印记：被这么好的照顾，往「活泼」偏一点 */
-    const mark = traitMark(pet, 'play');
+    /* v1.37：一键照顾跟单次护理一个口径 —— **不给**性格印记。
+       你把它照顾得再好，也只是它过得好，不等于它变成了什么脾气。 */
+    const mark = null;
     const useTxt = needs.map(function (n) { return n.emoji + n.name + '×' + n.count; }).join('、');
     logPet(pet, {
       kind: 'onekey',
@@ -1466,7 +1504,12 @@ window.Game = (function () {
   function opGuestCap(id) {
     const cfg = opCfg(id);
     if (!cfg) return 0;
-    return (cfg.guestsBase || 2) + buildLv(id) * (cfg.guestsPerLv || 1);
+    /* 出团没有"客人"概念（是导游带同伴走），guest 恒为 0。
+       注意不能用 `cfg.guestsBase || 2` —— 0 是假值会被顶成 2。 */
+    if (cfg.kind === 'travel') return 0;
+    const base = (typeof cfg.guestsBase === 'number') ? cfg.guestsBase : 2;
+    const per = (typeof cfg.guestsPerLv === 'number') ? cfg.guestsPerLv : 1;
+    return base + buildLv(id) * per;
   }
   /* 谁来光顾：性格权重 × 有多想要 × 一点随机 */
   function opPickGuests(id, n) {
@@ -1489,6 +1532,9 @@ window.Game = (function () {
     ensureOps();
     const cfg = opCfg(id);
     if (!cfg) return { ok: false, msg: '这栋不是运营建筑' };
+    /* v1.37：旅行社也并进了这套倒计时容器 —— 出团不再是"点一下立刻到账"，
+       它有 2 小时倒计时，收工才结算（走 travelFinish）。 */
+    if (cfg.kind === 'travel') return travelStart(id);
     if (!isBuilt(id)) return { ok: false, msg: '这栋还没建好' };
     const b = buildingById(id);
     if (opOf(id)) return { ok: false, msg: b.name + '正在营业，等这一轮收工' };
@@ -1564,6 +1610,8 @@ window.Game = (function () {
     const cfg = opCfg(id);
     const st = S.build.ops[id];
     if (!cfg || !st) return null;
+    /* v1.37：出团是另一套结算（回来带东西、算收藏品） */
+    if (cfg.kind === 'travel') return travelFinish(id, st, at);
     const b = buildingById(id);
     const lv = st.lv || buildLv(id);
     const guests = (st.guests || []).map(petById).filter(Boolean);
@@ -1624,18 +1672,30 @@ window.Game = (function () {
         trait: traitSnap(tmark),
         shift: (tmark && tmark.shifted) ? { from: tmark.fromName, to: tmark.toName } : null
       });
+      /* v1.37：光顾这一趟还可能撞上一件小事（随机经历），也写进它自己的日志 */
+      traitEventFor(p, id);
     });
-    /* 产出（v1.28：稀有出工，产出按效益系数放大） */
+    /* 产出（v1.28：稀有出工，产出按效益系数放大）
+       v1.37：系数**按建筑各读各的**（D.ECONOMY[id]）。
+       改前这里写死读 ECONOMY.canteen、澡堂干脆硬编码 (1+lv) —— 结果图书馆 / 博物馆 /
+       澡堂三行系数全是死配置，五栋产出完全一样，"逐栋平衡"根本无从谈起。
+       现在每栋有自己的价码：食堂 9/4（要买食材）> 图书馆 3/2 > 博物馆 2/2（不耗物资），
+       澡堂 1/0.6（产出营养液）。四栋都是「每轮 = (base + perLv × 等级) × 光顾人数」。 */
+    const ECO_FALLBACK = {
+      canteen: { base: 9, perLv: 4 }, bath: { base: 1, perLv: 0.6 },
+      library: { base: 3, perLv: 2 }, museum: { base: 2, perLv: 2 }
+    };
     let outTxt = '', outN = 0;
-    if (cfg.gain === 'beans') {
-      const eco = (D.ECONOMY && D.ECONOMY.canteen) || { base: 9, perLv: 4 };
+    if (cfg.gain === 'beans' || cfg.gain === 'fert') {
+      const eco = (D.ECONOMY && D.ECONOMY[id]) || ECO_FALLBACK[id] || { base: 2, perLv: 1 };
       outN = Math.round((eco.base + lv * eco.perLv) * guests.length * boost);
-      S.cur.beans += outN;
-      outTxt = '🌰 可可豆 ×' + outN;
-    } else if (cfg.gain === 'fert') {
-      outN = Math.round((1 + lv) * guests.length * boost);
-      S.bag.fert = (S.bag.fert || 0) + outN;
-      outTxt = '🧪 营养液 ×' + outN;
+      if (cfg.gain === 'beans') {
+        S.cur.beans += outN;
+        outTxt = '🌰 可可豆 ×' + outN;
+      } else {
+        S.bag.fert = (S.bag.fert || 0) + outN;
+        outTxt = '🧪 营养液 ×' + outN;
+      }
     } else {
       outTxt = '📖 大伙儿的心情与见识';
     }
@@ -1658,6 +1718,9 @@ window.Game = (function () {
           trait: traitSnap(cmark),
           shift: (cmark && cmark.shifted) ? { from: cmark.fromName, to: cmark.toName } : null
         });
+        /* v1.37：出工回来也可能撞上一件小事；顺便记一次"出工次数"（成就用） */
+        traitEventFor(p, id);
+        if (S.stats) S.stats.worksDone = (S.stats.worksDone || 0) + 1;
       });
     }
     const rec = {
@@ -1698,30 +1761,89 @@ window.Game = (function () {
   }
   function opLogs(id) { ensureOps(); return (S.build.logs && S.build.logs[id]) || []; }
 
-  /* ---- 旅行社：导游带团出游 → 随机带回物品与收藏品 ---- */
-  function travelRun(id) {
-    ensureBuild();
+  /* ---- 旅行社：导游带团出游（v1.37 起改成 2 小时倒计时） ----
+     以前是"点一下立刻回来"，一天只剩一次点击、也没有可等的东西；
+     现在它跟别的运营建筑用**同一套倒计时容器**（S.build.ops）：
+       开工 → 地图名牌上挂着"还剩多少分钟" → 到点收工结算（travelFinish）。
+     走的这几只当天下班（setRest），但**岗位保留**（v1.34 的规矩），明天照常出团。 */
+  function travelStart(id) {
+    ensureOps();
+    const cfg = opCfg(id);
+    if (!cfg) return { ok: false, msg: '旅行社还没配置' };
+    if (!isBuilt(id)) return { ok: false, msg: '旅行社还没建好' };
+    if (opOf(id)) return { ok: false, msg: '团还在路上，等他们回来' };
+    if (doneToday('travel:' + id)) return { ok: false, msg: '今天已经出过团了' };
     const staff = staffOf(id);
     if (staff.length < 2) return { ok: false, msg: '出游至少要有 1 只导游 + 1 只同伴' };
-    if (doneToday('travel:' + id)) return { ok: false, msg: '今天已经出过团了' };
     const guide = petById(staff[0]);
     const party = staff.slice(1).map(petById).filter(Boolean);
     if (!guide) return { ok: false, msg: '导游不见了' };
-    const lv = buildLv(id);
-    /* 出团消耗：走一天，需求值下降（池塘里泡着的不会渴） */
-    [guide].concat(party).forEach(function (p) {
+    const all = [guide].concat(party);
+    const tired = all.filter(function (p) { return isWorkedToday(p); });
+    if (tired.length) {
+      return {
+        ok: false,
+        msg: '今天已经出过工了：' + tired.map(function (p) { return p.name; }).join('、') +
+          '。出团算一趟工，明天再来吧。'
+      };
+    }
+    /* 出团消耗：走这一趟，需求值下降（池塘里泡着的不会渴）。
+       消耗在**开工时**扣，收工只发收益 —— 免得中途关页面白赚一趟。
+       v1.37：扣多少读 cfg.laborNeed（8 = 2 小时口径的三分之二天）。
+       改前这里写死 -14，而 data.js / 建筑面板都写 8，三处对不上。 */
+    const tripNeed = cfg.laborNeed || 8;
+    all.forEach(function (p) {
       const aqua = isAqua(p);
       ['water', 'nutri', 'clean', 'fun'].forEach(function (s) {
         if (s === 'water' && aqua) return;
-        p.stats[s] = Math.max(0, p.stats[s] - 14);
+        p.stats[s] = Math.max(0, (p.stats[s] || 0) - tripNeed);
       });
+      setRest(p);
     });
+    const boost = workBoostOf(all);
+    const now = Date.now();
+    const mins = cfg.minutes || 120;
+    const runMs = Math.max(Math.round(mins * 60000 * 0.6), Math.round(mins * 60000 / boost));
+    S.build.ops[id] = {
+      startAt: now, finishAt: now + runMs,
+      kind: 'travel',
+      guests: [],
+      crew: all.map(function (p) { return p.id; }),
+      guide: guide.id,
+      party: party.map(function (p) { return p.id; }),
+      lv: buildLv(id),
+      boost: boost,
+      cost: {}
+    };
+    const outMin = Math.max(1, Math.round(runMs / 60000));
+    window.Store.pushLog('🧭 ' + guide.name + ' 带着 ' + party.length + ' 只同伴出发了，约 ' + outMin + ' 分钟后回来。');
+    window.Store.save(true);
+    return {
+      ok: true,
+      msg: '🧭 ' + guide.name + ' 当导游，带 ' + party.length + ' 只同伴出发了，约 ' + outMin + ' 分钟后回来' +
+        (boost > 1.01 ? '（稀有出工，走得快 ×' + boost.toFixed(2) + '）' : ''),
+      guideName: guide.name, minutes: outMin
+    };
+  }
+
+  /* 出团收工：结算收获（豆 + 捡到的东西 + 收藏品），走的人涨成长并写进各自日志 */
+  function travelFinish(id, st, at) {
+    ensureOps();
+    const cfg = opCfg(id);
+    if (!cfg || !st) return null;
+    const b = buildingById(id);
+    const lv = st.lv || buildLv(id);
+    const crew = (st.crew || []).map(petById).filter(Boolean);
+    const guide = petById(st.guide) || crew[0];
+    if (!guide) { delete S.build.ops[id]; return null; }
+    const party = crew.filter(function (p) { return p.id !== guide.id; });
+    const boost = (typeof st.boost === 'number' && st.boost > 0) ? st.boost : workBoostOf(crew);
     const got = [];
-    /* v1.24：出团收益从 12+8×等级 提到 20+12×等级（随机跨度也放大到 14）。
-       出团要搭上一整天 4 项状态的 14 点衰减，是乐园侧最贵的一次行动，
-       收益太低就没人愿意去；系数在 D.ECONOMY.travel。 */
-    const eco = (D.ECONOMY && D.ECONOMY.travel) || { base: 12, perLv: 8, rand: 10 };
-    const beans = eco.base + lv * eco.perLv + Math.floor(Math.random() * eco.rand);
+    /* v1.37：出团是乐园侧最贵的一次行动（搭上 2 小时 + 全员 4 项状态各 -14），
+       收益得撑住才有人愿意去 —— 系数在 data.js 的 ECONOMY.travel（唯一调参入口），
+       这里的字面量只是兜底。 */
+    const eco = (D.ECONOMY && D.ECONOMY.travel) || { base: 30, perLv: 16, rand: 18 };
+    const beans = Math.round((eco.base + lv * eco.perLv + Math.floor(Math.random() * eco.rand)) * boost);
     S.cur.beans += beans;
     got.push('🌰 可可豆 ×' + beans);
     /* 物件掉落 */
@@ -1744,36 +1866,50 @@ window.Game = (function () {
       got.push(col.emoji + ' ' + col.name + (already ? '（重复收集）' : '·新收藏！'));
       window.Store.pushLog('🧭 ' + guide.name + ' 的团带回了「' + col.name + '」。');
     }
-    S.build.trips.push({ at: Date.now(), guide: guide.id, guideName: guide.name, party: party.map(function (p) { return p.id; }), got: got });
+    if (!S.build.trips) S.build.trips = [];
+    S.build.trips.push({ at: at || Date.now(), guide: guide.id, guideName: guide.name, party: party.map(function (p) { return p.id; }), got: got });
     if (S.build.trips.length > 40) S.build.trips = S.build.trips.slice(-40);
-    /* v1.32：出团也是一趟工 —— 走的这几只当天下班、不能再出工，回来各自涨成长（见多识广也是长本事） */
-    const tripGrow = workGrowOf(workBoostOf([guide].concat(party)));
-    [guide].concat(party).forEach(function (p) {
-      setRest(p);
-      unstaffEverywhere(p.id);
+    /* v1.32：出团也是一趟工 —— 走的这几只各自涨成长（见多识广也是长本事）。
+       休不休在**开工时**就写好了（travelStart 里 setRest），这里不再动。
+       v1.34 的规矩照旧：**不撤岗**，明天照常出团。 */
+    const tripGrow = workGrowOf(boost);
+    crew.forEach(function (p) {
       const gBefore = p.growth;
       p.growth += tripGrow;
-      /* v1.33：出游进它自己的日志；带团跑一趟，脾气往「活泼」偏 */
+      /* v1.33/v1.37：出游进它自己的日志；带团跑一趟，脾气往「活泼」偏（activity 驱动） */
       const tmark = traitMark(p, 'work_travel');
       logPet(p, {
         kind: 'travel',
         icon: '🧭',
-        text: (p.id === guide.id ? '当导游带团出游，' : '跟着团出游，') + '走了一整天' +
+        text: (p.id === guide.id ? '当导游带团出游，' : '跟着团出游，') + '跑了一趟' +
           (p.id === guide.id && col ? '，带回一件「' + col.name + '」' : '') + '。',
         grow: { before: Math.round(gBefore), after: Math.round(p.growth), d: tripGrow },
         trait: traitSnap(tmark),
         shift: (tmark && tmark.shifted) ? { from: tmark.fromName, to: tmark.toName } : null
       });
+      /* v1.37：路上撞见的小事（随机经历）+ 出工次数（成就用） */
+      traitEventFor(p, 'travel');
+      if (S.stats) S.stats.worksDone = (S.stats.worksDone || 0) + 1;
     });
+    const rec = {
+      at: at || Date.now(), op: id, label: cfg.label, emoji: cfg.emoji,
+      guests: [], out: got.join('、'), outN: beans, lv: lv, boost: boost,
+      crewGrow: tripGrow, crew: crew.map(function (p) { return p.name; })
+    };
+    if (!S.build.logs[id]) S.build.logs[id] = [];
+    S.build.logs[id].unshift(rec);
+    if (S.build.logs[id].length > 12) S.build.logs[id] = S.build.logs[id].slice(0, 12);
+    delete S.build.ops[id];
     markDone('travel:' + id);
     window.Store.save(true);
-    return {
-      ok: true,
-      msg: '🧭 ' + guide.name + ' 带 ' + party.length + ' 只出游回来了：' + got.join('、') +
-        '　🌱 它们今天不能再出工了，各涨成长 +' + tripGrow,
-      collection: col
-    };
+    const tmsg = '🧭 ' + guide.name + ' 带 ' + party.length + ' 只回来了：' + got.join('、') +
+      (boost > 1.01 ? '　✨ 稀有出工，效益 ×' + boost.toFixed(2) : '') +
+      '　🌱 各涨成长 +' + tripGrow + '（今天不能再出工；岗位留着，明天照常）';
+    window.Store.pushLog('🧭 ' + b.name + '的团回来了：' + got.join('、'));
+    return { ok: true, id: id, name: b.name, rec: rec, boost: boost, msg: tmsg, collection: col };
   }
+  /* 兼容旧名字：语义从「点一下立刻结算」变成「出发（倒计时）」 */
+  function travelRun(id) { return travelStart(id); }
   /* 已收集的收藏品（去重，标记件数） */
   function collectionsOwned() {
     const map = {};
@@ -1834,6 +1970,11 @@ window.Game = (function () {
     doneToday: doneToday,
     petById: petById,
     careOptionsFor: careOptionsFor,
+    /* v1.37：旅行社走倒计时（travelRun 是旧名字，现在等于"出发"） */
+    travelStart: travelStart,
+    travelFinish: travelFinish,
+    traitEventFor: traitEventFor,
+    traitApply: traitApply,
     /* v1.27 运营建筑（倒计时制） */
     opCfg: opCfg,
     opStatus: opStatus,
