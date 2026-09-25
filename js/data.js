@@ -2075,7 +2075,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.38',
+    VERSION: 'v1.39',
     WORLD: WORLD,
     ZONES: ZONES,
     ROAM_AVOID: ROAM_AVOID,

@@ -716,6 +716,11 @@ audio{width:100%;margin-top:6px;height:34px;}
 .notes-area:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(76,169,107,.14);}
 .reader-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
 .reader-actions .btn{flex:1;min-width:130px;}
+/* v1.39：阅读器底部直说「今日导游词任务完成没」——
+   以前两个按钮点完重开还是原样，看不出到底算不算数 */
+.reader-state{margin-top:10px;padding:9px 12px;border-radius:12px;font-size:12.5px;line-height:1.6;
+  color:#7A6438;background:#FFF9EC;border:1px solid #F0DDB4;}
+.reader-state.ok{color:#256B3E;background:#EDF8F0;border-color:#BFE0C8;font-weight:600;}
 
 /* ---------- v1.34 写 / 修改导游词 ---------- */
 .ws-pick{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
@@ -1618,12 +1623,27 @@ img.cm-face-art{width:62px;height:62px;object-fit:contain;display:block;}
 .tm-card .tm-desc{font-size:11px;color:#8AA394;line-height:1.35;}
 @media (max-width:340px){.tm-grid{grid-template-columns:1fr;}}
 
-/* ---- 阴影贴地：消掉"小动物在飘"的感觉 ----
-   分两种情况：立绘（图片底边就是脚，投影贴着就行）
-   与 emoji（字形框自带上下留白，看上去脚比框底高，得把投影再抬高一点） */
+/* ---- 阴影 / 名字 / 打工牌贴地：消掉"小动物在飘"的感觉（v1.39 按实测重标） ----
+   容器 .park-pet 是 70×70，比"脚"大一圈：草地上 walker 立绘（62px）的底边落在局部 y≈52、
+   池塘立绘落在 y≈52.5。旧规则把影子挂在盒底（bottom:3px / -3px）、名字挂在盒底**外** 4px，
+   真机上量出来影子离脚 6.6、名字离脚 21.5~23.5 局部px —— 小动物看着就悬在半空。
+   现在按实测一起提到脚底下：影子中心 ≈ 脚 +2px、名字顶 ≈ 脚 +3px；
+   打工牌是第二行，跟着名字挪，不跟就会在中间空出一大截。
+   田里／盆里的 .potted 本来就贴着盆沿和土堆，一行都不动。 */
+.walker   .pp-name{bottom:13px;}
+.walker   .pp-work{transform:translate(-50%,calc(100% + 4px));}
+.pond-pet .pp-shadow{bottom:10px;}                       /* 旧值 -3px：影子整个挂在盒子外面 */
+.pond-pet .pp-name{bottom:15px;}                         /* 旧值 -4px：名字顶比脚低 21.5px */
+.pond-pet .pp-work{transform:translate(-50%,100%);}
+/* emoji 字形框自带上下留白，看上去脚比框底高，影子／名字得再抬一点 */
 .walker.pet-emoji .pp-shadow{bottom:9px;}
-.pond-pet.pet-emoji .pp-shadow{bottom:10px;}
+.walker.pet-emoji .pp-name{bottom:16px;}
+.pond-pet.pet-emoji .pp-shadow{bottom:12px;}
+.pond-pet.pet-emoji .pp-name{bottom:17px;}
 @media (max-width:720px){
+  /* 移动端立绘缩到 62px、影子盒子矮了 5px（21→16）——两个效应叠一起，
+     影子的 bottom 要比桌面多 5px 才贴得住脚 */
+  .walker .pp-shadow{bottom:8px;}
   .walker.pet-emoji .pp-shadow{bottom:11px;}
   .potted .pp-pot .pot-svg{width:40px;height:40px;}
   .potted img.pp-img{width:46px;height:46px;}

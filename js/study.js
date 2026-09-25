@@ -212,31 +212,43 @@ window.Study = (function () {
   /* 面试问答：不再逐题点选、不再累计——每日任务改为「交一个凭证即完成」
      （凭证在投喂单的验证弹窗里提交，走 Study.finish）。此处不再维护逐题练习记录。 */
 
-  /* 在练习台里标记今天读了/背了某篇导游词，并完成当日导游词核心任务 */
+  /* 在练习台里标记今天读了/背了某篇导游词，并完成当日导游词核心任务。
+     v1.39 修：「读」不再被第 13 天挡在门外。
+     面板上两个按钮写的就是「点哪个都算完成今日任务」，但旧代码只在 day<13 时认可 read ——
+     过了第 13 天点「今天读了这篇」会**静默什么都不做**：不发奖、不标完成、连一句提示都没有。
+     现在 read / recite 都算完成，recite 只是"这一阶段更推荐"的提示，不是门槛（不给他加负担）。 */
   function finishScriptCore(scriptId, type) {
     if (!scriptId || (type !== 'read' && type !== 'recite')) return { ok: false, msg: '参数错误' };
     /* 同一天同一篇同类型只记一次，避免误触重复累计 */
-    if (!scriptDidToday(scriptId, type)) {
+    const alreadyToday = scriptDidToday(scriptId, type);
+    if (!alreadyToday) {
       const p = scriptPracticeToday();
       if (type === 'read') p.read.push(scriptId); else p.recite.push(scriptId);
       window.Store.save(true);
     }
 
     const info = window.Store.currentPhase();
-    const expected = info.day < D.PRACTICE.RECITE_START_DAY ? 'read' : 'recite';
+    /* 第 13 天起主推默讲（只是提示，不挡完成） */
+    const recommend = info.day < D.PRACTICE.RECITE_START_DAY ? 'read' : 'recite';
     const task = coreTaskByLib('p_script');
-    if (!task || task.state === 'done') return { ok: true, taskDone: false, task: task };
-    /* 第13天起要求背；之前读就算完成。做了相反类型也认可（读顺了顺便会背）。 */
-    if (type === expected || type === 'recite') {
-      const r = finish(task.uid, {
-        practice: true,
-        scriptId: scriptId,
-        practiceType: type,
-        summary: '练习台导游词：' + (type === 'read' ? '通读' : '默讲') + '《' + ((D.SCRIPTS.filter(function (s) { return s.id === scriptId; })[0] || {}).name || scriptId) + '》'
-      });
-      return { ok: r.ok, taskDone: r.ok, task: task, errs: r.errs };
+    if (!task) {
+      return { ok: true, taskDone: false, alreadyToday: alreadyToday, recommend: recommend, msg: '今天的导游词任务还没生成。' };
     }
-    return { ok: true, taskDone: false, task: task };
+    if (task.state === 'done') {
+      return { ok: true, taskDone: false, alreadyDone: true, alreadyToday: alreadyToday, recommend: recommend, task: task };
+    }
+
+    const r = finish(task.uid, {
+      practice: true,
+      scriptId: scriptId,
+      practiceType: type,
+      summary: '练习台导游词：' + (type === 'read' ? '通读' : '默讲') + '《' + ((D.SCRIPTS.filter(function (s) { return s.id === scriptId; })[0] || {}).name || scriptId) + '》'
+    });
+    return {
+      ok: r.ok, taskDone: r.ok, alreadyToday: alreadyToday, recommend: recommend,
+      task: task, errs: r.errs,
+      gain: r.ok ? { tickets: task.reward.tickets, beans: (r.gain && r.gain.beans) || task.reward.beans } : null
+    };
   }
 
   /* ================= 截图压缩 ================= */

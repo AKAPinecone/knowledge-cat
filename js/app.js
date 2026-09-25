@@ -5039,6 +5039,35 @@
     }
   }
 
+  /* 练习台 / 阅读器里点「今天读了这篇」「今天背了这篇」的统一入口。
+     v1.39：以前这个点击可能**什么都不发生**（不发奖、不报错、界面不变）：
+       · 第 13 天起点「读了」被 old 的 expected 判定挡掉，静默返回；
+       · 任务当天已完成时也只静默返回。
+     现在无论哪条分支都给一句明确的话，再把弹窗重开成"已完成"的样子。 */
+  function doScriptPractice(sid, type, snap, reopen) {
+    const tk = window.Study.coreTaskByLib('p_script');
+    const r = window.Study.finishScriptCore(sid, type);
+    if (snap && (snap.photo || snap.file || snap.audios.length)) {
+      storePracticeEvidence(snap, tk ? tk.uid : null, '导游词练习凭证');
+    }
+    const what = type === 'read' ? '通读' : '默讲';
+    if (r.ok && r.taskDone && r.task) {
+      const beans = (r.gain && r.gain.beans) || r.task.reward.beans;
+      toast('🎤 今日导游词任务完成（' + what + '）：+' + r.task.reward.tickets + ' 券 / +' + beans + ' 豆', 'ok', 5000);
+      confetti(42); playCheer();
+    } else if (!r.ok) {
+      toast('❌ ' + (r.msg || (r.errs && r.errs.join('；')) || '记录失败'), 'err');
+    } else if (r.alreadyDone) {
+      toast(r.alreadyToday
+        ? '今天已经记过这一篇的' + what + '了。'
+        : '已记下今天的' + what + '。今天的导游词任务早就完成了 ✅', 'ok', 4500);
+    } else {
+      toast('已记下今天的' + what + '。' + (r.msg || ''), 'ok', 4000);
+    }
+    render();
+    if (reopen) reopen();
+  }
+
   /* 读书进度的文案（弹窗里的选书按钮、任务卡面、「我的」页共用一套说法）
      v1.28：按「读到第几页 / 共几页」说，百分比是主信息。
      还没登记过位置的旧存档走 v1.26 的天数口径（mode:'days'）。 */
@@ -6044,19 +6073,7 @@
             const type = b.dataset.act === 'sp-read' ? 'read' : 'recite';
             /* 先抓住当前面板里可选的凭证，避免重渲后丢失 */
             const snap = { photo: pEv.photo, file: pEv.file, audios: pEv.audios.slice() };
-            const tk = window.Study.coreTaskByLib('p_script');
-            const r = window.Study.finishScriptCore(sid, type);
-            if (snap.photo || snap.file || snap.audios.length) {
-              storePracticeEvidence(snap, tk ? tk.uid : null, '导游词练习凭证');
-            }
-            if (r.ok && r.taskDone && r.task) {
-              toast('🎤 今日导游词任务完成：+' + r.task.reward.tickets + ' 券 / +' + r.task.reward.beans + ' 豆', 'ok', 5000);
-              confetti(42); playCheer();
-            } else if (!r.ok) {
-              toast('❌ ' + (r.msg || (r.errs && r.errs.join('；')) || '记录失败'), 'err');
-            }
-            render();
-            openPracticePanel('script');
+            doScriptPractice(sid, type, snap, function () { openPracticePanel('script'); });
           };
         });
       }
@@ -6283,10 +6300,27 @@
       evidenceZoneHTML('pEv', false) +
       '</div>';
 
-    /* 完成按钮 */
+    /* 完成按钮 —— v1.39：做过就把状态亮出来。
+       以前这里永远是两个可点的蓝按钮，点完重开还是原样，"完成了没有"完全看不出来。
+       现在：今天记过的类型变成「✓ 已读/已背」并锁住，底下一行直说今日任务到底完成没。 */
+    const spToday = window.Study.scriptPracticeToday();
+    const readToday = spToday.read.indexOf(sid) >= 0;
+    const reciteToday = spToday.recite.indexOf(sid) >= 0;
+    const tkScript = window.Study.coreTaskByLib('p_script');
+    const taskDone = !!(tkScript && tkScript.state === 'done');
     body += '<div class="reader-actions">' +
-      '<button class="btn btn-primary" data-act="sp-read" data-sid="' + sid + '">今天读了这篇</button>' +
-      '<button class="btn btn-primary" data-act="sp-recite" data-sid="' + sid + '">今天背了这篇</button>' +
+      (readToday
+        ? '<button class="btn btn-ghost" disabled>✓ 今天已读这一篇</button>'
+        : '<button class="btn btn-primary" data-act="sp-read" data-sid="' + sid + '">今天读了这篇</button>') +
+      (reciteToday
+        ? '<button class="btn btn-ghost" disabled>✓ 今天已背这一篇</button>'
+        : '<button class="btn btn-primary" data-act="sp-recite" data-sid="' + sid + '">今天背了这篇</button>') +
+      '</div>' +
+      '<div class="reader-state' + (taskDone ? ' ok' : '') + '">' +
+      (taskDone
+        ? '✅ 今日导游词任务已完成，这一篇也算数了 —— 想再读一篇随时点。'
+        : '📌 今日导游词任务还没完成：上面点「今天读了这篇」或「今天背了这篇」都算完成（' +
+          (reciteMode ? '现在这个阶段主推默讲，但读一遍也认' : '现在这个阶段以通读为主') + '）。') +
       '</div>';
 
     openModal({
@@ -6322,19 +6356,7 @@
           b.onclick = function () {
             const type = b.dataset.act === 'sp-read' ? 'read' : 'recite';
             const snap = { photo: pEv.photo, file: pEv.file, audios: pEv.audios.slice() };
-            const tk = window.Study.coreTaskByLib('p_script');
-            const r = window.Study.finishScriptCore(sid, type);
-            if (snap.photo || snap.file || snap.audios.length) {
-              storePracticeEvidence(snap, tk ? tk.uid : null, '导游词练习凭证');
-            }
-            if (r.ok && r.taskDone && r.task) {
-              toast('🎤 今日导游词任务完成：+' + r.task.reward.tickets + ' 券 / +' + r.task.reward.beans + ' 豆', 'ok', 5000);
-              confetti(42); playCheer();
-            } else if (!r.ok) {
-              toast('❌ ' + (r.msg || '记录失败'), 'err');
-            }
-            render();
-            openScriptReader(sc);
+            doScriptPractice(sid, type, snap, function () { openScriptReader(sc); });
           };
         });
       }
