@@ -27,7 +27,7 @@ window.GAME_DATA = (function () {
     }
   ];
 
-  /* ---------- 冲刺模式（阶段2 · 弱项突破期，考前 14 天）----------
+  /* ---------- 冲刺模式（阶段2 · 弱项突破期，读完书即开始）----------
      松果书读完后进入刷题 + 错题 + 背导游词的中期。这个阶段不再"每天喂满 8 件"，
      而是按「甲 / 乙」两组交替、每科每天≥15 道、错题四要素、导游词脱稿复述、阶梯奖励、周结算。
      —— 这是把阶段2学习计划落进游戏里的一套固定模板，不依赖「投喂单」。 */
@@ -46,7 +46,7 @@ window.GAME_DATA = (function () {
     }
     return {
       title: '冲刺模式',
-      subtitle: '阶段2 · 弱项突破期（考前 14 天）',
+      subtitle: '阶段2 · 弱项突破期（读完书即开始，连续 14 天）',
       days: 14,
       minPerSubject: 15,                            /* 每科每天至少 15 道 */
       groups: groups,
@@ -2470,7 +2470,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.44',
+    VERSION: 'v1.45',
     WORLD: WORLD,
     ZONES: ZONES,
     ROAM_AVOID: ROAM_AVOID,

@@ -3367,9 +3367,10 @@
     return s || { id: id, name: id };
   }
   function sprintState() {
-    if (!S.sprint) S.sprint = { day: 1, weekSettled: { 1: false, 2: false }, rec: {} };
+    if (!S.sprint) S.sprint = { day: 1, weekSettled: { 1: false, 2: false }, rec: {}, startDate: null };
     if (!S.sprint.rec) S.sprint.rec = {};
     if (!S.sprint.weekSettled) S.sprint.weekSettled = { 1: false, 2: false };
+    if (!('startDate' in S.sprint)) S.sprint.startDate = null;   // 读完书后手动开启，不绑定考试倒计时
     return S.sprint;
   }
   function sprintDayRec(n) {
@@ -3399,16 +3400,18 @@
     return okSubj && !!r.scriptDone;
   }
   function sprintCurrentDay() {
-    const left = window.Store.daysLeft();   // 距考试天数（考前 1 天 = 1）
-    return 15 - left;                        // 考前 14 天起为第 1 天
+    const sp = sprintState();
+    if (!sp.startDate) return 1;             // 还没开启 → 停第 1 天（等用户点「开始冲刺」）
+    const diff = window.Store.daysBetween(sp.startDate, window.Store.dateKey());
+    if (typeof diff !== 'number' || isNaN(diff)) return 1;
+    return Math.max(1, Math.min(14, diff + 1));   // 第 1 天起算，封顶 14（读完书即开始）
   }
 
   function viewSprint() {
     const sp = sprintState();
     const cur = sprintCurrentDay();
-    let sel = sp.day || 1;
-    if (sel < 1 || sel > 14) sel = 1;
-    if (cur >= 1 && cur <= 14) sel = cur;    // 冲刺期内默认跳到今天
+    let sel = sp.day;
+    if (!sel || sel < 1 || sel > 14) sel = cur;   // 首次/越界 → 跳到今天该做的那天（否则记住上次选的）
     sp.day = sel;
 
     const plan = D.SPRINT.schedule[sel - 1];
@@ -3424,6 +3427,20 @@
       '<span class="spacer"></span>' +
       '<span class="chip-sprint-day">第 ' + sel + ' / 14 天</span></div>';
 
+    if (!sp.startDate) {
+      h += '<div class="sprint-start-banner">' +
+        '<div class="ssb-title">🚀 还没开启冲刺</div>' +
+        '<div class="ssb-sub">书读完了就从这开始：点下面按钮，把今天设为冲刺第 1 天，之后连续 14 天按甲 / 乙组轮换推进——不绑定考试倒计时，想哪天开就哪天开。</div>' +
+        '<button class="btn btn-primary ssb-btn" data-act="sprint-start">开始冲刺（今天 = 第 1 天）</button>' +
+        '</div>';
+    } else {
+      const sd = sp.startDate;
+      const elapsed = window.Store.daysBetween(sd, window.Store.dateKey());
+      const done = (typeof elapsed === 'number' && !isNaN(elapsed)) ? Math.max(0, elapsed + 1) : 1;
+      h += '<div class="sprint-started">📅 冲刺开始于 ' + esc(sd) + '（已进行 ' + done + ' 天）' +
+        '　·　<span class="ssb-reset" data-act="sprint-start">重设起始日</span></div>';
+    }
+
     h += '<div class="sprint-progress"><i style="width:' + Math.round(doneCount / 14 * 100) + '%"></i>' +
       '<span class="sprint-progress-txt">已达标 ' + doneCount + ' / 14 天</span></div>';
 
@@ -3432,7 +3449,7 @@
     for (let d = 1; d <= 14; d++) {
       const dp = D.SPRINT.schedule[d - 1];
       const g = D.SPRINT.groups[dp.group];
-      const isToday = (d === cur);
+      const isToday = (sp.startDate && d === cur);
       const done = sprintDayDone(d);
       h += '<button class="sprint-day' + (d === sel ? ' on' : '') + (isToday ? ' today' : '') + (done ? ' done' : '') +
         '" data-act="sprint-day" data-day="' + d + '">' +
@@ -3443,7 +3460,7 @@
     }
     h += '</div>';
 
-    if (cur >= 1 && cur <= 14 && sel !== cur) {
+    if (sp.startDate && cur >= 1 && cur <= 14 && sel !== cur) {
       h += '<div class="hint sprint-today-hint">当前真实进度是第 ' + cur + ' 天，点上面的 ⭐ 回到今天。</div>';
     }
 
@@ -4183,6 +4200,13 @@
     }
 
     /* ---- 冲刺模式（阶段2 弱项突破期）---- */
+    if (act === 'sprint-start') {
+      sprintState().startDate = window.Store.dateKey();
+      window.Store.save(true);
+      render();
+      toast('🚀 冲刺已开启！从今天起连续 14 天，加油～', 'ok', 6000);
+      return;
+    }
     if (act === 'sprint-day') { sprintState().day = Number(ds.day) || 1; return render(); }
     if (act === 'sprint-inc') {
       const dI = Number(ds.day), subjI = ds.subj, deltaI = Number(ds.delta) || 0;
