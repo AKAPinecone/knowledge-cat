@@ -27,6 +27,42 @@ window.GAME_DATA = (function () {
     }
   ];
 
+  /* ---------- 冲刺模式（阶段2 · 弱项突破期，考前 14 天）----------
+     松果书读完后进入刷题 + 错题 + 背导游词的中期。这个阶段不再"每天喂满 8 件"，
+     而是按「甲 / 乙」两组交替、每科每天≥15 道、错题四要素、导游词脱稿复述、阶梯奖励、周结算。
+     —— 这是把阶段2学习计划落进游戏里的一套固定模板，不依赖「投喂单」。 */
+  const SPRINT = (function () {
+    /* 甲组 = 地方导基 + 全国导基；乙组 = 政策法规 + 导游业务。单日不重复同组，隔天轮换。 */
+    const groups = {
+      A: { name: '甲组', subjects: ['loc', 'nat'], label: '地方导基 + 全国导基' },
+      B: { name: '乙组', subjects: ['law', 'ops'], label: '政策法规 + 导游业务' }
+    };
+    /* 12 篇导游词按顺序每天 1 篇；最后两天（13/14）回到 s01/s02 做最终复述保温。 */
+    const scriptPlan = ['s01', 's02', 's03', 's04', 's05', 's06', 's07', 's08', 's09', 's10', 's11', 's12', 's01', 's02'];
+    const schedule = [];
+    for (let i = 1; i <= 14; i++) {
+      const g = (i % 2 === 1) ? 'A' : 'B';          /* 奇数天甲组，偶数天乙组 */
+      schedule.push({ day: i, group: g, subjects: groups[g].subjects.slice(), script: scriptPlan[i - 1] });
+    }
+    return {
+      title: '冲刺模式',
+      subtitle: '阶段2 · 弱项突破期（考前 14 天）',
+      days: 14,
+      minPerSubject: 15,                            /* 每科每天至少 15 道 */
+      groups: groups,
+      schedule: schedule,
+      /* 阶梯奖励：按单科当天累计题数定档，力度递增；每档只领一次（领过更高档就发更高档） */
+      rewardLadder: [
+        { min: 15, tickets: 5,  beans: 10, label: 'L1 达标 · 15 题' },
+        { min: 25, tickets: 12, beans: 25, label: 'L2 进阶 · 25 题' },
+        { min: 35, tickets: 22, beans: 45, label: 'L3 强化 · 35 题' },
+        { min: 50, tickets: 35, beans: 75, label: 'L4 冲刺 · 50 题' }
+      ],
+      /* 周结算：第 7 天 / 第 14 天，整周（每天两科≥15 + 导游词背完）达标才发 */
+      weeklyBonus: { tickets: 60, beans: 120, label: '周结算 · 整周达标' }
+    };
+  })();
+
   /* ---------- 课本精读：进度按「章 / 节 / 页码」推进（v1.28） ----------
      v1.26 用的是「计划天数 = max(6, 已读天数)」——比"数打卡次数"准，但计划天数本身还是估的，
      估 8 天、6 天读完，进度条永远不是满分，看着像欠账。
@@ -2434,7 +2470,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.43',
+    VERSION: 'v1.44',
     WORLD: WORLD,
     ZONES: ZONES,
     ROAM_AVOID: ROAM_AVOID,
@@ -2471,6 +2507,7 @@ window.GAME_DATA = (function () {
     COLLECTIONS: COLLECTIONS,
     EXAM_DATE: EXAM_DATE,
     PHASES: PHASES,
+    SPRINT: SPRINT,
     BOOK_DAYS: BOOK_DAYS,
     BOOK_DAYS_MIN: BOOK_DAYS_MIN,
     bookPlanOf: bookPlanOf,

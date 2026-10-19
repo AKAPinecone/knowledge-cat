@@ -106,6 +106,7 @@ window.Store = (function () {
                         等你下一次登记「读到哪」，它会自动变成对象、切到页码制。
                         唯一入口：data.js 的 bookProgressOf() 读、bookSetPos() 写。 */ },
       scripts: {},          /* scriptId -> {read, recite, mastered, lastAt} */
+      sprint: {},           /* 冲刺模式：{ day, weekSettled:{1,2}, rec:{ [dayNum]:{subjects,scriptDone,classOpt} } } */
       myScripts: [],        /* v1.34 自己写的导游词：[{id, name, place, group, text, createdAt, updatedAt, at}]
                                内置 12 篇在 data.js 的 SCRIPTS 里（只读参考），这里是玩家自己的稿子。
                                唯一写入口：study.js 的 upsertMyScript()；读：myScripts / myScriptById()。 */

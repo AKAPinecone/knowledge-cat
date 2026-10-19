@@ -613,6 +613,7 @@
     else if (curTab === 'help') v.innerHTML = viewHelp();
     else if (curTab === 'docs') v.innerHTML = viewDocs();
     else if (curTab === 'notes') v.innerHTML = viewNotes();
+    else if (curTab === 'sprint') v.innerHTML = viewSprint();
     if (curTab === 'garden') { startPark(); wireWorld(); gardenSig = gardenSignature(); }
     else stopPark();
     if (curTab === 'study') studySig = studySignature();
@@ -3351,6 +3352,263 @@
   }
 
   /* ---------------- 资料库 ---------------- */
+  /* =========================================================
+   * 冲刺模式（阶段2 · 弱项突破期模板）
+   * 两组交替、每科≥15 题、错题四要素、导游词脱稿复述、阶梯奖励、周结算。
+   * 进度按「冲刺第几天」存（S.sprint.rec[dayNum]），跟真实日历解耦，
+   * 这样考前 14 天之外也能提前用；在冲刺期内默认跳到今天那一天。
+   * ========================================================= */
+  function subjMeta(id) {
+    const s = (D.SUBJECTS || []).filter(function (x) { return x.id === id; })[0];
+    return s || { id: id, name: id, short: id, emoji: '📘', color: '#888' };
+  }
+  function scriptMeta(id) {
+    const s = (D.SCRIPTS || []).filter(function (x) { return x.id === id; })[0];
+    return s || { id: id, name: id };
+  }
+  function sprintState() {
+    if (!S.sprint) S.sprint = { day: 1, weekSettled: { 1: false, 2: false }, rec: {} };
+    if (!S.sprint.rec) S.sprint.rec = {};
+    if (!S.sprint.weekSettled) S.sprint.weekSettled = { 1: false, 2: false };
+    return S.sprint;
+  }
+  function sprintDayRec(n) {
+    const sp = sprintState();
+    if (!sp.rec[n]) sp.rec[n] = { subjects: {}, scriptDone: false, classOpt: false };
+    const rec = sp.rec[n];
+    if (!rec.subjects) rec.subjects = {};
+    const plan = D.SPRINT.schedule[n - 1];
+    if (plan) plan.subjects.forEach(function (subj) {
+      if (!rec.subjects[subj]) rec.subjects[subj] = { count: 0, claimed: -1, mistakes: [] };
+    });
+    return rec;
+  }
+  function sprintTierOf(count) {
+    let t = -1;
+    (D.SPRINT.rewardLadder || []).forEach(function (L, i) { if (count >= L.min) t = i; });
+    return t;
+  }
+  function sprintDayDone(n) {
+    const sp = sprintState();
+    const r = sp.rec[n];
+    const plan = D.SPRINT.schedule[n - 1];
+    if (!plan || !r) return false;
+    const okSubj = plan.subjects.every(function (s) {
+      return r.subjects && r.subjects[s] && r.subjects[s].count >= D.SPRINT.minPerSubject;
+    });
+    return okSubj && !!r.scriptDone;
+  }
+  function sprintCurrentDay() {
+    const left = window.Store.daysLeft();   // 距考试天数（考前 1 天 = 1）
+    return 15 - left;                        // 考前 14 天起为第 1 天
+  }
+
+  function viewSprint() {
+    const sp = sprintState();
+    const cur = sprintCurrentDay();
+    let sel = sp.day || 1;
+    if (sel < 1 || sel > 14) sel = 1;
+    if (cur >= 1 && cur <= 14) sel = cur;    // 冲刺期内默认跳到今天
+    sp.day = sel;
+
+    const plan = D.SPRINT.schedule[sel - 1];
+    const group = D.SPRINT.groups[plan.group];
+    const rec = sprintDayRec(sel);
+
+    let doneCount = 0;
+    for (let d = 1; d <= 14; d++) if (sprintDayDone(d)) doneCount++;
+
+    let h = '<div class="panel sprint">';
+    h += '<div class="panel-head"><h2>🚀 冲刺模式</h2>' +
+      '<span class="hint">' + esc(D.SPRINT.subtitle) + '</span>' +
+      '<span class="spacer"></span>' +
+      '<span class="chip-sprint-day">第 ' + sel + ' / 14 天</span></div>';
+
+    h += '<div class="sprint-progress"><i style="width:' + Math.round(doneCount / 14 * 100) + '%"></i>' +
+      '<span class="sprint-progress-txt">已达标 ' + doneCount + ' / 14 天</span></div>';
+
+    /* 14 天选择条 */
+    h += '<div class="sprint-days">';
+    for (let d = 1; d <= 14; d++) {
+      const dp = D.SPRINT.schedule[d - 1];
+      const g = D.SPRINT.groups[dp.group];
+      const isToday = (d === cur);
+      const done = sprintDayDone(d);
+      h += '<button class="sprint-day' + (d === sel ? ' on' : '') + (isToday ? ' today' : '') + (done ? ' done' : '') +
+        '" data-act="sprint-day" data-day="' + d + '">' +
+        '<span class="sd-n">' + d + (isToday ? '⭐' : '') + '</span>' +
+        '<span class="sd-g">' + g.name + '</span>' +
+        (done ? '<span class="sd-ok">✓</span>' : '') +
+        '</button>';
+    }
+    h += '</div>';
+
+    if (cur >= 1 && cur <= 14 && sel !== cur) {
+      h += '<div class="hint sprint-today-hint">当前真实进度是第 ' + cur + ' 天，点上面的 ⭐ 回到今天。</div>';
+    }
+
+    h += '<div class="sprint-group">' + group.name + ' · ' + esc(group.label) +
+      '　|　今日两科各 ≥ ' + D.SPRINT.minPerSubject + ' 题</div>';
+
+    /* 每科一张卡 */
+    plan.subjects.forEach(function (subj) {
+      const sm = subjMeta(subj);
+      const sr = rec.subjects[subj];
+      const cnt = sr.count;
+      const tier = sprintTierOf(cnt);
+      const claimed = sr.claimed;
+      const canClaim = tier >= 0 && tier > claimed;
+      const nextTier = (tier < 0) ? D.SPRINT.rewardLadder[0]
+        : (tier + 1 < D.SPRINT.rewardLadder.length ? D.SPRINT.rewardLadder[tier + 1] : null);
+
+      h += '<div class="sprint-subj" style="border-left-color:' + sm.color + '">';
+      h += '<div class="ss-head">' +
+        '<span class="ss-emoji">' + sm.emoji + '</span>' +
+        '<span class="ss-name">' + esc(sm.name) + '</span>' +
+        (tier >= 0
+          ? '<span class="ss-tier">已到 ' + esc(D.SPRINT.rewardLadder[tier].label) + '</span>'
+          : '<span class="ss-tier muted">未到领奖线</span>') +
+        '</div>';
+
+      /* 题数步进 */
+      h += '<div class="ss-count">';
+      h += '<button class="btn btn-sm" data-act="sprint-inc" data-day="' + sel + '" data-subj="' + subj + '" data-delta="-1">－</button>';
+      h += '<span class="ss-num">' + cnt + ' 题</span>';
+      h += '<button class="btn btn-sm" data-act="sprint-inc" data-day="' + sel + '" data-subj="' + subj + '" data-delta="1">＋</button>';
+      h += '<button class="btn btn-sm" data-act="sprint-inc" data-day="' + sel + '" data-subj="' + subj + '" data-delta="5">＋5</button>';
+      h += '</div>';
+
+      /* 领奖 */
+      h += '<div class="ss-reward">';
+      if (canClaim) {
+        const L = D.SPRINT.rewardLadder[tier];
+        h += '<button class="btn btn-primary btn-sm" data-act="sprint-claim" data-day="' + sel + '" data-subj="' + subj + '">🎁 领取 ' + esc(L.label) + '：+' + L.tickets + ' 券 +' + L.beans + ' 豆</button>';
+      } else if (claimed >= 0) {
+        h += '<span class="ss-claimed">✓ 已领 ' + esc(D.SPRINT.rewardLadder[claimed].label) + '</span>';
+      } else {
+        h += '<span class="ss-hint">做到 ' + D.SPRINT.rewardLadder[0].min + ' 题即可领第一档' +
+          (nextTier ? ('（再 ' + (nextTier.min - cnt) + ' 题到 ' + esc(nextTier.label) + '）') : '') + '</span>';
+      }
+      h += '</div>';
+
+      /* 错题四要素 */
+      h += '<div class="ss-mistake">';
+      h += '<div class="ss-sub">📕 错题四要素（逐题记：题目 / 正确答案 / 错误原因 / 对应知识点）</div>';
+      h += '<div class="mistake-form">' +
+        '<input class="m-q" type="text" maxlength="120" placeholder="① 题目（或知识点关键词）">' +
+        '<input class="m-a" type="text" maxlength="120" placeholder="② 正确答案">' +
+        '<input class="m-r" type="text" maxlength="120" placeholder="③ 为什么错">' +
+        '<input class="m-p" type="text" maxlength="120" placeholder="④ 对应知识点">' +
+        '<button class="btn btn-sm" data-act="sprint-add-mistake" data-day="' + sel + '" data-subj="' + subj + '">＋ 记一道</button>' +
+        '</div>';
+      const mis = (sr.mistakes || []);
+      if (mis.length) {
+        h += '<div class="mistake-list">';
+        mis.forEach(function (m, i) {
+          h += '<div class="mistake-row">' +
+            '<div class="mm-q">❓ ' + esc(m.q) + '</div>' +
+            '<div class="mm-a">✅ ' + esc(m.a) + '</div>' +
+            '<div class="mm-r">⚠️ ' + esc(m.r) + '</div>' +
+            '<div class="mm-p">📌 ' + esc(m.p) + '</div>' +
+            '<button class="btn btn-sm btn-ghost" data-act="sprint-del-mistake" data-day="' + sel + '" data-subj="' + subj + '" data-i="' + i + '">删除</button>' +
+            '</div>';
+        });
+        h += '</div>';
+      }
+      h += '</div>';
+
+      /* 复盘重做（昨天的错题） */
+      if (sel > 1) {
+        const prev = sp.rec[sel - 1];
+        let prevMis = [];
+        if (prev && prev.subjects && prev.subjects[subj] && prev.subjects[subj].mistakes) prevMis = prev.subjects[subj].mistakes;
+        h += '<div class="ss-review">';
+        h += '<div class="ss-sub">🔁 复盘重做（昨天第 ' + (sel - 1) + ' 天记的错题，' + prevMis.length + ' 道）</div>';
+        if (prevMis.length) {
+          h += '<div class="review-list">';
+          prevMis.forEach(function (m) {
+            h += '<div class="review-row">❓ ' + esc(m.q) + '　→　✅ ' + esc(m.a) +
+              '　<span class="rv-point">📌 ' + esc(m.p) + '</span></div>';
+          });
+          h += '</div>';
+          h += '<div class="hint">明天复盘会显示你今天记的——今天先做对，明天别再错同一道。</div>';
+        } else {
+          h += '<div class="hint">昨天这科没记错题，直接进入新题练习即可。</div>';
+        }
+        h += '</div>';
+      }
+
+      h += '</div>'; /* /sprint-subj */
+    });
+
+    /* 导游词背诵 */
+    const sc = scriptMeta(plan.script);
+    h += '<div class="sprint-script">';
+    h += '<div class="ss-sub">📜 今日导游词背诵（脱稿复述验收）</div>';
+    h += '<div class="sc-body">';
+    h += '<div class="sc-name">' + esc(sc.name) + '　<span class="sc-meta">建议 ' + (sc.minutes || 8) + ' 分钟 · 脱稿复述一遍</span></div>';
+    h += '<div class="sc-acts">';
+    h += '<button class="btn btn-sm' + (rec.scriptDone ? ' btn-ghost' : ' btn-primary') + '" data-act="sprint-script" data-day="' + sel + '">' + (rec.scriptDone ? '✓ 已脱稿复述' : '我背完了（脱稿复述）') + '</button>';
+    h += '<button class="btn btn-sm" data-act="sprint-sp-open" data-sid="' + plan.script + '">📖 打开导游词</button>';
+    h += '</div>';
+    h += '</div>';
+    h += '</div>';
+
+    /* 网课选做 */
+    h += '<div class="sprint-class">';
+    h += '<label class="sc-check"><input type="checkbox" ' + (rec.classOpt ? 'checked' : '') + ' data-act="sprint-class" data-day="' + sel + '"> 今日补看网课（选做 · 时间充裕或某知识点薄弱时勾选）</label>';
+    h += '</div>';
+
+    /* 周结算 */
+    const week = (sel <= 7) ? 1 : 2;
+    const settled = !!sp.weekSettled[week];
+    h += '<div class="sprint-weekly">';
+    h += '<div class="ss-sub">🏆 周结算（第 7 天 / 第 14 天领取 · 整周达标才发）</div>';
+    if (settled) {
+      h += '<div class="ss-claimed">✓ 第 ' + week + ' 周已结算：' + esc(D.SPRINT.weeklyBonus.label) + ' +' + D.SPRINT.weeklyBonus.tickets + ' 券 +' + D.SPRINT.weeklyBonus.beans + ' 豆</div>';
+    } else {
+      h += '<div class="hint">本周（第 ' + week + ' 周 · 第 ' + ((week === 1) ? '1–7' : '8–14') + ' 天）把每天两科≥' + D.SPRINT.minPerSubject + ' 题 + 导游词背完，到第 7 / 14 天来这里领 ' + D.SPRINT.weeklyBonus.tickets + ' 券 +' + D.SPRINT.weeklyBonus.beans + ' 豆。</div>';
+      if (sel === 7 || sel === 14) {
+        h += '<button class="btn btn-primary" data-act="sprint-settle" data-week="' + week + '">🏆 领取第 ' + week + ' 周结算奖励</button>';
+      }
+    }
+    h += '</div>';
+
+    /* 奖励阶梯参考 */
+    h += '<div class="sprint-ladder">';
+    h += '<div class="ss-sub">🎯 做题奖励阶梯（按单科当天累计题数）</div>';
+    h += '<div class="ladder-rows">';
+    D.SPRINT.rewardLadder.forEach(function (L, i) {
+      const reached = rec.subjects && Object.keys(rec.subjects).some(function (k) { return sprintTierOf(rec.subjects[k].count) >= i; });
+      h += '<div class="ladder-row' + (reached ? ' on' : '') + '">' +
+        '<span class="lr-tier">' + esc(L.label) + '</span>' +
+        '<span class="lr-rew">+' + L.tickets + ' 券 +' + L.beans + ' 豆</span>' +
+        '</div>';
+    });
+    h += '</div>';
+    h += '</div>';
+
+    /* 自检方式 */
+    h += '<div class="sprint-selfcheck">';
+    h += '<div class="ss-sub">✅ 每日自检（全部满足 = 今天过关）</div>';
+    h += '<ul class="sc-list">';
+    h += '<li>两组科目今天都做了？<b>' + esc(group.label) + '</b>（隔天轮换，不重复同组）</li>';
+    plan.subjects.forEach(function (s) {
+      const sr2 = rec.subjects[s];
+      const ok = sr2 && sr2.count >= D.SPRINT.minPerSubject;
+      h += '<li class="' + (ok ? 'ok' : '') + '">' + subjMeta(s).emoji + ' ' + esc(subjMeta(s).name) + ' ≥ ' + D.SPRINT.minPerSubject + ' 题？<b>' + (sr2 ? sr2.count : 0) + '</b> 题 ' + (ok ? '✓' : '') + '</li>';
+    });
+    h += '<li class="' + (rec.scriptDone ? 'ok' : '') + '">导游词《' + esc(sc.name) + '》脱稿复述？' + (rec.scriptDone ? ' ✓' : '') + '</li>';
+    const misTotal = plan.subjects.reduce(function (a, s) { return a + ((rec.subjects[s] && rec.subjects[s].mistakes) ? rec.subjects[s].mistakes.length : 0); }, 0);
+    h += '<li>错题逐题记了「题目/答案/原因/知识点」？共 <b>' + misTotal + '</b> 道</li>';
+    h += '<li>明天复盘：重做今天记的错题，别再错同一道</li>';
+    h += '</ul>';
+    h += '</div>';
+
+    h += '</div>'; /* /panel */
+    return h;
+  }
+
   function viewDocs() {
     const wrongN = window.QBank.all().length;
     /* v1.36：还剩几道没消掉 —— 答对一次就移出，所以这个数会自己变小 */
@@ -3922,6 +4180,92 @@
       if (!confirm('删除这条笔记？删除后无法恢复。')) return;
       window.Store.removeNote(ds.id).then(function () { renderView(); toast('已删除。', 'ok'); });
       return;
+    }
+
+    /* ---- 冲刺模式（阶段2 弱项突破期）---- */
+    if (act === 'sprint-day') { sprintState().day = Number(ds.day) || 1; return render(); }
+    if (act === 'sprint-inc') {
+      const dI = Number(ds.day), subjI = ds.subj, deltaI = Number(ds.delta) || 0;
+      const sr = sprintDayRec(dI).subjects[subjI];
+      sr.count = Math.max(0, sr.count + deltaI);
+      window.Store.save(true);
+      return render();
+    }
+    if (act === 'sprint-claim') {
+      const dC = Number(ds.day), subjC = ds.subj;
+      const sr = sprintDayRec(dC).subjects[subjC];
+      const t = sprintTierOf(sr.count);
+      if (t < 0) return toast('还没到领奖线（每科至少 ' + D.SPRINT.minPerSubject + ' 题）', 'warn');
+      if (sr.claimed >= t) return toast('这一档已经领过啦～', 'warn');
+      const L = D.SPRINT.rewardLadder[t];
+      S.cur.tickets += L.tickets; S.cur.beans += L.beans;
+      sr.claimed = t;
+      window.Store.save(true);
+      toast('🎉 ' + L.label + '：+' + L.tickets + ' 券 +' + L.beans + ' 豆', 'ok', 6000);
+      return render();
+    }
+    if (act === 'sprint-add-mistake') {
+      const dM = Number(ds.day), subjM = ds.subj;
+      const form = (el && el.closest) ? el.closest('.mistake-form') : null;
+      if (!form) return;
+      const q = ($('.m-q', form) || {}).value || '';
+      const a = ($('.m-a', form) || {}).value || '';
+      const r = ($('.m-r', form) || {}).value || '';
+      const p = ($('.m-p', form) || {}).value || '';
+      if (!q.trim()) return toast('先填「题目」再记～', 'warn');
+      const sr = sprintDayRec(dM).subjects[subjM];
+      if (!sr.mistakes) sr.mistakes = [];
+      sr.mistakes.push({ q: q, a: a, r: r, p: p });
+      window.Store.save(true);
+      toast('📕 已记下这道错题（四要素）', 'ok');
+      return render();
+    }
+    if (act === 'sprint-del-mistake') {
+      const dD = Number(ds.day), subjD = ds.subj, iD = Number(ds.i);
+      const sr = sprintDayRec(dD).subjects[subjD];
+      if (sr.mistakes && sr.mistakes[iD]) sr.mistakes.splice(iD, 1);
+      window.Store.save(true);
+      return render();
+    }
+    if (act === 'sprint-script') {
+      const dS = Number(ds.day);
+      const rec = sprintDayRec(dS);
+      rec.scriptDone = !rec.scriptDone;
+      window.Store.save(true);
+      toast(rec.scriptDone ? '✅ 已记录脱稿复述' : '已取消', 'ok');
+      return render();
+    }
+    if (act === 'sprint-sp-open') {
+      const sc = scriptMeta(ds.sid);
+      if (sc && sc.content) openScriptReader(sc);
+      else toast('找不到这篇导游词。', 'err');
+      return;
+    }
+    if (act === 'sprint-class') {
+      const dC2 = Number(ds.day);
+      sprintDayRec(dC2).classOpt = !!(el && el.checked);
+      window.Store.save(true);
+      return; /* 复选框自身已切换，无需整页重绘 */
+    }
+    if (act === 'sprint-settle') {
+      const week = Number(ds.week);
+      const sp = sprintState();
+      if (sp.weekSettled[week]) return toast('本周结算已领取～', 'warn');
+      const from = (week === 1) ? 1 : 8, to = (week === 1) ? 7 : 14;
+      for (let dd = from; dd <= to; dd++) {
+        const r = sp.rec[dd];
+        const pl = D.SPRINT.schedule[dd - 1];
+        const okSubj = pl.subjects.every(function (s) { return r && r.subjects && r.subjects[s] && r.subjects[s].count >= D.SPRINT.minPerSubject; });
+        if (!(okSubj && r && r.scriptDone)) {
+          return toast('第 ' + dd + ' 天还没达标（两科≥' + D.SPRINT.minPerSubject + ' 题 + 导游词背完），先把本周每天做完', 'warn', 7000);
+        }
+      }
+      S.cur.tickets += D.SPRINT.weeklyBonus.tickets;
+      S.cur.beans += D.SPRINT.weeklyBonus.beans;
+      sp.weekSettled[week] = true;
+      window.Store.save(true);
+      toast('🏆 第 ' + week + ' 周结算达成：+' + D.SPRINT.weeklyBonus.tickets + ' 券 +' + D.SPRINT.weeklyBonus.beans + ' 豆', 'ok', 7000);
+      return render();
     }
     if (act === 'export') return doExport();
     if (act === 'import') return doImport();
