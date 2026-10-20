@@ -2124,7 +2124,7 @@ span.adopt-img{font-size:34px;line-height:1;}
 }
 
 /* =========================================================
- * 冲刺模式（阶段2 弱项突破期）
+ * 单科拔高（阶段2 · 刷题拔高期）
  * ========================================================= */
 .chip-sprint-day{margin-left:auto;font-size:12px;font-weight:700;color:var(--green-deep);background:var(--panel-3);padding:3px 10px;border-radius:20px;}
 .sprint-progress{position:relative;height:22px;background:var(--panel-3);border-radius:12px;margin:10px 0 14px;overflow:hidden;}
@@ -2188,7 +2188,7 @@ span.adopt-img{font-size:34px;line-height:1;}
   .ss-count .btn{padding:4px 9px;}
 }
 
-/* 冲刺模式：开启 / 起始日横幅 */
+/* 单科拔高：开启 / 起始日横幅 */
 .sprint-start-banner{border:1px dashed var(--green);background:linear-gradient(135deg,#EAF6EC,#E8F1FB);border-radius:12px;padding:14px 14px 15px;margin:4px 0 14px;text-align:center;}
 .ssb-title{font-size:15px;font-weight:800;color:var(--green-deep);margin-bottom:6px;}
 .ssb-sub{font-size:12.5px;color:var(--ink-2);line-height:1.6;margin-bottom:11px;}

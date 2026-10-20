@@ -27,10 +27,10 @@ window.GAME_DATA = (function () {
     }
   ];
 
-  /* ---------- 冲刺模式（阶段2 · 弱项突破期，读完书即开始）----------
+  /* ---------- 单科拔高（阶段2 · 刷题拔高期，读完书即开始）----------
      松果书读完后进入刷题 + 错题 + 背导游词的中期。这个阶段不再"每天喂满 8 件"，
      而是按「甲 / 乙」两组交替、每科每天≥15 道、错题四要素、导游词脱稿复述、阶梯奖励、周结算。
-     —— 这是把阶段2学习计划落进游戏里的一套固定模板，不依赖「投喂单」。 */
+     —— 这是把阶段2（单科拔高）学习计划落进游戏里的一套固定模板，不依赖「投喂单」。 */
   const SPRINT = (function () {
     /* 甲组 = 地方导基 + 全国导基；乙组 = 政策法规 + 导游业务。单日不重复同组，隔天轮换。 */
     const groups = {
@@ -45,8 +45,8 @@ window.GAME_DATA = (function () {
       schedule.push({ day: i, group: g, subjects: groups[g].subjects.slice(), script: scriptPlan[i - 1] });
     }
     return {
-      title: '冲刺模式',
-      subtitle: '阶段2 · 弱项突破期（读完书即开始，连续 14 天）',
+      title: '单科拔高',
+      subtitle: '阶段2 · 单科拔高（读完书即开始，连续 14 天）',
       days: 14,
       minPerSubject: 15,                            /* 每科每天至少 15 道 */
       groups: groups,
@@ -56,7 +56,7 @@ window.GAME_DATA = (function () {
         { min: 15, tickets: 5,  beans: 10, label: 'L1 达标 · 15 题' },
         { min: 25, tickets: 12, beans: 25, label: 'L2 进阶 · 25 题' },
         { min: 35, tickets: 22, beans: 45, label: 'L3 强化 · 35 题' },
-        { min: 50, tickets: 35, beans: 75, label: 'L4 冲刺 · 50 题' }
+        { min: 50, tickets: 35, beans: 75, label: 'L4 单科拔高 · 50 题' }
       ],
       /* 周结算：第 7 天 / 第 14 天，整周（每天两科≥15 + 导游词背完）达标才发 */
       weeklyBonus: { tickets: 60, beans: 120, label: '周结算 · 整周达标' }
@@ -2470,7 +2470,7 @@ window.GAME_DATA = (function () {
   };
 
   return {
-    VERSION: 'v1.45',
+    VERSION: 'v1.46',
     WORLD: WORLD,
     ZONES: ZONES,
     ROAM_AVOID: ROAM_AVOID,

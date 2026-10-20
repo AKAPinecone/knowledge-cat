@@ -3353,10 +3353,10 @@
 
   /* ---------------- 资料库 ---------------- */
   /* =========================================================
-   * 冲刺模式（阶段2 · 弱项突破期模板）
+   * 单科拔高（阶段2 · 刷题拔高期模板）
    * 两组交替、每科≥15 题、错题四要素、导游词脱稿复述、阶梯奖励、周结算。
-   * 进度按「冲刺第几天」存（S.sprint.rec[dayNum]），跟真实日历解耦，
-   * 这样考前 14 天之外也能提前用；在冲刺期内默认跳到今天那一天。
+   * 进度按「第几天」存（S.sprint.rec[dayNum]），跟真实日历解耦，
+   * 读完书即开始，按起始日连续推进，不绑定考试倒计时。
    * ========================================================= */
   function subjMeta(id) {
     const s = (D.SUBJECTS || []).filter(function (x) { return x.id === id; })[0];
@@ -3401,7 +3401,7 @@
   }
   function sprintCurrentDay() {
     const sp = sprintState();
-    if (!sp.startDate) return 1;             // 还没开启 → 停第 1 天（等用户点「开始冲刺」）
+    if (!sp.startDate) return 1;             // 还没开启 → 停第 1 天（等用户点「开始单科拔高」）
     const diff = window.Store.daysBetween(sp.startDate, window.Store.dateKey());
     if (typeof diff !== 'number' || isNaN(diff)) return 1;
     return Math.max(1, Math.min(14, diff + 1));   // 第 1 天起算，封顶 14（读完书即开始）
@@ -3422,22 +3422,22 @@
     for (let d = 1; d <= 14; d++) if (sprintDayDone(d)) doneCount++;
 
     let h = '<div class="panel sprint">';
-    h += '<div class="panel-head"><h2>🚀 冲刺模式</h2>' +
+    h += '<div class="panel-head"><h2>🚀 单科拔高</h2>' +
       '<span class="hint">' + esc(D.SPRINT.subtitle) + '</span>' +
       '<span class="spacer"></span>' +
       '<span class="chip-sprint-day">第 ' + sel + ' / 14 天</span></div>';
 
     if (!sp.startDate) {
       h += '<div class="sprint-start-banner">' +
-        '<div class="ssb-title">🚀 还没开启冲刺</div>' +
-        '<div class="ssb-sub">书读完了就从这开始：点下面按钮，把今天设为冲刺第 1 天，之后连续 14 天按甲 / 乙组轮换推进——不绑定考试倒计时，想哪天开就哪天开。</div>' +
-        '<button class="btn btn-primary ssb-btn" data-act="sprint-start">开始冲刺（今天 = 第 1 天）</button>' +
+        '<div class="ssb-title">🚀 还没开启单科拔高</div>' +
+        '<div class="ssb-sub">书读完了就从这开始：点下面按钮，把今天设为单科拔高第 1 天，之后连续 14 天按甲 / 乙组轮换推进——不绑定考试倒计时，想哪天开就哪天开。</div>' +
+        '<button class="btn btn-primary ssb-btn" data-act="sprint-start">开始单科拔高（今天 = 第 1 天）</button>' +
         '</div>';
     } else {
       const sd = sp.startDate;
       const elapsed = window.Store.daysBetween(sd, window.Store.dateKey());
       const done = (typeof elapsed === 'number' && !isNaN(elapsed)) ? Math.max(0, elapsed + 1) : 1;
-      h += '<div class="sprint-started">📅 冲刺开始于 ' + esc(sd) + '（已进行 ' + done + ' 天）' +
+      h += '<div class="sprint-started">📅 单科拔高开始于 ' + esc(sd) + '（已进行 ' + done + ' 天）' +
         '　·　<span class="ssb-reset" data-act="sprint-start">重设起始日</span></div>';
     }
 
@@ -4199,12 +4199,12 @@
       return;
     }
 
-    /* ---- 冲刺模式（阶段2 弱项突破期）---- */
+    /* ---- 单科拔高（阶段2 刷题拔高期）---- */
     if (act === 'sprint-start') {
       sprintState().startDate = window.Store.dateKey();
       window.Store.save(true);
       render();
-      toast('🚀 冲刺已开启！从今天起连续 14 天，加油～', 'ok', 6000);
+      toast('🚀 单科拔高已开启！从今天起连续 14 天，加油～', 'ok', 6000);
       return;
     }
     if (act === 'sprint-day') { sprintState().day = Number(ds.day) || 1; return render(); }
